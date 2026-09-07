@@ -80,7 +80,17 @@ export async function getRealDataPointsForZipAndVertical(zip: string, vertical: 
     });
     if (!snapshot) continue;
 
-    const points = await prisma.dataPoint.findMany({ where: { snapshotId: snapshot.id, locationId: location.id } });
+    // orderBy is load-bearing, not tidiness: Postgres returns rows in
+    // whatever order it likes, and the AI fact fingerprint hashes this list
+    // AS A SEQUENCE. Without a stable order, re-collecting byte-identical
+    // data can produce a different fingerprint — which reads downstream as
+    // "the numbers changed", invalidating cached copy and paying to
+    // regenerate text that was already correct. Observed on 2026-09-07:
+    // 77494's values were unchanged and its fingerprint moved anyway.
+    const points = await prisma.dataPoint.findMany({
+      where: { snapshotId: snapshot.id, locationId: location.id },
+      orderBy: { metric: "asc" },
+    });
     for (const point of points) {
       rows.push({
         sourceName: source.name,

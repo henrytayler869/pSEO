@@ -20,6 +20,7 @@
 //
 // Usage: tsx scripts/test-validation-rules.ts
 
+import { snapshotStatusFor } from "../lib/collector/run";
 import {
   checkCompleteness,
   checkOutliers,
@@ -32,6 +33,47 @@ import {
  * and by grouped queries. Renaming one silently empties whatever counts it,
  * so the names are asserted, not just the behaviour. */
 const EXPECTED_RULE_NAMES = ["missing_required_metric", "outlier_vs_regional_mean", "stale_data", "cross_source_deviation"];
+
+/**
+ * Snapshot-level trust, checked separately because it sits UPSTREAM of every
+ * rule above and none of them could see it.
+ *
+ * The per-location rules answer "is this value plausible". None of them
+ * answer "did this collection produce anything at all", and on 2026-09-07
+ * nothing did: the Census API returned a well-formed response with no usable
+ * values, all 300 locations failed, and the snapshot was recorded OK with
+ * zero data points. Every downstream check then passed — correctly, on an
+ * empty set — and the run printed "cổng ĐẠT" while an empty snapshot
+ * superseded 1,496 real points.
+ */
+const SNAPSHOT_CASES: { name: string; input: Parameters<typeof snapshotStatusFor>[0]; expect: "OK" | "SUSPECT" }[] = [
+  {
+    name: "snapshot: đợt thu bình thường -> OK",
+    input: { driftMessage: null, pointCount: 1496, locationsAttempted: 300, locationsFailed: 4 },
+    expect: "OK",
+  },
+  {
+    // REGRESSION: the exact run that caused the damage.
+    name: "REGRESSION snapshot: 300/300 địa điểm hỏng, 0 điểm dữ liệu -> SUSPECT",
+    input: { driftMessage: null, pointCount: 0, locationsAttempted: 300, locationsFailed: 300 },
+    expect: "SUSPECT",
+  },
+  {
+    name: "snapshot: quá nửa địa điểm hỏng -> SUSPECT dù vẫn có dữ liệu",
+    input: { driftMessage: null, pointCount: 120, locationsAttempted: 300, locationsFailed: 200 },
+    expect: "SUSPECT",
+  },
+  {
+    name: "snapshot: schema drift -> SUSPECT (hành vi cũ, phải giữ)",
+    input: { driftMessage: "cột biến mất", pointCount: 900, locationsAttempted: 300, locationsFailed: 0 },
+    expect: "SUSPECT",
+  },
+  {
+    name: "snapshot: vài địa điểm hỏng lẻ tẻ -> vẫn OK",
+    input: { driftMessage: null, pointCount: 1180, locationsAttempted: 300, locationsFailed: 5 },
+    expect: "OK",
+  },
+];
 
 function point(zip: string, metric: string, value: number, state = "TX"): LocationPoint {
   return { locationId: `loc-${zip}`, zip, state, metric, value };
@@ -189,16 +231,27 @@ function main() {
     }
   }
 
+  for (const c of SNAPSHOT_CASES) {
+    const got = snapshotStatusFor(c.input);
+    if (got === c.expect) {
+      passed++;
+      console.log(`✓ ${c.name}`);
+    } else {
+      failures.push(`${c.name}\n    mong đợi: ${c.expect}\n    nhận được: ${got}`);
+      console.log(`✗ ${c.name}`);
+    }
+  }
+
   // A rule with no firing case is a rule this suite does not actually cover,
   // and its silence in production would mean nothing.
   const neverFired = EXPECTED_RULE_NAMES.filter((r) => !rulesSeen.has(r));
 
   console.log();
   if (failures.length > 0) {
-    console.log(`${passed}/${CASES.length} test đúng. Hỏng:\n`);
+    console.log(`${passed}/${CASES.length + SNAPSHOT_CASES.length} test đúng. Hỏng:\n`);
     for (const f of failures) console.log(`  ${f}\n`);
   } else {
-    console.log(`${passed}/${CASES.length} test đúng.`);
+    console.log(`${passed}/${CASES.length + SNAPSHOT_CASES.length} test đúng.`);
   }
   if (neverFired.length > 0) {
     console.log(`\n⚠️  Luật chưa có ca nào làm nó kêu: ${neverFired.join(", ")}`);

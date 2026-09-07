@@ -187,9 +187,17 @@ export async function buildFactSet(vertical: string, zip: string): Promise<FactS
 
   // The fingerprint must change whenever any figure changes, so cached text
   // can never outlive the numbers it describes.
+  //
+  // Sorted first, because it must ALSO not change when nothing changed. This
+  // hashes a sequence, and the sequence came from an unordered database read
+  // — so identical data re-collected could hash differently, look like new
+  // numbers, and pay to regenerate copy that was already right. Sorting by
+  // key makes the input canonical: same facts, same fingerprint, whatever
+  // order the rows arrived in.
+  const canonical = [...facts].map((f) => [f.key, f.value, f.scope] as const).sort((a, b) => a[0].localeCompare(b[0]));
   const fingerprint = crypto
     .createHash("sha256")
-    .update(JSON.stringify({ vertical, zip, facts: facts.map((f) => [f.key, f.value, f.scope]) }))
+    .update(JSON.stringify({ vertical, zip, facts: canonical }))
     .digest("hex")
     .slice(0, 32);
 

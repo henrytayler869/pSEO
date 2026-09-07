@@ -54,6 +54,48 @@ async function fetchWithRetry(
  * changed response shape means nothing else this source returns this run
  * can be trusted either.
  */
+/** Fraction of locations that may fail before the whole snapshot is
+ * untrustworthy. Well below "most of them": a source that could not answer for
+ * half the country did not have a bad day, it had a different failure. */
+const MASS_FAILURE_THRESHOLD = 0.5;
+
+/**
+ * Whether a finished collection may be trusted as the source's current truth.
+ *
+ * Extracted and made pure so it can be TESTED. It used to be one inline
+ * expression — `driftMessage !== null ? "SUSPECT" : "OK"` — which meant a run
+ * where every single location failed was still recorded OK, and that is not a
+ * hypothetical: on 2026-09-07 the Census API returned a well-formed response
+ * carrying no usable values, all 300 locations threw, and the snapshot was
+ * written OK with ZERO data points.
+ *
+ * The damage came from what OK means downstream. Queries read the latest OK
+ * snapshot per source, so an empty OK snapshot SUPERSEDED a good one holding
+ * 1,496 points: five metrics vanished from every market, all 148 fact
+ * fingerprints changed, and 127 pages of already-generated copy became cache
+ * misses in one step. Nothing failed. The run reported "cổng ĐẠT".
+ *
+ * Schema drift was the only failure this ever modelled — the case where the
+ * response shape changes. It did not model the response staying the right
+ * shape while carrying nothing, which is the more common way a public API
+ * degrades under load.
+ */
+export function snapshotStatusFor(input: {
+  driftMessage: string | null;
+  pointCount: number;
+  locationsAttempted: number;
+  locationsFailed: number;
+}): "OK" | "SUSPECT" {
+  if (input.driftMessage !== null) return "SUSPECT";
+  // Collected nothing at all. Whatever happened, this cannot be the new truth
+  // for a source that previously had data.
+  if (input.locationsAttempted > 0 && input.pointCount === 0) return "SUSPECT";
+  if (input.locationsAttempted > 0 && input.locationsFailed / input.locationsAttempted > MASS_FAILURE_THRESHOLD) {
+    return "SUSPECT";
+  }
+  return "OK";
+}
+
 export async function runCollection(params: {
   adapterKey: string;
   adapter: CollectorAdapter;
@@ -104,7 +146,12 @@ export async function runCollection(params: {
     () => driftMessage !== null
   );
 
-  const status = driftMessage !== null ? "SUSPECT" : "OK";
+  const status = snapshotStatusFor({
+    driftMessage,
+    pointCount: collectedPoints.length,
+    locationsAttempted: locations.length,
+    locationsFailed: failures.length,
+  });
   const statusNoteParts: string[] = [];
   if (driftMessage) statusNoteParts.push(`Schema drift: ${driftMessage}`);
   if (failures.length > 0) {
