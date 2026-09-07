@@ -412,6 +412,24 @@ endpoint chi tiết trước, nếu không sẽ đếm nhầm như bản 2 của
 `mainKeyword` + `countyFips` có sẵn ở endpoint danh sách nên bước group
 không tốn thêm request nào.
 
+> ⚠️ **Khoá này phủ gì và KHÔNG phủ gì — đọc trước khi lưu nó xuống đâu đó.**
+>
+> 1. **`mainKeyword` không phải định danh.** Nó là **kết quả đo**, và đổi mỗi
+>    lần chạy lại keyword research — vòng 2026-09-07 đổi **233/582 market**.
+>    Bất cứ thứ gì bạn khoá theo chuỗi này (ngoại lệ, mapping, cụm đã lưu) sẽ
+>    **âm thầm trỏ sai** sau lần chạy tiếp theo: không lỗi, không cảnh báo,
+>    chỉ là gom nhóm khác đi. Đã xảy ra thật — một ngoại lệ khoá theo chuỗi
+>    làm **48 zip NYC gộp thành một cụm** và không khâu nào kêu. Dùng
+>    `keywordMeasuredAt` để biết cần tính lại (§3.5).
+> 2. **Từ khoá hiệu lực là `countyKeyword ?? mainKeyword`**, không phải
+>    `mainKeyword` trần. Với các borough NYC, `countyKeyword` mới là thứ trang
+>    thật sự nhắm — công thức ở §3.6. Group bằng `mainKeyword` trần cho ra số
+>    cụm khác với thực tế.
+>
+> Nói cách khác: công thức ở trên trả lời "hiện giờ những zip nào tranh nhau
+> một truy vấn", **không** trả lời "cụm này có còn là cụm tôi đã dựng trang
+> không". Câu thứ hai phải hỏi lại mỗi vòng research.
+
 ```js
 // B1: lọc buildable (cần 1 request chi tiết / zip — cache lại)
 const buildable = [];
