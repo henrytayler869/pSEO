@@ -103,8 +103,22 @@ ghi đè.
 
 ## 3. Dataset API — nguồn dữ liệu cho website
 
-Base URL: `http://<host-control-panel>:3000/api/v1`
-(khi deploy thật thì thay bằng domain nội bộ của Control Panel)
+Base URL (production, từ 2026-09-07):
+
+```
+https://hq.cornships.com/api/v1
+```
+
+TLS Let's Encrypt, tự gia hạn. HTTP tự chuyển 301 sang HTTPS.
+
+> **`/api/v1` KHÔNG bị Basic Auth.** Giao diện UI của Control Panel nằm sau
+> Basic Auth ở Nginx, nhưng `location /api/v1/` có `auth_basic off` — site gọi
+> bằng `X-Api-Key` như cũ, không cần thêm gì. Nếu một ngày bạn nhận `401` mà
+> thân phản hồi là **HTML** thay vì JSON, đó là Basic Auth của Nginx chứ không
+> phải lớp xác thực của app: báo ngay, đó là lỗi cấu hình hạ tầng.
+
+Trước đó tài liệu ghi `http://<host-control-panel>:3000` — địa chỉ dev. Nếu site
+còn trỏ vào đó thì phải đổi.
 
 ### Xác thực
 
@@ -1020,10 +1034,10 @@ nếu không sẽ phá vỡ tính trung thực của toàn hệ thống:
 
 ```bash
 curl -s -H "Authorization: Bearer <API_KEY>" \
-  "http://localhost:3000/api/v1/niches" | python3 -m json.tool
+  "https://hq.cornships.com/api/v1/niches" | python3 -m json.tool
 ```
 
 ```bash
 curl -s -H "Authorization: Bearer <API_KEY>" \
-  "http://localhost:3000/api/v1/niches/moving-services/markets/10002" | python3 -m json.tool
+  "https://hq.cornships.com/api/v1/niches/moving-services/markets/10002" | python3 -m json.tool
 ```

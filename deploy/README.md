@@ -162,5 +162,10 @@ Chậm hơn đổi symlink vì phải build lại — cái giá của layout t�
   vờ.
 - **Không thu thập dữ liệu.** Thu thập có lịch riêng
   (`scripts/run-scheduled-collection.ts`).
-- **Không cấp TLS.** `cornships.com` đang chuyển nameserver sang Cloudflare;
-  Let's Encrypt cấp sau khi DNS về.
+- **Không đụng tới Nginx, và không được đụng.** TLS do certbot quản (tự gia
+  hạn, `certbot.timer`). Đặc biệt **đừng ghi đè
+  `/etc/nginx/sites-available/00-default-drop`**: certbot thêm block `443` vào
+  file site chính, khiến chốt chặn "request tới IP trần" chỉ còn hiệu lực ở
+  cổng 80 — nếu không có default_server 443 với `ssl_reject_handshake on` thì
+  gõ thẳng IP qua https sẽ rơi vào block duy nhất có 443 và **phục vụ Control
+  Panel cho cả internet**. Chốt đó do session VPS dựng, nằm ngoài repo này.
