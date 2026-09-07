@@ -21,6 +21,7 @@
 
 import { prisma } from "../lib/db/prisma";
 import { VERTICALS_WITH_BRIEFS } from "../lib/ai/generate";
+import { getRealDataPointsForZipAndVertical } from "../lib/queries/collector";
 
 interface Pattern {
   name: string;
@@ -35,6 +36,23 @@ interface Pattern {
    * never actionable. Warnings that are always on get skimmed, and skimming
    * is how the real one gets missed. */
   verticalSpecific: boolean;
+  /** Metric prefix a market must actually have for this pattern to have
+   * anything to catch, or null when the pattern applies to any prose.
+   *
+   * This answers a question coverage cannot: "has this rule ever fired" and
+   * "can this rule fire at all" are different, and only the first is testable
+   * with fixtures. migration_bridge looks for claims hung off migration
+   * figures — a market with no IRS data never receives such a figure, so the
+   * pattern is inert there no matter what the model writes, and its zero
+   * means "nothing to look at" rather than "checked and clean".
+   *
+   * Counting OPPORTUNITIES would not separate these: every text pattern has
+   * an opportunity on every passage, so that number is just the passage
+   * count. The discriminating thing is the DATA PRECONDITION — which facts
+   * must exist before the rule has any surface at all. (Framing from the site
+   * session, which reached it after trying the opportunity count and finding
+   * it told them nothing.) */
+  requiresMetricPrefix: string | null;
 }
 
 /**
@@ -145,18 +163,21 @@ function patternsFor(vertical: string): Pattern[] {
   return [
     {
       name: "seo_leak",
+      requiresMetricPrefix: null,
       verticalSpecific: false,
       why: "Nói về từ khoá/lượt tìm kiếm — đây là số liệu nội bộ, người đọc không dùng đến, và in ra là tự khai trang do máy viết.",
       test: /\b(search(es|ed)?\s+(volume|per\s+month|monthly)|monthly\s+searches|search\s+volume|keyword|query volume|SEO|ranks?\s+for)\b/i,
     },
     {
       name: "off_trade",
+      requiresMetricPrefix: null,
       verticalSpecific: true,
       why: `Viết sang nghề khác — dữ liệu nhà ở gợi ý bảo trì, nhưng "${vertical}" không làm việc đó.`,
       test: new RegExp(`\\b(${[...new Set(foreign)].join("|")})\\b`, "i"),
     },
     {
       name: "migration_bridge",
+      requiresMetricPrefix: "irs_migration",
       verticalSpecific: false,
       why: "Treo bất cứ thứ gì lên số di cư — số đó tả hộ khai thuế trên cả county, không kéo theo lời khuyên hay nhận định nào.",
       // Deliberately kept narrow to MIGRATION figures, matching what prompt
@@ -173,6 +194,7 @@ function patternsFor(vertical: string): Pattern[] {
     },
     {
       name: "supply_side_claim",
+      requiresMetricPrefix: null,
       verticalSpecific: true,
       why: "Khẳng định về phía cung (công ty ở đây làm loại việc gì, bận ra sao, giá thế nào) — KHÔNG nguồn nào trong dataset đo phía cung.",
       // "several movers" alone is not a claim: "call several movers and
@@ -409,6 +431,61 @@ function assertScannerWorks(vertical: string): void {
   console.log();
 }
 
+/**
+ * How many passages each pattern could actually reject.
+ *
+ * Coverage answers "has this pattern ever fired". This answers the different
+ * question "can it fire HERE at all" — and a pattern can pass the first while
+ * failing the second, which is the case fixtures cannot reach. A market with
+ * no IRS data never receives a migration figure, so migration_bridge is inert
+ * on it however the model writes; its zero belongs in a different column from
+ * the zeros that mean "checked and clean".
+ *
+ * Reported, never enforced. A pattern with nothing to look at is a real state
+ * of the data, not a defect, and failing the run over it would leave a
+ * permanently red signal until somebody deleted the pattern to quiet it —
+ * which is precisely how the thing it guards gets lost. A warning that is
+ * always on is noise wearing the shape of a check.
+ */
+async function reportSurface(vertical: string, patterns: Pattern[]): Promise<void> {
+  const zips = (
+    await prisma.aiGeneration.findMany({
+      where: { vertical, validationPassed: true },
+      select: { zip: true },
+      distinct: ["zip"],
+    })
+  ).map((r) => r.zip);
+  if (zips.length === 0) return;
+
+  console.log(`Bề mặt — mỗi mẫu có bao nhiêu đoạn để soi (trên ${zips.length} trang):`);
+  for (const p of patterns) {
+    if (p.requiresMetricPrefix === null) {
+      console.log(`  ${p.name.padEnd(20)} ${String(zips.length).padStart(4)}  (áp dụng cho mọi đoạn văn)`);
+      continue;
+    }
+    // Must go through the SAME vertical-filtered accessor the fact builder
+    // uses, not a raw DataPoint query. A zip can hold IRS points collected
+    // for moving-services while the solar FactSet never receives them — so
+    // querying by zip alone reported a surface of 3 where the real one is 0,
+    // measuring something adjacent to the question instead of the question.
+    let n = 0;
+    for (const zip of zips) {
+      const points = await getRealDataPointsForZipAndVertical(zip, vertical);
+      if (points.some((pt) => pt.metric.startsWith(p.requiresMetricPrefix!))) n++;
+    }
+    const mark = n === 0 ? "!" : " ";
+    console.log(`${mark} ${p.name.padEnd(20)} ${String(n).padStart(4)}  (cần dữ liệu ${p.requiresMetricPrefix})`);
+    if (n === 0) {
+      console.log(
+        `      Mẫu này KHÔNG THỂ kêu cho "${vertical}" — không trang nào có dữ liệu đó. Số 0 của nó nghĩa là "không có gì để soi".`
+      );
+    } else if (n < zips.length) {
+      console.log(`      ${zips.length - n} trang không có dữ liệu đó, nên mẫu này không soi tới chúng.`);
+    }
+  }
+  console.log();
+}
+
 async function main() {
   const vertical = process.argv[2];
   if (!vertical) {
@@ -418,6 +495,7 @@ async function main() {
   }
   assertScannerWorks(vertical);
   const PATTERNS = patternsFor(vertical);
+  await reportSurface(vertical, PATTERNS);
 
   const rows = await prisma.aiGeneration.findMany({
     where: { vertical, validationPassed: true },
