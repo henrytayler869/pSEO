@@ -13,7 +13,7 @@
 // .env, not in the database.
 
 import os from "node:os";
-import { setAdminPassword, getAdminPasswordHash } from "../lib/auth/password";
+import { setAdminPassword, getAdminPasswordHash, verifyPassword } from "../lib/auth/password";
 import { prisma } from "../lib/db/prisma";
 
 /** Where this just wrote, in terms a person can check against where they meant
@@ -71,6 +71,30 @@ async function main() {
   }
 
   const had = await getAdminPasswordHash();
+
+  // Refuse a "new" password that is the one already stored.
+  //
+  // The Settings form already refuses this, by comparing the two plaintexts it
+  // has. This path never sees the old plaintext — but it does not need to:
+  // verifying the NEW password against the STORED hash answers the same
+  // question.
+  //
+  // It matters because of what an observer can and cannot tell. Writing this
+  // row changes updatedAt and produces a different hash either way, since the
+  // salt is regenerated every time. So an unchanged password and a real change
+  // look identical from outside — which is exactly the situation someone lands
+  // in after rotating a password they believe was exposed. Without this check,
+  // "I changed it" and "the record was rewritten" are two different facts that
+  // no measurement can separate.
+  if (had && verifyPassword(password, had)) {
+    console.error("Mật khẩu mới TRÙNG mật khẩu hiện tại — không ghi gì.");
+    console.error("Ghi lại vẫn đổi hash (salt sinh mới mỗi lần) và vẫn đổi updatedAt, nên nhìn từ");
+    console.error("bên ngoài sẽ giống hệt một lần đổi thật. Nếu bạn đang xoay mật khẩu vì nghi lộ,");
+    console.error("thì đây đúng là trường hợp không được để lọt.");
+    process.exitCode = 1;
+    return;
+  }
+
   await setAdminPassword(password);
 
   console.log(had ? "Đã ĐỔI mật khẩu quản trị." : "Đã ĐẶT mật khẩu quản trị lần đầu.");
