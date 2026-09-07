@@ -21,7 +21,7 @@
 
 import { prisma } from "../lib/db/prisma";
 import { VERTICALS_WITH_BRIEFS } from "../lib/ai/generate";
-import { getRealDataPointsForZipAndVertical } from "../lib/queries/collector";
+import { buildFactSet } from "../lib/ai/facts";
 
 interface Pattern {
   name: string;
@@ -463,15 +463,28 @@ async function reportSurface(vertical: string, patterns: Pattern[]): Promise<voi
       console.log(`  ${p.name.padEnd(20)} ${String(zips.length).padStart(4)}  (áp dụng cho mọi đoạn văn)`);
       continue;
     }
-    // Must go through the SAME vertical-filtered accessor the fact builder
-    // uses, not a raw DataPoint query. A zip can hold IRS points collected
-    // for moving-services while the solar FactSet never receives them — so
-    // querying by zip alone reported a surface of 3 where the real one is 0,
-    // measuring something adjacent to the question instead of the question.
+    // Counted from the FACTS the model actually receives, not from
+    // DataPoints.
+    //
+    // Two hops matter and only the second is definitional. Querying
+    // DataPoint by zip was wrong outright — a zip holds IRS points collected
+    // for moving-services that the solar FactSet never receives, so it
+    // reported a surface of 3 where the real one is 0. Going through the
+    // vertical-filtered accessor fixed that, but it agreed with the fact
+    // builder by coincidence of using the same call, not by construction:
+    // facts.ts already drops one input on purpose (search volume), so the
+    // DataPoint -> Fact mapping is not 1:1 and nothing keeps it that way.
+    // Any further filter added there would leave this over-reporting a reach
+    // the model never had.
+    //
+    // Reading buildFactSet closes that: a pattern's surface IS the set of
+    // prompts carrying the figure it looks for, and buildFactSet is the
+    // definition of what a prompt carries. It cannot drift from the thing it
+    // measures.
     let n = 0;
     for (const zip of zips) {
-      const points = await getRealDataPointsForZipAndVertical(zip, vertical);
-      if (points.some((pt) => pt.metric.startsWith(p.requiresMetricPrefix!))) n++;
+      const factSet = await buildFactSet(vertical, zip);
+      if (factSet?.facts.some((f) => f.key.startsWith(p.requiresMetricPrefix!))) n++;
     }
     const mark = n === 0 ? "!" : " ";
     console.log(`${mark} ${p.name.padEnd(20)} ${String(n).padStart(4)}  (cần dữ liệu ${p.requiresMetricPrefix})`);
