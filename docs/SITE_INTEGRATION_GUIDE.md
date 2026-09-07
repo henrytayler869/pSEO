@@ -553,6 +553,67 @@ input**, không phải dữ liệu remote — đọc ở module scope, đừng b
 cache dành cho dữ liệu mạng. Và verify bằng đúng điều kiện sinh ra lỗi:
 regenerate rồi build mà **không** xoá thư mục cache.
 
+### ⚠️⚠️⚠️ Bẫy cùng loại nhưng nằm ở tầng thấp hơn: cache `fetch()` không ai địa chỉ hoá được
+
+Ca thật (2026-09-07). Sau khi Head Quarter sinh lại 2 đoạn văn, site build lại
+để lấy bản mới. Kết quả **trong cùng một lần build, cùng một lệnh**:
+
+```
+85142 → text CŨ
+90280 → text MỚI
+```
+
+Site không hề cache trên đĩa. Nhưng Next giữ một cache **thứ hai** cho
+`fetch()`, khoá theo URL, nằm trong `.next/cache`, tồn tại qua các lần build và
+**không mang tag** — nên `revalidateTag` không với tới, và đổi khoá của lớp
+`use cache` bọc bên ngoài cũng không đụng được. Khác biệt giữa hai zip chỉ là
+entry nào tình cờ hết hạn: **tung đồng xu**, và trang giữ text cũ trông y hệt
+trang đúng.
+
+Cùng cơ chế đó trước đây đã gây ra hai sự cố mà site chẩn đoán sai tầng — lỗi
+ZodError khi thêm trường, và 5 metric mobility không lên trang. Cả hai lần đều
+báo "đã sửa"; bản vá đúng nhưng không phải nguyên nhân duy nhất.
+
+> **Nguyên tắc**: một cache mà không có gì địa chỉ hoá được thì không phải
+> cache, nó là **state không ai kiểm soát**. Có tag mới là cache.
+
+**Head Quarter nay chặn từ gốc.** Mọi response `/api/v1` — kể cả 401, 404, 422,
+429 — đều trả:
+
+```
+Cache-Control: no-store, no-cache, must-revalidate
+Pragma: no-cache
+```
+
+Không gửi header cache **không** có nghĩa "đừng cache"; nó có nghĩa mỗi client
+tự chọn chính sách, và mặc định của framework hiếm khi là cái bạn muốn. Việc
+sinh nội dung đã được cache sẵn phía server (trong `AiGeneration`), nên một
+request chỉ là một lượt đọc database — cache HTTP không mua được gì, chỉ mua
+thêm một khoảng thời gian site phục vụ nội dung đã bị thay thế.
+
+Site **vẫn nên cache**, nhưng bằng lớp của chính mình, có tag, invalidate được.
+Điều bị chặn là việc tầng transport tự cache thay bạn.
+
+Lý do 401 cũng `no-store`: một 401 bị cache sống lâu hơn cái key đã xoay vòng
+gây ra nó.
+
+### `textFingerprint` — tín hiệu đúng để phát hiện đoạn văn đã cũ
+
+`factsFingerprint` trả lời câu hỏi **hẹp hơn** bạn tưởng: nó đổi khi **con số**
+đổi. Nó **không** nhúc nhích khi cùng bộ số được diễn đạt lại — mà đó chính là
+điều xảy ra khi một luật prompt siết lại và toàn bộ nội dung được sinh lại.
+Đã xảy ra thật hai lần trong dự án này.
+
+Nên `/interpretation` trả thêm:
+
+```json
+{ "factsFingerprint": "1088e6b6…", "textFingerprint": "d4da3328e0ac5596" }
+```
+
+`textFingerprint` đổi **khi và chỉ khi** đoạn văn bạn render đổi, bất kể vì lý
+do gì. Muốn hỏi "bản tôi lưu có còn là bản sẽ được phục vụ không" thì so
+trường này. Dùng `factsFingerprint` cho câu hỏi khác: "số đã đổi chưa".
+
 ### Khi thêm trường mới, LUÔN báo kèm độ phủ
 
 Một trường rỗng không chỉ tạo code chết — nó tạo **báo cáo sai**.

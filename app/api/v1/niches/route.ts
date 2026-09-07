@@ -1,5 +1,6 @@
 import { requireApiKey } from "@/lib/api/auth";
 import { getTrafficVerticalSummaries } from "@/lib/queries/traffic-research";
+import { apiJson } from "@/lib/api/cache-policy";
 
 /**
  * GET /api/v1/niches — every TRAFFIC-researched niche, ranked by average
@@ -11,7 +12,7 @@ export async function GET(request: Request) {
   if (unauthorized) return unauthorized;
 
   const summaries = await getTrafficVerticalSummaries();
-  return Response.json({
+  return apiJson({
     niches: summaries.map((s) => ({
       vertical: s.vertical,
       rank: s.rank,

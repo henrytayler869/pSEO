@@ -4,6 +4,7 @@ import { latestPerKeyword } from "@/lib/keywords/latest";
 import { computeTrafficValues, computeTrafficBaselines } from "@/lib/keywords/traffic-metrics";
 import { getLatestSemanticKeywords } from "@/lib/keywords/related-keywords";
 import { getRealDataPointsForZipAndVertical, getCountyKeywordForZip } from "@/lib/queries/collector";
+import { apiJson } from "@/lib/api/cache-policy";
 
 /**
  * GET /api/v1/niches/{vertical}/markets/{zip} — the full real dataset for
@@ -30,7 +31,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/v1/niches/[v
     include: { keywordMetrics: true, marketScores: { where: { mode: "TRAFFIC" }, orderBy: { version: "desc" }, take: 1 } },
   });
   if (!identity) {
-    return Response.json({ error: `No researched market found for vertical "${vertical}", zip "${zip}".` }, { status: 404 });
+    return apiJson({ error: `No researched market found for vertical "${vertical}", zip "${zip}".` }, { status: 404 });
   }
 
   const location = await prisma.location.findFirst({ where: { zip } });
@@ -38,7 +39,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/v1/niches/[v
 
   const values = computeTrafficValues(identity.keywordMetrics);
   if (!values) {
-    return Response.json({ error: `No keyword data with search volume for vertical "${vertical}", zip "${zip}".` }, { status: 404 });
+    return apiJson({ error: `No keyword data with search volume for vertical "${vertical}", zip "${zip}".` }, { status: 404 });
   }
   const latestKeywordRow = latestPerKeyword(identity.keywordMetrics)[0];
   const mainKeyword = latestKeywordRow?.keyword ?? null;
@@ -55,7 +56,7 @@ export async function GET(request: Request, ctx: RouteContext<"/api/v1/niches/[v
 
   const latestScore = identity.marketScores[0];
 
-  return Response.json({
+  return apiJson({
     vertical,
     zip,
     city: cityName,

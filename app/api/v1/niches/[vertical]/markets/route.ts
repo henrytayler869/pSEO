@@ -1,5 +1,6 @@
 import { requireApiKey } from "@/lib/api/auth";
 import { getTrafficRankedMarkets } from "@/lib/queries/traffic-research";
+import { apiJson } from "@/lib/api/cache-policy";
 
 /**
  * GET /api/v1/niches/{vertical}/markets — every real zip researched for this
@@ -15,10 +16,10 @@ export async function GET(request: Request, ctx: RouteContext<"/api/v1/niches/[v
   const { vertical } = await ctx.params;
   const markets = await getTrafficRankedMarkets(vertical);
   if (markets.length === 0) {
-    return Response.json({ error: `No researched markets found for vertical "${vertical}".` }, { status: 404 });
+    return apiJson({ error: `No researched markets found for vertical "${vertical}".` }, { status: 404 });
   }
 
-  return Response.json({
+  return apiJson({
     vertical,
     markets: markets.map((m) => ({
       zip: m.zip,

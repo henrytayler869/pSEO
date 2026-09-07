@@ -1,6 +1,7 @@
 import { requireApiKey } from "@/lib/api/auth";
-import { getOrGenerateInterpretation } from "@/lib/ai/generate";
+import { getOrGenerateInterpretation, fingerprintText } from "@/lib/ai/generate";
 import { SpendCapExceededError, getTotalSpendUsd, getAiConfig } from "@/lib/ai/anthropic";
+import { apiJson } from "@/lib/api/cache-policy";
 
 /**
  * GET /api/v1/niches/{vertical}/markets/{zip}/interpretation
@@ -28,25 +29,23 @@ export async function GET(
   try {
     const outcome = await getOrGenerateInterpretation(vertical, zip);
     if (!outcome) {
-      return Response.json(
+      return apiJson(
         { error: `No researched market with keyword data for vertical "${vertical}", zip "${zip}".` },
-        { status: 404 }
-      );
+        { status: 404 });
     }
 
     if (!outcome.validation.passed) {
-      return Response.json(
+      return apiJson(
         {
           error: "Generated text failed fact validation and was not served.",
           issues: outcome.validation.issues,
           attempts: outcome.attempts,
           hint: "Không phải lỗi tạm thời — thử lại thường cho kết quả như cũ. Xem AiGeneration để đọc text bị chặn và prompt đã dùng.",
         },
-        { status: 422 }
-      );
+        { status: 422 });
     }
 
-    return Response.json({
+    return apiJson({
       vertical,
       zip,
       text: outcome.text,
@@ -55,23 +54,29 @@ export async function GET(
       // stores this can tell its cached copy is describing stale numbers
       // without having to diff the numbers themselves.
       factsFingerprint: outcome.factsFingerprint,
+      // Changes whenever the TEXT changes, including when the figures did
+      // not. Copy gets regenerated for reasons no consumer can observe — a
+      // prompt rule tightening, for instance — and factsFingerprint stays
+      // identical through that, so a site keying staleness on facts alone
+      // silently keeps a superseded paragraph. This is the field to compare
+      // when the question is "is what I stored still what would be served".
+      textFingerprint: fingerprintText(outcome.text),
     });
   } catch (err) {
     if (err instanceof SpendCapExceededError) {
-      return Response.json(
+      return apiJson(
         {
           error: err.message,
           spentUsd: err.spentUsd,
           capUsd: err.capUsd,
         },
-        { status: 429 }
-      );
+        { status: 429 });
     }
     const message = err instanceof Error ? err.message : "Sinh nội dung thất bại.";
     // A missing key is a configuration problem, not a server fault — say so
     // plainly rather than returning an opaque 500.
     const status = message.includes("ANTHROPIC_API_KEY") ? 503 : 500;
-    return Response.json({ error: message, ...(status === 503 ? await spendContext() : {}) }, { status });
+    return apiJson({ error: message, ...(status === 503 ? await spendContext() : {}) }, { status });
   }
 }
 

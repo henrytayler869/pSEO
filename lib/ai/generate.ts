@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { buildFactSet, type FactSet } from "./facts";
 import { validateGeneratedText, type ValidationResult } from "./validate";
 import { generateWithClaude } from "./anthropic";
+import crypto from "node:crypto";
 
 const MAX_ATTEMPTS = 2; // one retry: a second failure is a prompt problem, not luck
 
@@ -123,6 +124,21 @@ function renderFactsForPrompt(factSet: FactSet): string {
     "MEASURED FIGURES (the only facts you may state):",
     ...lines,
   ].join("\n");
+}
+
+/** Fingerprint of the served TEXT.
+ *
+ * Distinct from factsFingerprint, and needed because that one answers a
+ * narrower question than consumers assumed. factsFingerprint changes when the
+ * NUMBERS change; it does not move when the same numbers get described
+ * differently — which is exactly what happens when a prompt rule tightens and
+ * copy is regenerated. A site keying staleness on facts alone will therefore
+ * hold a superseded paragraph and have no way to notice.
+ *
+ * This changes if and only if the text a consumer would render changes,
+ * whatever the reason. */
+export function fingerprintText(text: string): string {
+  return crypto.createHash("sha256").update(text).digest("hex").slice(0, 16);
 }
 
 export interface GenerateOutcome {
