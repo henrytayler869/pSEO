@@ -56,14 +56,21 @@ jobs:
         # accident fails here rather than on the VPS.
         run: npx prisma migrate deploy
 
+      # Build comes BEFORE typecheck, which reads backwards and is correct.
+      # Next 16 GENERATES the types for route handlers and layouts
+      # (`RouteContext`, `LayoutProps`) during the build, into .next/types. A
+      # clean checkout has no .next, so typecheck-first fails on four files
+      # with "Cannot find name 'RouteContext'" — while passing on any machine
+      # that happens to have built once. That is a green local check standing
+      # on a build artefact nobody declared a dependency on.
+      - name: Build
+        run: npm run build
+
       - name: Typecheck
         run: npx tsc --noEmit
 
       - name: Lint
         run: npx eslint .
-
-      - name: Build
-        run: npm run build
 
       - name: Test — luật xác thực dữ liệu
         # Pure functions, no data needed. Proves each collector rule can fire
