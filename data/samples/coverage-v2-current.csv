@@ -1,0 +1,280 @@
+zip,city,state,vertical,payoutFloor,pricingModel,isFlatRate,coverageZipCount,sourceRefreshedAt
+10001,New York,NY,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+10001,New York,NY,hvac-repair,34.34,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+10001,New York,NY,garage-door-repair,21.41,CPL,false,72,2026-09-04T00:00:00.000Z
+90001,Los Angeles,CA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+90001,Los Angeles,CA,hvac-repair,44.57,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+90001,Los Angeles,CA,roofing-replacement,172.17,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+90001,Los Angeles,CA,garage-door-repair,19.18,CPL,false,72,2026-09-04T00:00:00.000Z
+60601,Chicago,IL,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+60601,Chicago,IL,hvac-repair,38.57,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+60601,Chicago,IL,roofing-replacement,203.76,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+60601,Chicago,IL,garage-door-repair,21.5,CPL,false,72,2026-09-04T00:00:00.000Z
+77002,Houston,TX,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+77002,Houston,TX,hvac-repair,41.58,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+77002,Houston,TX,roofing-replacement,177.44,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+77002,Houston,TX,garage-door-repair,21.61,CPL,false,72,2026-09-04T00:00:00.000Z
+85001,Phoenix,AZ,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+85001,Phoenix,AZ,hvac-repair,45.72,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+85001,Phoenix,AZ,roofing-replacement,181.45,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+85001,Phoenix,AZ,garage-door-repair,16.93,CPL,false,72,2026-09-04T00:00:00.000Z
+19102,Philadelphia,PA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+19102,Philadelphia,PA,hvac-repair,34.35,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+19102,Philadelphia,PA,roofing-replacement,221.62,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+19102,Philadelphia,PA,garage-door-repair,19.76,CPL,false,72,2026-09-04T00:00:00.000Z
+78201,San Antonio,TX,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+78201,San Antonio,TX,hvac-repair,27.11,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+78201,San Antonio,TX,roofing-replacement,138.53,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+78201,San Antonio,TX,garage-door-repair,15.7,CPL,false,72,2026-09-04T00:00:00.000Z
+92101,San Diego,CA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+92101,San Diego,CA,hvac-repair,35.21,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+92101,San Diego,CA,roofing-replacement,201.48,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+92101,San Diego,CA,garage-door-repair,15.8,CPL,false,72,2026-09-04T00:00:00.000Z
+75201,Dallas,TX,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+75201,Dallas,TX,hvac-repair,38.48,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+75201,Dallas,TX,garage-door-repair,16.85,CPL,false,72,2026-09-04T00:00:00.000Z
+78701,Austin,TX,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+78701,Austin,TX,hvac-repair,46.29,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+78701,Austin,TX,roofing-replacement,197.13,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+78701,Austin,TX,garage-door-repair,15.77,CPL,false,72,2026-09-04T00:00:00.000Z
+95101,San Jose,CA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+95101,San Jose,CA,hvac-repair,32.02,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+95101,San Jose,CA,roofing-replacement,188.82,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+95101,San Jose,CA,garage-door-repair,13.94,CPL,false,72,2026-09-04T00:00:00.000Z
+76102,Fort Worth,TX,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+76102,Fort Worth,TX,hvac-repair,36.67,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+76102,Fort Worth,TX,roofing-replacement,130.9,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+76102,Fort Worth,TX,garage-door-repair,13.75,CPL,false,72,2026-09-04T00:00:00.000Z
+32202,Jacksonville,FL,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+32202,Jacksonville,FL,hvac-repair,27.5,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+32202,Jacksonville,FL,roofing-replacement,117.39,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+32202,Jacksonville,FL,garage-door-repair,14.29,CPL,false,72,2026-09-04T00:00:00.000Z
+43215,Columbus,OH,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+43215,Columbus,OH,hvac-repair,34.15,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+43215,Columbus,OH,roofing-replacement,127.16,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+43215,Columbus,OH,garage-door-repair,14.73,CPL,false,72,2026-09-04T00:00:00.000Z
+28202,Charlotte,NC,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+28202,Charlotte,NC,hvac-repair,29.55,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+28202,Charlotte,NC,roofing-replacement,130.1,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+28202,Charlotte,NC,garage-door-repair,15.2,CPL,false,72,2026-09-04T00:00:00.000Z
+94102,San Francisco,CA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+94102,San Francisco,CA,hvac-repair,55.34,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+94102,San Francisco,CA,roofing-replacement,192.66,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+94102,San Francisco,CA,garage-door-repair,16.98,CPL,false,72,2026-09-04T00:00:00.000Z
+46201,Indianapolis,IN,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+46201,Indianapolis,IN,hvac-repair,30.44,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+46201,Indianapolis,IN,garage-door-repair,11.86,CPL,false,72,2026-09-04T00:00:00.000Z
+98101,Seattle,WA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+98101,Seattle,WA,hvac-repair,44.42,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+98101,Seattle,WA,roofing-replacement,207.69,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+98101,Seattle,WA,garage-door-repair,20.32,CPL,false,72,2026-09-04T00:00:00.000Z
+80202,Denver,CO,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+80202,Denver,CO,hvac-repair,48.47,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+80202,Denver,CO,roofing-replacement,166.08,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+80202,Denver,CO,garage-door-repair,22.04,CPL,false,72,2026-09-04T00:00:00.000Z
+20001,Washington,DC,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+20001,Washington,DC,hvac-repair,40.96,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+20001,Washington,DC,roofing-replacement,226.05,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+20001,Washington,DC,garage-door-repair,16.52,CPL,false,72,2026-09-04T00:00:00.000Z
+37201,Nashville,TN,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+37201,Nashville,TN,hvac-repair,30.97,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+37201,Nashville,TN,roofing-replacement,97.55,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+37201,Nashville,TN,garage-door-repair,13.3,CPL,false,72,2026-09-04T00:00:00.000Z
+73102,Oklahoma City,OK,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+73102,Oklahoma City,OK,hvac-repair,32.78,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+73102,Oklahoma City,OK,roofing-replacement,145.64,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+73102,Oklahoma City,OK,garage-door-repair,16.01,CPL,false,72,2026-09-04T00:00:00.000Z
+79901,El Paso,TX,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+79901,El Paso,TX,hvac-repair,22.05,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+79901,El Paso,TX,roofing-replacement,102.51,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+79901,El Paso,TX,garage-door-repair,10.41,CPL,false,72,2026-09-04T00:00:00.000Z
+02108,Boston,MA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+02108,Boston,MA,hvac-repair,38.65,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+02108,Boston,MA,roofing-replacement,209.5,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+02108,Boston,MA,garage-door-repair,16.81,CPL,false,72,2026-09-04T00:00:00.000Z
+97201,Portland,OR,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+97201,Portland,OR,hvac-repair,33.24,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+97201,Portland,OR,garage-door-repair,12.09,CPL,false,72,2026-09-04T00:00:00.000Z
+89101,Las Vegas,NV,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+89101,Las Vegas,NV,hvac-repair,35.01,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+89101,Las Vegas,NV,roofing-replacement,120.44,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+89101,Las Vegas,NV,garage-door-repair,16.1,CPL,false,72,2026-09-04T00:00:00.000Z
+48201,Detroit,MI,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+48201,Detroit,MI,hvac-repair,32.22,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+48201,Detroit,MI,roofing-replacement,143.95,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+48201,Detroit,MI,garage-door-repair,13.18,CPL,false,72,2026-09-04T00:00:00.000Z
+38103,Memphis,TN,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+38103,Memphis,TN,hvac-repair,34.14,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+38103,Memphis,TN,roofing-replacement,131.08,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+38103,Memphis,TN,garage-door-repair,15.16,CPL,false,72,2026-09-04T00:00:00.000Z
+40202,Louisville,KY,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+40202,Louisville,KY,hvac-repair,30.57,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+40202,Louisville,KY,roofing-replacement,137.47,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+40202,Louisville,KY,garage-door-repair,15.73,CPL,false,72,2026-09-04T00:00:00.000Z
+21201,Baltimore,MD,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+21201,Baltimore,MD,hvac-repair,35.32,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+21201,Baltimore,MD,roofing-replacement,164.9,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+21201,Baltimore,MD,garage-door-repair,15.97,CPL,false,72,2026-09-04T00:00:00.000Z
+53202,Milwaukee,WI,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+53202,Milwaukee,WI,hvac-repair,25.78,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+53202,Milwaukee,WI,roofing-replacement,129.19,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+53202,Milwaukee,WI,garage-door-repair,12.97,CPL,false,72,2026-09-04T00:00:00.000Z
+87101,Albuquerque,NM,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+87101,Albuquerque,NM,hvac-repair,22.26,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+87101,Albuquerque,NM,roofing-replacement,101.73,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+87101,Albuquerque,NM,garage-door-repair,8.4,CPL,false,72,2026-09-04T00:00:00.000Z
+85701,Tucson,AZ,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+85701,Tucson,AZ,hvac-repair,28.68,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+85701,Tucson,AZ,garage-door-repair,7.68,CPL,false,72,2026-09-04T00:00:00.000Z
+93701,Fresno,CA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+93701,Fresno,CA,hvac-repair,25.77,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+93701,Fresno,CA,roofing-replacement,106.01,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+93701,Fresno,CA,garage-door-repair,7.8,CPL,false,72,2026-09-04T00:00:00.000Z
+95814,Sacramento,CA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+95814,Sacramento,CA,hvac-repair,38.62,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+95814,Sacramento,CA,roofing-replacement,123.79,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+95814,Sacramento,CA,garage-door-repair,15.06,CPL,false,72,2026-09-04T00:00:00.000Z
+64105,Kansas City,MO,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+64105,Kansas City,MO,hvac-repair,34.45,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+64105,Kansas City,MO,roofing-replacement,129.86,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+64105,Kansas City,MO,garage-door-repair,13.56,CPL,false,72,2026-09-04T00:00:00.000Z
+30301,Atlanta,GA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+30301,Atlanta,GA,hvac-repair,36.91,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+30301,Atlanta,GA,roofing-replacement,205.86,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+30301,Atlanta,GA,garage-door-repair,17.88,CPL,false,72,2026-09-04T00:00:00.000Z
+33101,Miami,FL,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+33101,Miami,FL,hvac-repair,37.57,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+33101,Miami,FL,roofing-replacement,204.05,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+33101,Miami,FL,garage-door-repair,21.65,CPL,false,72,2026-09-04T00:00:00.000Z
+27601,Raleigh,NC,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+27601,Raleigh,NC,hvac-repair,30.94,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+27601,Raleigh,NC,roofing-replacement,154.74,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+27601,Raleigh,NC,garage-door-repair,13.46,CPL,false,72,2026-09-04T00:00:00.000Z
+68102,Omaha,NE,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+68102,Omaha,NE,hvac-repair,22.55,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+68102,Omaha,NE,roofing-replacement,107.44,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+68102,Omaha,NE,garage-door-repair,8.58,CPL,false,72,2026-09-04T00:00:00.000Z
+55401,Minneapolis,MN,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+55401,Minneapolis,MN,hvac-repair,37.87,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+55401,Minneapolis,MN,garage-door-repair,19.93,CPL,false,72,2026-09-04T00:00:00.000Z
+44113,Cleveland,OH,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+44113,Cleveland,OH,hvac-repair,37.47,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+44113,Cleveland,OH,roofing-replacement,160.57,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+44113,Cleveland,OH,garage-door-repair,12.53,CPL,false,72,2026-09-04T00:00:00.000Z
+74103,Tulsa,OK,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+74103,Tulsa,OK,hvac-repair,26.97,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+74103,Tulsa,OK,roofing-replacement,94.63,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+74103,Tulsa,OK,garage-door-repair,7.98,CPL,false,72,2026-09-04T00:00:00.000Z
+76001,Arlington,TX,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+76001,Arlington,TX,hvac-repair,21.76,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+76001,Arlington,TX,roofing-replacement,102.03,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+76001,Arlington,TX,garage-door-repair,9.68,CPL,false,72,2026-09-04T00:00:00.000Z
+70112,New Orleans,LA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+70112,New Orleans,LA,hvac-repair,30.52,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+70112,New Orleans,LA,roofing-replacement,128.68,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+70112,New Orleans,LA,garage-door-repair,13.18,CPL,false,72,2026-09-04T00:00:00.000Z
+67202,Wichita,KS,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+67202,Wichita,KS,hvac-repair,24.38,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+67202,Wichita,KS,roofing-replacement,96.16,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+67202,Wichita,KS,garage-door-repair,10.6,CPL,false,72,2026-09-04T00:00:00.000Z
+93301,Bakersfield,CA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+93301,Bakersfield,CA,hvac-repair,26.68,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+93301,Bakersfield,CA,roofing-replacement,111.71,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+93301,Bakersfield,CA,garage-door-repair,7.91,CPL,false,72,2026-09-04T00:00:00.000Z
+33602,Tampa,FL,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+33602,Tampa,FL,hvac-repair,29.09,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+33602,Tampa,FL,roofing-replacement,143.07,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+33602,Tampa,FL,garage-door-repair,12.95,CPL,false,72,2026-09-04T00:00:00.000Z
+80010,Aurora,CO,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+80010,Aurora,CO,hvac-repair,25.01,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+80010,Aurora,CO,garage-door-repair,8.74,CPL,false,72,2026-09-04T00:00:00.000Z
+92801,Anaheim,CA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+92801,Anaheim,CA,hvac-repair,27.74,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+92801,Anaheim,CA,roofing-replacement,91.53,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+92801,Anaheim,CA,garage-door-repair,8.47,CPL,false,72,2026-09-04T00:00:00.000Z
+92701,Santa Ana,CA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+92701,Santa Ana,CA,hvac-repair,25.73,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+92701,Santa Ana,CA,roofing-replacement,95.61,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+92701,Santa Ana,CA,garage-door-repair,8.98,CPL,false,72,2026-09-04T00:00:00.000Z
+63101,St. Louis,MO,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+63101,St. Louis,MO,hvac-repair,34.32,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+63101,St. Louis,MO,roofing-replacement,142.34,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+63101,St. Louis,MO,garage-door-repair,14.45,CPL,false,72,2026-09-04T00:00:00.000Z
+15201,Pittsburgh,PA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+15201,Pittsburgh,PA,hvac-repair,29.86,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+15201,Pittsburgh,PA,roofing-replacement,131.2,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+15201,Pittsburgh,PA,garage-door-repair,12.99,CPL,false,72,2026-09-04T00:00:00.000Z
+45202,Cincinnati,OH,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+45202,Cincinnati,OH,hvac-repair,30.87,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+45202,Cincinnati,OH,roofing-replacement,148.53,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+45202,Cincinnati,OH,garage-door-repair,12.59,CPL,false,72,2026-09-04T00:00:00.000Z
+23219,Richmond,VA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+23219,Richmond,VA,hvac-repair,22.9,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+23219,Richmond,VA,roofing-replacement,101.67,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+23219,Richmond,VA,garage-door-repair,8.4,CPL,false,72,2026-09-04T00:00:00.000Z
+84101,Salt Lake City,UT,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+84101,Salt Lake City,UT,hvac-repair,28.76,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+84101,Salt Lake City,UT,roofing-replacement,127.38,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+84101,Salt Lake City,UT,garage-door-repair,11.69,CPL,false,72,2026-09-04T00:00:00.000Z
+83702,Boise,ID,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+83702,Boise,ID,hvac-repair,26.73,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+83702,Boise,ID,garage-door-repair,8.94,CPL,false,72,2026-09-04T00:00:00.000Z
+35203,Birmingham,AL,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+35203,Birmingham,AL,hvac-repair,24.88,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+35203,Birmingham,AL,roofing-replacement,102.25,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+35203,Birmingham,AL,garage-door-repair,10.34,CPL,false,72,2026-09-04T00:00:00.000Z
+14604,Rochester,NY,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+14604,Rochester,NY,hvac-repair,28.92,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+14604,Rochester,NY,roofing-replacement,92.93,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+14604,Rochester,NY,garage-door-repair,7.88,CPL,false,72,2026-09-04T00:00:00.000Z
+06103,Hartford,CT,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+06103,Hartford,CT,hvac-repair,29.44,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+06103,Hartford,CT,roofing-replacement,95.88,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+06103,Hartford,CT,garage-door-repair,10.1,CPL,false,72,2026-09-04T00:00:00.000Z
+72201,Little Rock,AR,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+72201,Little Rock,AR,hvac-repair,29.29,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+72201,Little Rock,AR,roofing-replacement,91.61,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+72201,Little Rock,AR,garage-door-repair,7.85,CPL,false,72,2026-09-04T00:00:00.000Z
+99201,Spokane,WA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+99201,Spokane,WA,hvac-repair,27.11,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+99201,Spokane,WA,roofing-replacement,105.52,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+99201,Spokane,WA,garage-door-repair,8.06,CPL,false,72,2026-09-04T00:00:00.000Z
+50309,Des Moines,IA,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+50309,Des Moines,IA,hvac-repair,24.97,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+50309,Des Moines,IA,roofing-replacement,96.56,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+50309,Des Moines,IA,garage-door-repair,10.57,CPL,false,72,2026-09-04T00:00:00.000Z
+53703,Madison,WI,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+53703,Madison,WI,hvac-repair,25.93,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+53703,Madison,WI,roofing-replacement,107.29,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+53703,Madison,WI,garage-door-repair,10.11,CPL,false,72,2026-09-04T00:00:00.000Z
+37402,Chattanooga,TN,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+37402,Chattanooga,TN,hvac-repair,28.28,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+37402,Chattanooga,TN,garage-door-repair,7.6,CPL,false,72,2026-09-04T00:00:00.000Z
+29201,Columbia,SC,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+29201,Columbia,SC,hvac-repair,22.14,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+29201,Columbia,SC,roofing-replacement,88.18,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+29201,Columbia,SC,garage-door-repair,9.57,CPL,false,72,2026-09-04T00:00:00.000Z
+39201,Jackson,MS,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+39201,Jackson,MS,hvac-repair,28.44,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+39201,Jackson,MS,roofing-replacement,111.81,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+39201,Jackson,MS,garage-door-repair,10.02,CPL,false,72,2026-09-04T00:00:00.000Z
+58102,Fargo,ND,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+58102,Fargo,ND,hvac-repair,27.23,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+58102,Fargo,ND,roofing-replacement,106.52,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+58102,Fargo,ND,garage-door-repair,10.14,CPL,false,72,2026-09-04T00:00:00.000Z
+57104,Sioux Falls,SD,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+57104,Sioux Falls,SD,hvac-repair,26.93,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+57104,Sioux Falls,SD,roofing-replacement,89.91,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+57104,Sioux Falls,SD,garage-door-repair,8.83,CPL,false,72,2026-09-04T00:00:00.000Z
+82001,Cheyenne,WY,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+82001,Cheyenne,WY,hvac-repair,29.54,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+82001,Cheyenne,WY,roofing-replacement,101.19,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+82001,Cheyenne,WY,garage-door-repair,8.51,CPL,false,72,2026-09-04T00:00:00.000Z
+99501,Anchorage,AK,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+99501,Anchorage,AK,hvac-repair,27.55,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+99501,Anchorage,AK,roofing-replacement,83.91,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+99501,Anchorage,AK,garage-door-repair,8.45,CPL,false,72,2026-09-04T00:00:00.000Z
+96813,Honolulu,HI,water-damage-restoration,38,PER_CALL_DURATION,true,72,2026-09-04T00:00:00.000Z
+96813,Honolulu,HI,hvac-repair,37.09,PER_CALL_DURATION,false,72,2026-09-04T00:00:00.000Z
+96813,Honolulu,HI,roofing-replacement,122.44,PER_APPOINTMENT,false,63,2026-09-04T00:00:00.000Z
+96813,Honolulu,HI,garage-door-repair,13.32,CPL,false,72,2026-09-04T00:00:00.000Z

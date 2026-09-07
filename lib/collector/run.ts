@@ -1,0 +1,152 @@
+import { prisma } from "@/lib/db/prisma";
+import { SchemaDriftError, LocationFetchError } from "./errors";
+import { mapWithConcurrency, sleep } from "./concurrency";
+import type { CollectorAdapter, LocationRef } from "./types";
+
+export interface CollectionFailure {
+  locationId: string;
+  zip: string;
+  message: string;
+}
+
+export interface CollectionRunResult {
+  snapshotId: string;
+  status: "OK" | "SUSPECT";
+  version: number;
+  pointCount: number;
+  locationsSucceeded: number;
+  locationsFailed: number;
+  failures: CollectionFailure[];
+  driftMessage: string | null;
+}
+
+const DEFAULT_CONCURRENCY = 5;
+const DEFAULT_MAX_RETRIES = 2;
+
+async function fetchWithRetry(
+  adapter: CollectorAdapter,
+  location: LocationRef,
+  maxRetries: number
+): ReturnType<CollectorAdapter["fetchOne"]> {
+  let lastErr: unknown;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await adapter.fetchOne(location);
+    } catch (err) {
+      if (err instanceof SchemaDriftError) throw err; // never retry — it'll just fail the same way
+      lastErr = err;
+      if (attempt < maxRetries) {
+        await sleep(300 * 2 ** attempt); // 300ms, 600ms, ...
+      }
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
+}
+
+/**
+ * Runs one adapter over a batch of locations, creating a new DataSnapshot
+ * (never overwriting a prior one — version increments per DataSource).
+ * Per-location failures are retried, then logged and skipped — they never
+ * fail the whole run silently (Module 3's completeness check is what turns
+ * "we have no data for this location" into a BLOCK). A SchemaDriftError from
+ * any location halts the run immediately: the snapshot is marked SUSPECT
+ * with the drift reason, and no more locations are attempted, because a
+ * changed response shape means nothing else this source returns this run
+ * can be trusted either.
+ */
+export async function runCollection(params: {
+  adapterKey: string;
+  adapter: CollectorAdapter;
+  locations: LocationRef[];
+  concurrency?: number;
+  maxRetries?: number;
+}): Promise<CollectionRunResult> {
+  const { adapterKey, adapter, locations, concurrency = DEFAULT_CONCURRENCY, maxRetries = DEFAULT_MAX_RETRIES } = params;
+
+  const source = await prisma.dataSource.findUnique({ where: { adapterKey } });
+  if (!source) {
+    throw new Error(`Chưa có DataSource nào được đăng ký cho adapterKey "${adapterKey}" — hãy seed registry trước khi thu thập.`);
+  }
+
+  const lastVersion = await prisma.dataSnapshot.findFirst({
+    where: { sourceId: source.id },
+    orderBy: { version: "desc" },
+  });
+  const version = (lastVersion?.version ?? 0) + 1;
+
+  const failures: CollectionFailure[] = [];
+  let driftMessage: string | null = null;
+  const collectedPoints: { locationId: string; metric: string; value: number; unit: string; resolvedAtResolution: string; isInferred: boolean; confidence: number }[] = [];
+
+  await mapWithConcurrency(
+    locations,
+    concurrency,
+    async (location) => {
+      try {
+        const points = await fetchWithRetry(adapter, location, maxRetries);
+        for (const p of points) {
+          collectedPoints.push({ locationId: location.locationId, ...p });
+        }
+      } catch (err) {
+        if (err instanceof SchemaDriftError) {
+          // Don't rethrow — that would escape mapWithConcurrency's
+          // Promise.all and crash the whole run. Setting driftMessage is
+          // enough: shouldAbort() stops every worker from picking up new
+          // locations on its next loop iteration.
+          driftMessage = err.message;
+          return;
+        }
+        const message = err instanceof LocationFetchError || err instanceof Error ? err.message : String(err);
+        failures.push({ locationId: location.locationId, zip: location.zip, message });
+        console.error(`[collector:${adapterKey}] failed for zip ${location.zip} (${location.locationId}): ${message}`);
+      }
+    },
+    () => driftMessage !== null
+  );
+
+  const status = driftMessage !== null ? "SUSPECT" : "OK";
+  const statusNoteParts: string[] = [];
+  if (driftMessage) statusNoteParts.push(`Schema drift: ${driftMessage}`);
+  if (failures.length > 0) {
+    const shown = failures.slice(0, 20).map((f) => `${f.zip} (${f.message})`);
+    const suffix = failures.length > 20 ? ` +${failures.length - 20} more` : "";
+    statusNoteParts.push(`${failures.length} location(s) failed: ${shown.join("; ")}${suffix}`);
+  }
+
+  const snapshot = await prisma.dataSnapshot.create({
+    data: {
+      sourceId: source.id,
+      version,
+      status,
+      statusNote: statusNoteParts.length > 0 ? statusNoteParts.join(" | ") : null,
+    },
+  });
+
+  if (collectedPoints.length > 0) {
+    await prisma.dataPoint.createMany({
+      data: collectedPoints.map((p) => ({
+        locationId: p.locationId,
+        snapshotId: snapshot.id,
+        metric: p.metric,
+        value: p.value,
+        unit: p.unit,
+        resolvedAtResolution: p.resolvedAtResolution as never,
+        isInferred: p.isInferred,
+        confidence: p.confidence,
+      })),
+    });
+  }
+
+  const succeededLocationIds = new Set(collectedPoints.map((p) => p.locationId));
+
+  return {
+    snapshotId: snapshot.id,
+    status,
+    version,
+    pointCount: collectedPoints.length,
+    locationsSucceeded: succeededLocationIds.size,
+    locationsFailed: failures.length,
+    failures,
+    driftMessage,
+  };
+}

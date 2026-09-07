@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pseo-control-panel-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pseo
+      POSTGRES_PASSWORD: pseo
+      POSTGRES_DB: pseo_control_panel
+    ports:
+      - "5433:5432"
+    volumes:
+      - pseo_pgdata:/var/lib/postgresql/data
+
+volumes:
+  pseo_pgdata:

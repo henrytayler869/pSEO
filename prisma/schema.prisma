@@ -1,0 +1,495 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum PricingModel {
+  PER_APPOINTMENT
+  PER_CALL_DURATION
+  CPL
+}
+
+enum ScoreMode {
+  PAYOUT // real payoutFloor from a network coverage import
+  TRAFFIC // no network yet — scored on SEO opportunity alone
+}
+
+enum GeoResolution {
+  ZIP
+  COUNTY
+  METRO
+  STATE
+}
+
+enum SnapshotStatus {
+  OK
+  SUSPECT // schema drift or other adapter-level anomaly detected
+  FAILED
+}
+
+enum FlagSeverity {
+  INFO
+  WARN
+  BLOCK
+}
+
+// ---------------------------------------------------------------------------
+// Coverage import (raw + parsed)
+// ---------------------------------------------------------------------------
+
+// One row per network coverage file import. The raw payload is preserved
+// verbatim (never mutated) so every Market row can be traced back to the
+// exact file it came from, and two imports can be diffed against each other.
+model CoverageImport {
+  id         String   @id @default(cuid())
+  fileName   String
+  network    String // e.g. "NetworkX Home Services"
+  importedAt DateTime @default(now())
+  rawPayload Json // the parsed CSV/JSON exactly as received, untouched
+  rowCount   Int
+  notes      String?
+
+  markets Market[]
+
+  @@index([importedAt])
+}
+
+// ---------------------------------------------------------------------------
+// MarketIdentity — the stable (zip, vertical) concept that survives every
+// coverage refresh. Everything that should trend over time (scores, keyword
+// data, external DataPoints, eventually Pages) hangs off this, NOT off a
+// particular CoverageImport's Market snapshot. Without this, re-importing a
+// coverage file produces entirely new Market rows and every history — score
+// versioning, page-to-market linkage — silently resets per import instead of
+// accumulating per real-world market.
+// ---------------------------------------------------------------------------
+
+model MarketIdentity {
+  id       String @id @default(cuid())
+  zip      String
+  vertical String
+
+  // Descriptive label only, frozen at first sighting. City/state for a given
+  // zip essentially never change in practice; if a later import disagrees,
+  // that's coverage-file noise, not a reason to treat this as versioned data.
+  // city is nullable because a MarketIdentity can now originate from the
+  // real Census-sourced Location registry (TRAFFIC mode, no coverage file),
+  // and Census's ZCTA geography doesn't carry a city name — same reasoning
+  // as Location.city.
+  city  String?
+  state String
+
+  createdAt DateTime @default(now())
+
+  coverageSnapshots Market[]
+  keywordMetrics    KeywordMetric[]
+  marketScores      MarketScore[]
+
+  @@unique([zip, vertical])
+  @@index([vertical])
+  @@index([zip])
+}
+
+// ---------------------------------------------------------------------------
+// Market — one coverage-import-scoped snapshot of a MarketIdentity's
+// payout/pricing terms. This is intentionally re-created on every import
+// (never updated in place), because payoutFloor/pricingModel/isFlatRate are
+// exactly the fields that legitimately change between coverage refreshes and
+// must stay traceable to the exact file they came from.
+// ---------------------------------------------------------------------------
+
+model Market {
+  id String @id @default(cuid())
+
+  marketIdentityId String
+  marketIdentity   MarketIdentity @relation(fields: [marketIdentityId], references: [id])
+
+  // Sourced directly from the network's coverage file for this vertical/zip.
+  // NOTE: this is a floor, not a guaranteed real payout. Never label it
+  // "expected earnings" anywhere in the UI.
+  payoutFloor  Float
+  pricingModel PricingModel
+
+  // Precomputed at import time by comparing payoutFloor across every zip in
+  // the same vertical for the same CoverageImport. If true, ranking by
+  // payout is meaningless for this vertical (see MarketScore + UI gating).
+  isFlatRate Boolean
+
+  coverageZipCount  Int // total zips in this vertical's coverage footprint at import time
+  sourceRefreshedAt DateTime // freshness of the coverage file itself, per the network
+
+  coverageImportId String
+  coverageImport   CoverageImport @relation(fields: [coverageImportId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  scoresComputedFromThis MarketScore[] @relation("ScoreSourceMarket")
+
+  @@unique([marketIdentityId, coverageImportId])
+  @@index([coverageImportId])
+}
+
+// ---------------------------------------------------------------------------
+// Keyword metrics (Ahrefs) — tied to the stable identity, not a coverage
+// snapshot, since search demand for "hvac repair in Austin" doesn't depend
+// on which coverage import happened to (re)discover that zip. Rows are never
+// overwritten; a later fetch for the same keyword adds a new row, and
+// consumers resolve "current" by taking the most recent fetchedAt per
+// keyword — see lib/keywords/latest.ts.
+// ---------------------------------------------------------------------------
+
+model KeywordMetric {
+  id               String         @id @default(cuid())
+  marketIdentityId String
+  marketIdentity   MarketIdentity @relation(fields: [marketIdentityId], references: [id])
+
+  keyword           String // the actual keyword pattern queried, e.g. "hvac repair 90210"
+  searchVolume      Int
+  keywordDifficulty Float // KD, 0-100
+  cpc               Float
+
+  source    String // "ahrefs_api" | "ahrefs_csv_import"
+  fetchedAt DateTime @default(now())
+
+  @@index([marketIdentityId])
+  @@index([keyword])
+}
+
+// ---------------------------------------------------------------------------
+// SemanticKeyword — related/topically-relevant keywords for a vertical as a
+// whole (DataForSEO Labs "related_keywords"), not per-zip like KeywordMetric.
+// Fetched once per niche (the seed is generic, e.g. "moving services", not a
+// city-specific long-tail phrase) — this is real on-page SEO input (what a
+// writer should cover/reference), not a scoring input, so it never touches
+// MarketScore. Insert-only like KeywordMetric, for the same reason: a later
+// fetch just adds a new row, resolved to "latest" via latestPerKeyword().
+model SemanticKeyword {
+  id       String @id @default(cuid())
+  vertical String
+
+  keyword           String
+  searchVolume      Int
+  keywordDifficulty Float
+  cpc               Float
+
+  source    String // "dataforseo_related_keywords"
+  fetchedAt DateTime @default(now())
+
+  @@index([vertical])
+  @@index([keyword])
+}
+
+// ---------------------------------------------------------------------------
+// CountyKeywordMetric — search demand measured for a COUNTY-sized place,
+// sitting between KeywordMetric (per zip) and SemanticKeyword (per whole
+// vertical). It exists because keyword resolution and data resolution were
+// mismatched: keywords are generated from the Census "Place" name, and all
+// 48 NYC zips share the Place "New York" — so every borough inherited
+// "movers new york" (18,100 SV, KD 49) even though each borough has its own
+// real, far easier term (measured 2026-09-07: brooklyn 6,600/KD 14,
+// queens 2,400/KD 2, bronx 1,300/KD 0).
+//
+// Keyed by countyFips, deliberately NOT by keyword string: a consuming site
+// once keyed an exception on a keyword string, this pipeline re-measured and
+// changed that string, and the exception broke silently. FIPS codes only
+// change when a state reorganises its administrative geography.
+//
+// Insert-only like KeywordMetric — a re-measurement adds a row and
+// consumers resolve "current" by latest fetchedAt.
+// ---------------------------------------------------------------------------
+
+model CountyKeywordMetric {
+  id         String @id @default(cuid())
+  vertical   String
+  countyFips String // 5-digit state+county FIPS, joins to Location.countyFips
+
+  // The colloquial place name the keyword was built from (e.g. "brooklyn"
+  // for Kings County) — stored so a consumer can see WHY this phrase, and
+  // so a wrong mapping is visible in the data rather than buried in config.
+  searchPlace String
+
+  keyword           String
+  searchVolume      Int
+  keywordDifficulty Float
+  cpc               Float
+
+  source    String // "dataforseo_api"
+  fetchedAt DateTime @default(now())
+
+  @@index([vertical, countyFips])
+  @@index([countyFips])
+}
+
+// ---------------------------------------------------------------------------
+// MarketScore — versioned per MarketIdentity, so score history for a real
+// market accumulates continuously across coverage refreshes instead of
+// restarting at version 1 every time the network re-sends its file.
+// sourceMarketId still pins each score to the exact coverage snapshot whose
+// payoutFloor fed the computation, so a specific import's ranked view can
+// show "the score computed from this import" rather than whatever the
+// latest score happens to be.
+// ---------------------------------------------------------------------------
+
+model MarketScore {
+  id               String         @id @default(cuid())
+  marketIdentityId String
+  marketIdentity   MarketIdentity @relation(fields: [marketIdentityId], references: [id])
+
+  // PAYOUT: scored from a real coverage-import Market snapshot (payoutFloor
+  // * estConversionRate * searchVolume / difficulty). TRAFFIC: no network
+  // relationship exists yet — scored purely on SEO opportunity (searchVolume
+  // * cpc / difficulty), no payout data involved. See lib/scoring/.
+  mode ScoreMode
+
+  // Which coverage snapshot's payoutFloor/etc this specific computation
+  // used. Null for TRAFFIC-mode scores — there is no coverage snapshot.
+  sourceMarketId String?
+  sourceMarket   Market? @relation("ScoreSourceMarket", fields: [sourceMarketId], references: [id])
+
+  calculatedAt DateTime @default(now())
+  version      Int // increments per MarketIdentity — continuous across imports
+
+  score Float
+
+  // Every input to the formula, frozen at calculation time, so a score can
+  // always be explained without re-deriving it from possibly-changed data.
+  // payoutFloorInput/estConversionRateInput are null in TRAFFIC mode;
+  // cpcInput is null in PAYOUT mode (the v1 formula never used CPC).
+  payoutFloorInput       Float?
+  estConversionRateInput Float?
+  cpcInput               Float?
+  searchVolumeInput      Int
+  difficultyIndexInput   Float
+  formulaVersion         String // e.g. "v1: payoutFloor * estConversionRate * searchVolume / difficultyIndex"
+
+  @@unique([marketIdentityId, version])
+  @@index([marketIdentityId])
+  @@index([sourceMarketId])
+  @@index([calculatedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Data source registry + snapshots
+// ---------------------------------------------------------------------------
+
+model DataSource {
+  id              String        @id @default(cuid())
+  name            String        @unique // "NREL PVWatts", "EIA Electricity Prices", ...
+  adapterKey      String        @unique // maps to the adapter implementation, e.g. "nrel_pvwatts"
+  endpoint        String
+  unit            String // unit of the primary metric this source provides
+  geoResolution   GeoResolution
+  refreshInterval String // human-readable cadence, e.g. "P30D"
+  isActive        Boolean       @default(true)
+
+  // Which niche(s) this source's data is meant to back on a page (e.g.
+  // "solar-installation" for PVWatts) — purely descriptive/UI, not read by
+  // any adapter or scoring code, so a niche not listed here can still use
+  // the data; this is "what it's for," not an access-control list.
+  relevantVerticals String[] @default([])
+
+  snapshots DataSnapshot[]
+
+  createdAt DateTime @default(now())
+}
+
+model DataSnapshot {
+  id         String         @id @default(cuid())
+  sourceId   String
+  source     DataSource     @relation(fields: [sourceId], references: [id])
+  fetchedAt  DateTime       @default(now())
+  version    Int // increments per source; snapshots are never overwritten
+  status     SnapshotStatus @default(OK)
+  statusNote String? // why it's SUSPECT/FAILED, e.g. "response missing expected field 'ac_annual'"
+
+  dataPoints     DataPoint[]
+  validationRuns ValidationRun[]
+
+  @@unique([sourceId, version])
+  @@index([sourceId])
+}
+
+// A place — identified by zip — that external data sources describe.
+// Deliberately NOT scoped by vertical: solar irradiance, electricity
+// prices, wages, climate all describe a location independent of which
+// pay-per-call vertical might eventually have a page there. This also
+// carries the zip <-> county <-> metro <-> state crosswalk, since every geo
+// inference a DataPoint relies on must be traceable to a row here. A future
+// Page (scoped by MarketIdentity, i.e. zip+vertical) joins back to Location
+// via zip to pull in whatever DataPoints apply.
+model Location {
+  id         String  @id @default(cuid())
+  zip        String
+  city       String? // descriptive only; not every source tells us this
+  state      String
+  county     String?
+  countyFips String?
+  metro      String? // CBSA name, nullable — not every zip is in a metro
+  cbsaCode   String?
+
+  // ZCTA internal-point centroid (Census Gazetteer file) — required by
+  // PVWatts v8 (lib/collector/adapters/pvwatts.ts) since NLR/NREL removed
+  // the "address" geocoding param in Feb 2025; nullable because
+  // scripts/generate-locations.mjs's old fake demo list never populated
+  // this, and the collector adapter fails clearly per-zip if missing
+  // rather than guessing.
+  lat Float?
+  lon Float?
+
+  createdAt DateTime @default(now())
+
+  dataPoints      DataPoint[]
+  validationFlags ValidationFlag[]
+
+  @@unique([zip])
+  @@index([county])
+  @@index([metro])
+}
+
+// A single observed value for a place from a given snapshot. Geo-resolution
+// mismatches (e.g. a METRO-level BLS figure applied to a ZIP-level Location)
+// are recorded explicitly via resolvedAtResolution/isInferred, with
+// confidence downgraded accordingly — never silently upsampled.
+model DataPoint {
+  id         String       @id @default(cuid())
+  locationId String
+  location   Location     @relation(fields: [locationId], references: [id])
+  snapshotId String
+  snapshot   DataSnapshot @relation(fields: [snapshotId], references: [id])
+
+  metric String // e.g. "annual_kwh_per_kw", "avg_retail_price_per_kwh"
+  value  Float
+  unit   String
+
+  // Geo crosswalk trace: the resolution the raw value was actually reported
+  // at, vs. the Location's native ZIP. If different, this value was
+  // inferred via the crosswalk fields on Location and confidence must
+  // reflect that.
+  resolvedAtResolution GeoResolution
+  isInferred           Boolean       @default(false)
+  confidence           Float // 0-1
+
+  createdAt DateTime @default(now())
+
+  @@index([locationId, metric])
+  @@index([snapshotId])
+}
+
+// ---------------------------------------------------------------------------
+// Validation
+// ---------------------------------------------------------------------------
+
+model ValidationRun {
+  id         String       @id @default(cuid())
+  snapshotId String
+  snapshot   DataSnapshot @relation(fields: [snapshotId], references: [id])
+  runAt      DateTime     @default(now())
+
+  totalLocations   Int
+  blockedLocations Int
+  warnLocations    Int
+  blockRate        Float // blockedLocations / totalLocations
+
+  // Batch gate: if blockRate exceeded the configured threshold, the whole
+  // snapshot is barred from proceeding to render, not just the flagged rows.
+  batchGatePassed Boolean
+
+  flags ValidationFlag[]
+
+  @@index([snapshotId])
+}
+
+model ValidationFlag {
+  id              String        @id @default(cuid())
+  validationRunId String
+  validationRun   ValidationRun @relation(fields: [validationRunId], references: [id])
+  locationId      String
+  location        Location      @relation(fields: [locationId], references: [id])
+
+  severity FlagSeverity
+  rule     String // e.g. "cross_source_deviation", "outlier_vs_regional_mean", "stale_data", "missing_required_metric"
+  message  String
+
+  createdAt DateTime @default(now())
+
+  @@index([validationRunId])
+  @@index([locationId])
+}
+
+model AppConfig {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Domain — real domains acquired for a pSEO site, registered here BEFORE a
+// Website (below) can exist: a Website needs a live WordPress install plus
+// verified GSC/GA4 properties, none of which can exist until the domain is
+// owned and its DNS is under control. Adding a Domain here creates a real
+// zone in Cloudflare via the Cloudflare API (lib/cloudflare/zones.ts) — this
+// is the "add the domain into the system" step, not a placeholder record.
+// ---------------------------------------------------------------------------
+
+model Domain {
+  id   String @id @default(cuid())
+  name String @unique // e.g. "atmovingservices.com" — the real, purchased domain
+
+  // Purely descriptive — which niche this domain is meant to serve, same
+  // "annotation, not access control" role as DataSource.relevantVerticals.
+  relevantVertical String?
+
+  cloudflareZoneId String? // null if the Cloudflare call never succeeded
+  cloudflareStatus String? // mirrors Cloudflare's own zone.status verbatim: initializing/pending/active/moved
+  nameServers      String[] @default([]) // Cloudflare-assigned nameservers to set at the registrar
+  cloudflareError  String? // last error message if adding to Cloudflare failed — never silently blank
+
+  lastCheckedAt DateTime? // last time status/nameservers were refreshed from Cloudflare
+  createdAt     DateTime  @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Publisher — external programmatic websites this control panel coordinates
+// as their "Head Quarter": headless WordPress (CMS) + Next.js (frontend)
+// sites built in separate sessions/projects, connected here for read-only
+// GSC + GA4 reporting. Deliberately just connection metadata — post lists,
+// traffic breakdowns, and index status are always fetched live from
+// WordPress/GSC/GA4 at view time (lib/queries/publisher.ts), not mirrored
+// into this DB, so numbers can never go stale relative to the real source.
+// ---------------------------------------------------------------------------
+
+model Website {
+  id   String @id @default(cuid())
+  name String
+
+  // Public site origin, e.g. "https://example.com" — used to derive the
+  // WordPress REST API base (`${url}/wp-json/wp/v2`) unless wpApiBaseUrl
+  // overrides it (some sites proxy /wp-json elsewhere, e.g. a headless CMS
+  // subdomain).
+  url          String
+  wpApiBaseUrl String?
+
+  // Search Console property identity, e.g. "sc-domain:example.com" or
+  // "https://example.com/" (URL-prefix form) — GSC requires the exact
+  // registered format, see README once written.
+  gscPropertyUrl String
+
+  // GA4 numeric property ID (the "G-XXXXXXX" measurement ID is different
+  // from this — GA4 Data API calls use "properties/{propertyId}", the
+  // numeric Analytics property ID, not the measurement ID).
+  ga4PropertyId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([gscPropertyUrl])
+}

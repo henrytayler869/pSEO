@@ -1,0 +1,139 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { ArrowLeft, Globe } from "lucide-react";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { PageHeader } from "@/components/page-header";
+import { getWebsiteDetail } from "@/lib/queries/publisher";
+
+export default async function WebsiteDetailPage({ params }: { params: Promise<{ websiteId: string }> }) {
+  const { websiteId } = await params;
+  const detail = await getWebsiteDetail(websiteId);
+  if (!detail) notFound();
+
+  const { website, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <Link href="/publisher" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-3.5 w-3.5" /> Quay lại Publisher
+        </Link>
+      </div>
+
+      <PageHeader
+        icon={Globe}
+        title={website.name}
+        description={
+          <>
+            {website.url} · GSC: {website.gscPropertyUrl} · GA4: {website.ga4PropertyId}
+          </>
+        }
+      />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatCard label="Bài viết (WordPress)" value={postCount !== null ? postCount.toLocaleString() : "—"} error={postCountError} />
+        <StatCard
+          label="Clicks / Impressions (28 ngày)"
+          value={search ? `${search.clicks.toLocaleString()} / ${search.impressions.toLocaleString()}` : "—"}
+          error={gscError}
+        />
+        <StatCard label="Active users (28 ngày)" value={traffic ? traffic.activeUsers.toLocaleString() : "—"} error={ga4Error} />
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tìm kiếm (Google Search Console)</CardTitle>
+          <CardDescription>28 ngày gần nhất, xếp theo click. Vị trí trung bình toàn site: {search ? search.avgPosition.toFixed(1) : "—"}.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {gscError ? (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertTitle>Không lấy được dữ liệu GSC</AlertTitle>
+              <AlertDescription>{gscError}</AlertDescription>
+            </Alert>
+          ) : topPages && topPages.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Trang</TableHead>
+                  <TableHead>Clicks</TableHead>
+                  <TableHead>Impressions</TableHead>
+                  <TableHead>CTR</TableHead>
+                  <TableHead>Vị trí TB</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {topPages.map((p) => (
+                  <TableRow key={p.page}>
+                    <TableCell className="max-w-md truncate" title={p.page}>
+                      {p.page}
+                    </TableCell>
+                    <TableCell>{p.clicks.toLocaleString()}</TableCell>
+                    <TableCell>{p.impressions.toLocaleString()}</TableCell>
+                    <TableCell>{(p.ctr * 100).toFixed(1)}%</TableCell>
+                    <TableCell>{p.position.toFixed(1)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground">Chưa có dữ liệu click/impression trong khoảng thời gian này.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Traffic (Google Analytics 4)</CardTitle>
+          <CardDescription>
+            28 ngày gần nhất. Sessions: {traffic ? traffic.sessions.toLocaleString() : "—"} · Pageviews:{" "}
+            {traffic ? traffic.screenPageViews.toLocaleString() : "—"}.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {ga4Error ? (
+            <Alert className="border-red-200 bg-red-50">
+              <AlertTitle>Không lấy được dữ liệu GA4</AlertTitle>
+              <AlertDescription>{ga4Error}</AlertDescription>
+            </Alert>
+          ) : trafficBySource && trafficBySource.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Kênh</TableHead>
+                  <TableHead>Sessions</TableHead>
+                  <TableHead>Active users</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {trafficBySource.map((r) => (
+                  <TableRow key={r.dimensionValue}>
+                    <TableCell>{r.dimensionValue}</TableCell>
+                    <TableCell>{r.sessions.toLocaleString()}</TableCell>
+                    <TableCell>{r.activeUsers.toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <p className="text-sm text-muted-foreground">Chưa có dữ liệu traffic trong khoảng thời gian này.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function StatCard({ label, value, error }: { label: string; value: string; error: string | null }) {
+  return (
+    <Card>
+      <CardContent className="pt-6">
+        <div className="text-sm text-muted-foreground">{label}</div>
+        <div className="text-2xl font-semibold">{error ? "—" : value}</div>
+        {error && <div className="mt-1 text-xs text-red-700">{error}</div>}
+      </CardContent>
+    </Card>
+  );
+}

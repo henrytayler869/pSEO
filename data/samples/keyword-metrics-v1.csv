@@ -1,0 +1,278 @@
+zip,vertical,keyword,searchVolume,keywordDifficulty,cpc
+10001,water-damage-restoration,"water damage restoration new york",90,26,14.21
+10001,roofing-replacement,"roofing replacement new york",1860,74,36.81
+10001,garage-door-repair,"garage door repair new york",357,11,7.42
+90001,water-damage-restoration,"water damage restoration los angeles",118,24,16.59
+90001,hvac-repair,"hvac repair los angeles",1332,30,15.19
+90001,roofing-replacement,"roofing replacement los angeles",2205,62,35.54
+90001,garage-door-repair,"garage door repair los angeles",389,21,9.29
+60601,water-damage-restoration,"water damage restoration chicago",64,32,15.75
+60601,hvac-repair,"hvac repair chicago",1558,37,19.46
+60601,roofing-replacement,"roofing replacement chicago",2184,72,31.86
+60601,garage-door-repair,"garage door repair chicago",338,12,7.02
+77002,water-damage-restoration,"water damage restoration houston",75,29,15.18
+77002,hvac-repair,"hvac repair houston",1460,41,14.46
+77002,roofing-replacement,"roofing replacement houston",1670,68,33.9
+77002,garage-door-repair,"garage door repair houston",592,19,7.67
+85001,water-damage-restoration,"water damage restoration phoenix",118,32,12.36
+85001,hvac-repair,"hvac repair phoenix",1418,39,23.14
+85001,roofing-replacement,"roofing replacement phoenix",2033,72,43.89
+85001,garage-door-repair,"garage door repair phoenix",417,18,10.13
+19102,water-damage-restoration,"water damage restoration philadelphia",93,30,14.38
+19102,hvac-repair,"hvac repair philadelphia",1445,41,23.6
+19102,roofing-replacement,"roofing replacement philadelphia",2136,67,40.5
+19102,garage-door-repair,"garage door repair philadelphia",536,23,8.49
+78201,water-damage-restoration,"water damage restoration san antonio",114,26,16.66
+78201,hvac-repair,"hvac repair san antonio",611,26,15.25
+78201,roofing-replacement,"roofing replacement san antonio",989,54,31.96
+78201,garage-door-repair,"garage door repair san antonio",272,13,6.25
+92101,water-damage-restoration,"water damage restoration san diego",119,28,12.42
+92101,roofing-replacement,"roofing replacement san diego",1965,77,42.53
+92101,garage-door-repair,"garage door repair san diego",552,13,10.56
+75201,water-damage-restoration,"water damage restoration dallas",115,28,13.8
+75201,hvac-repair,"hvac repair dallas",981,30,22.74
+75201,roofing-replacement,"roofing replacement dallas",2021,69,36.91
+75201,garage-door-repair,"garage door repair dallas",519,21,9.08
+78701,water-damage-restoration,"water damage restoration austin",61,25,11.18
+78701,hvac-repair,"hvac repair austin",1029,27,22.12
+78701,roofing-replacement,"roofing replacement austin",2226,75,30.11
+78701,garage-door-repair,"garage door repair austin",323,15,9.9
+95101,water-damage-restoration,"water damage restoration san jose",75,31,14.88
+95101,hvac-repair,"hvac repair san jose",836,39,13.84
+95101,roofing-replacement,"roofing replacement san jose",576,54,23.49
+95101,garage-door-repair,"garage door repair san jose",237,15,6.16
+76102,water-damage-restoration,"water damage restoration fort worth",104,28,13.92
+76102,hvac-repair,"hvac repair fort worth",692,21,17.11
+76102,roofing-replacement,"roofing replacement fort worth",906,59,21.82
+76102,garage-door-repair,"garage door repair fort worth",166,11,6.44
+32202,water-damage-restoration,"water damage restoration jacksonville",74,26,17.43
+32202,hvac-repair,"hvac repair jacksonville",687,38,13.81
+32202,roofing-replacement,"roofing replacement jacksonville",884,45,30.17
+32202,garage-door-repair,"garage door repair jacksonville",290,16,5.97
+43215,water-damage-restoration,"water damage restoration columbus",108,28,11.47
+43215,hvac-repair,"hvac repair columbus",460,37,14.49
+43215,roofing-replacement,"roofing replacement columbus",1007,57,26.91
+43215,garage-door-repair,"garage door repair columbus",316,13,5.76
+28202,water-damage-restoration,"water damage restoration charlotte",93,29,11.95
+28202,roofing-replacement,"roofing replacement charlotte",951,48,22.07
+28202,garage-door-repair,"garage door repair charlotte",267,19,7.19
+94102,water-damage-restoration,"water damage restoration san francisco",71,32,14.15
+94102,hvac-repair,"hvac repair san francisco",1640,19,23.35
+94102,roofing-replacement,"roofing replacement san francisco",1901,66,29.39
+94102,garage-door-repair,"garage door repair san francisco",422,21,10.17
+46201,water-damage-restoration,"water damage restoration indianapolis",74,31,13.69
+46201,hvac-repair,"hvac repair indianapolis",506,33,15.06
+46201,roofing-replacement,"roofing replacement indianapolis",625,57,21.43
+46201,garage-door-repair,"garage door repair indianapolis",179,25,5.99
+98101,water-damage-restoration,"water damage restoration seattle",88,28,14.84
+98101,hvac-repair,"hvac repair seattle",1385,34,15.75
+98101,roofing-replacement,"roofing replacement seattle",2404,78,35.08
+98101,garage-door-repair,"garage door repair seattle",381,18,10.18
+80202,water-damage-restoration,"water damage restoration denver",87,28,12.27
+80202,hvac-repair,"hvac repair denver",1399,19,22.44
+80202,roofing-replacement,"roofing replacement denver",1628,69,33.28
+80202,garage-door-repair,"garage door repair denver",481,11,9.75
+20001,water-damage-restoration,"water damage restoration washington",63,31,15.84
+20001,hvac-repair,"hvac repair washington",1555,37,14.76
+20001,roofing-replacement,"roofing replacement washington",1909,72,37.65
+20001,garage-door-repair,"garage door repair washington",484,18,8.78
+37201,water-damage-restoration,"water damage restoration nashville",95,24,15.46
+37201,hvac-repair,"hvac repair nashville",424,35,12.62
+37201,roofing-replacement,"roofing replacement nashville",727,56,32.82
+37201,garage-door-repair,"garage door repair nashville",203,20,8.41
+73102,water-damage-restoration,"water damage restoration oklahoma city",88,24,14.47
+73102,roofing-replacement,"roofing replacement oklahoma city",797,51,26.57
+73102,garage-door-repair,"garage door repair oklahoma city",283,13,7.75
+79901,water-damage-restoration,"water damage restoration el paso",96,32,16.33
+79901,hvac-repair,"hvac repair el paso",256,18,13.26
+79901,roofing-replacement,"roofing replacement el paso",208,33,16.89
+79901,garage-door-repair,"garage door repair el paso",124,19,5.28
+02108,water-damage-restoration,"water damage restoration boston",112,29,17.39
+02108,hvac-repair,"hvac repair boston",1870,41,21.96
+02108,roofing-replacement,"roofing replacement boston",2376,78,31.53
+02108,garage-door-repair,"garage door repair boston",342,25,6.91
+97201,water-damage-restoration,"water damage restoration portland",89,31,15.25
+97201,hvac-repair,"hvac repair portland",776,26,17.55
+97201,roofing-replacement,"roofing replacement portland",774,59,29.1
+97201,garage-door-repair,"garage door repair portland",198,13,6.56
+89101,water-damage-restoration,"water damage restoration las vegas",104,24,11.47
+89101,hvac-repair,"hvac repair las vegas",531,33,14.06
+89101,roofing-replacement,"roofing replacement las vegas",876,59,25.78
+89101,garage-door-repair,"garage door repair las vegas",289,21,5.31
+48201,water-damage-restoration,"water damage restoration detroit",102,31,12.28
+48201,hvac-repair,"hvac repair detroit",692,40,14.75
+48201,roofing-replacement,"roofing replacement detroit",734,57,28.77
+48201,garage-door-repair,"garage door repair detroit",209,17,7.1
+38103,water-damage-restoration,"water damage restoration memphis",121,25,14.66
+38103,hvac-repair,"hvac repair memphis",456,33,17.22
+38103,roofing-replacement,"roofing replacement memphis",763,54,31.52
+38103,garage-door-repair,"garage door repair memphis",222,19,5.84
+40202,water-damage-restoration,"water damage restoration louisville",120,25,15.26
+40202,roofing-replacement,"roofing replacement louisville",917,53,27.63
+40202,garage-door-repair,"garage door repair louisville",262,24,7.95
+21201,water-damage-restoration,"water damage restoration baltimore",59,24,11.17
+21201,hvac-repair,"hvac repair baltimore",836,18,11.51
+21201,roofing-replacement,"roofing replacement baltimore",813,45,30.31
+21201,garage-door-repair,"garage door repair baltimore",263,11,6.67
+53202,water-damage-restoration,"water damage restoration milwaukee",111,27,11.89
+53202,hvac-repair,"hvac repair milwaukee",760,34,11.62
+53202,roofing-replacement,"roofing replacement milwaukee",871,53,31.74
+53202,garage-door-repair,"garage door repair milwaukee",253,17,7.31
+87101,water-damage-restoration,"water damage restoration albuquerque",84,29,11.86
+87101,hvac-repair,"hvac repair albuquerque",194,35,12.28
+87101,roofing-replacement,"roofing replacement albuquerque",254,37,20.77
+87101,garage-door-repair,"garage door repair albuquerque",105,19,4.6
+85701,water-damage-restoration,"water damage restoration tucson",100,32,16.74
+85701,hvac-repair,"hvac repair tucson",295,26,13.25
+85701,roofing-replacement,"roofing replacement tucson",302,37,14.73
+85701,garage-door-repair,"garage door repair tucson",83,15,6.21
+93701,water-damage-restoration,"water damage restoration fresno",90,32,10.65
+93701,hvac-repair,"hvac repair fresno",288,32,13.69
+93701,roofing-replacement,"roofing replacement fresno",248,38,14.65
+93701,garage-door-repair,"garage door repair fresno",144,15,5.03
+95814,water-damage-restoration,"water damage restoration sacramento",83,26,12.51
+95814,hvac-repair,"hvac repair sacramento",852,33,13.62
+95814,roofing-replacement,"roofing replacement sacramento",806,50,26.27
+95814,garage-door-repair,"garage door repair sacramento",186,19,8.4
+64105,water-damage-restoration,"water damage restoration kansas city",100,28,16.72
+64105,roofing-replacement,"roofing replacement kansas city",849,58,26.24
+64105,garage-door-repair,"garage door repair kansas city",262,17,7.31
+30301,water-damage-restoration,"water damage restoration atlanta",100,29,13.36
+30301,hvac-repair,"hvac repair atlanta",1080,18,21
+30301,roofing-replacement,"roofing replacement atlanta",1651,67,28.86
+30301,garage-door-repair,"garage door repair atlanta",354,20,8.02
+33101,water-damage-restoration,"water damage restoration miami",61,28,15.4
+33101,hvac-repair,"hvac repair miami",1044,35,16.29
+33101,roofing-replacement,"roofing replacement miami",1521,74,34.96
+33101,garage-door-repair,"garage door repair miami",430,20,8.86
+27601,water-damage-restoration,"water damage restoration raleigh",110,25,11.9
+27601,hvac-repair,"hvac repair raleigh",580,39,17.69
+27601,roofing-replacement,"roofing replacement raleigh",1054,51,22.6
+27601,garage-door-repair,"garage door repair raleigh",267,20,7.88
+68102,water-damage-restoration,"water damage restoration omaha",118,27,13.13
+68102,hvac-repair,"hvac repair omaha",199,40,11.4
+68102,roofing-replacement,"roofing replacement omaha",232,28,20.04
+68102,garage-door-repair,"garage door repair omaha",79,18,5.06
+55401,water-damage-restoration,"water damage restoration minneapolis",96,32,14.18
+55401,hvac-repair,"hvac repair minneapolis",1572,31,22.81
+55401,roofing-replacement,"roofing replacement minneapolis",2284,62,32.78
+55401,garage-door-repair,"garage door repair minneapolis",621,16,9.91
+44113,water-damage-restoration,"water damage restoration cleveland",92,28,12.77
+44113,hvac-repair,"hvac repair cleveland",592,26,16.09
+44113,roofing-replacement,"roofing replacement cleveland",1008,58,23.47
+44113,garage-door-repair,"garage door repair cleveland",255,18,7.06
+74103,water-damage-restoration,"water damage restoration tulsa",104,29,13.36
+74103,roofing-replacement,"roofing replacement tulsa",404,30,16.4
+74103,garage-door-repair,"garage door repair tulsa",75,13,3.87
+76001,water-damage-restoration,"water damage restoration arlington",66,27,15.86
+76001,hvac-repair,"hvac repair arlington",265,29,10.33
+76001,roofing-replacement,"roofing replacement arlington",404,35,16.48
+76001,garage-door-repair,"garage door repair arlington",98,22,4.48
+70112,water-damage-restoration,"water damage restoration new orleans",95,26,11.29
+70112,hvac-repair,"hvac repair new orleans",807,27,12.13
+70112,roofing-replacement,"roofing replacement new orleans",1051,45,30.41
+70112,garage-door-repair,"garage door repair new orleans",253,12,7.42
+67202,water-damage-restoration,"water damage restoration wichita",114,25,16.4
+67202,hvac-repair,"hvac repair wichita",209,41,10.73
+67202,roofing-replacement,"roofing replacement wichita",283,28,16.11
+67202,garage-door-repair,"garage door repair wichita",76,16,4.95
+93301,water-damage-restoration,"water damage restoration bakersfield",84,24,17.24
+93301,hvac-repair,"hvac repair bakersfield",308,24,8.93
+93301,roofing-replacement,"roofing replacement bakersfield",235,35,19.49
+93301,garage-door-repair,"garage door repair bakersfield",147,23,5.97
+33602,water-damage-restoration,"water damage restoration tampa",74,30,14.06
+33602,hvac-repair,"hvac repair tampa",797,23,11.26
+33602,roofing-replacement,"roofing replacement tampa",991,58,32.83
+33602,garage-door-repair,"garage door repair tampa",194,13,5.29
+80010,water-damage-restoration,"water damage restoration aurora",119,29,14.93
+80010,hvac-repair,"hvac repair aurora",186,33,12.03
+80010,roofing-replacement,"roofing replacement aurora",362,28,19.95
+80010,garage-door-repair,"garage door repair aurora",89,18,4.67
+92801,water-damage-restoration,"water damage restoration anaheim",63,26,16.8
+92801,roofing-replacement,"roofing replacement anaheim",403,34,14.5
+92801,garage-door-repair,"garage door repair anaheim",74,22,3.85
+92701,water-damage-restoration,"water damage restoration santa ana",117,27,17.17
+92701,hvac-repair,"hvac repair santa ana",342,36,9.06
+92701,roofing-replacement,"roofing replacement santa ana",271,31,13.34
+92701,garage-door-repair,"garage door repair santa ana",121,19,5.25
+63101,water-damage-restoration,"water damage restoration st. louis",100,29,10.95
+63101,hvac-repair,"hvac repair st. louis",824,34,15.93
+63101,roofing-replacement,"roofing replacement st. louis",754,57,23.28
+63101,garage-door-repair,"garage door repair st. louis",227,12,8.54
+15201,water-damage-restoration,"water damage restoration pittsburgh",71,26,14.75
+15201,hvac-repair,"hvac repair pittsburgh",700,31,14.45
+15201,roofing-replacement,"roofing replacement pittsburgh",747,50,26.04
+15201,garage-door-repair,"garage door repair pittsburgh",278,12,7.43
+45202,water-damage-restoration,"water damage restoration cincinnati",99,29,16.65
+45202,hvac-repair,"hvac repair cincinnati",811,30,17.09
+45202,roofing-replacement,"roofing replacement cincinnati",602,51,29.07
+45202,garage-door-repair,"garage door repair cincinnati",223,14,8.68
+23219,water-damage-restoration,"water damage restoration richmond",117,27,16.97
+23219,hvac-repair,"hvac repair richmond",334,20,10.98
+23219,roofing-replacement,"roofing replacement richmond",377,31,16.94
+23219,garage-door-repair,"garage door repair richmond",133,16,5.56
+84101,water-damage-restoration,"water damage restoration salt lake city",81,32,10.93
+84101,hvac-repair,"hvac repair salt lake city",854,36,14.7
+84101,roofing-replacement,"roofing replacement salt lake city",686,48,25.22
+84101,garage-door-repair,"garage door repair salt lake city",201,14,5.35
+83702,water-damage-restoration,"water damage restoration boise",103,25,12.3
+83702,roofing-replacement,"roofing replacement boise",203,36,13.51
+83702,garage-door-repair,"garage door repair boise",128,19,4.88
+35203,water-damage-restoration,"water damage restoration birmingham",80,29,14.64
+35203,hvac-repair,"hvac repair birmingham",224,37,13.05
+35203,roofing-replacement,"roofing replacement birmingham",350,35,16.84
+35203,garage-door-repair,"garage door repair birmingham",100,19,6.2
+14604,water-damage-restoration,"water damage restoration rochester",77,27,13.38
+14604,hvac-repair,"hvac repair rochester",222,34,10.2
+14604,roofing-replacement,"roofing replacement rochester",235,34,19.47
+14604,garage-door-repair,"garage door repair rochester",115,25,5.93
+06103,water-damage-restoration,"water damage restoration hartford",116,29,14.06
+06103,hvac-repair,"hvac repair hartford",240,39,9.64
+06103,roofing-replacement,"roofing replacement hartford",208,34,12.91
+06103,garage-door-repair,"garage door repair hartford",81,21,4.17
+72201,water-damage-restoration,"water damage restoration little rock",74,25,13.18
+72201,hvac-repair,"hvac repair little rock",345,30,12.19
+72201,roofing-replacement,"roofing replacement little rock",375,36,15.01
+72201,garage-door-repair,"garage door repair little rock",135,16,4.39
+99201,water-damage-restoration,"water damage restoration spokane",62,30,15.77
+99201,hvac-repair,"hvac repair spokane",331,30,9.64
+99201,roofing-replacement,"roofing replacement spokane",324,34,15.09
+99201,garage-door-repair,"garage door repair spokane",140,22,5.32
+50309,water-damage-restoration,"water damage restoration des moines",98,28,16.89
+50309,hvac-repair,"hvac repair des moines",243,41,12.76
+50309,roofing-replacement,"roofing replacement des moines",213,37,18.86
+50309,garage-door-repair,"garage door repair des moines",136,14,4.05
+53703,water-damage-restoration,"water damage restoration madison",111,27,14.47
+53703,roofing-replacement,"roofing replacement madison",377,32,15.87
+53703,garage-door-repair,"garage door repair madison",113,11,4.47
+37402,water-damage-restoration,"water damage restoration chattanooga",119,32,14.47
+37402,hvac-repair,"hvac repair chattanooga",266,23,8.72
+37402,roofing-replacement,"roofing replacement chattanooga",379,31,15.2
+37402,garage-door-repair,"garage door repair chattanooga",148,20,4.37
+29201,water-damage-restoration,"water damage restoration columbia",78,26,12.08
+29201,hvac-repair,"hvac repair columbia",332,42,11.78
+29201,roofing-replacement,"roofing replacement columbia",276,36,14.24
+29201,garage-door-repair,"garage door repair columbia",116,17,5.23
+39201,water-damage-restoration,"water damage restoration jackson",81,28,13.83
+39201,hvac-repair,"hvac repair jackson",258,34,9.44
+39201,roofing-replacement,"roofing replacement jackson",339,36,18
+39201,garage-door-repair,"garage door repair jackson",82,16,4.19
+58102,water-damage-restoration,"water damage restoration fargo",114,25,14.22
+58102,hvac-repair,"hvac repair fargo",307,25,8.41
+58102,roofing-replacement,"roofing replacement fargo",300,29,19.48
+58102,garage-door-repair,"garage door repair fargo",108,14,5.3
+57104,water-damage-restoration,"water damage restoration sioux falls",94,28,16.37
+57104,hvac-repair,"hvac repair sioux falls",347,22,8.26
+57104,roofing-replacement,"roofing replacement sioux falls",368,36,17.2
+57104,garage-door-repair,"garage door repair sioux falls",78,15,4.34
+82001,water-damage-restoration,"water damage restoration cheyenne",109,28,11.42
+82001,hvac-repair,"hvac repair cheyenne",221,33,12.27
+82001,roofing-replacement,"roofing replacement cheyenne",349,38,16.95
+82001,garage-door-repair,"garage door repair cheyenne",138,24,5.51
+99501,water-damage-restoration,"water damage restoration anchorage",112,27,11.87
+99501,roofing-replacement,"roofing replacement anchorage",208,33,18.04
+99501,garage-door-repair,"garage door repair anchorage",93,25,6.17
+96813,water-damage-restoration,"water damage restoration honolulu",104,32,12.2
+96813,hvac-repair,"hvac repair honolulu",784,20,13.5
+96813,roofing-replacement,"roofing replacement honolulu",809,54,33.75
+96813,garage-door-repair,"garage door repair honolulu",284,22,8.09
