@@ -522,6 +522,33 @@ Nó **không** thay thế được việc so tập URL trước/sau khi rebuild:
 đổi có thể tách hoặc gộp cụm, tức thêm/bớt trang. Timestamp cho biết "cần
 kiểm lại", so tập URL cho biết "URL nào biến mất và cần redirect".
 
+### Head Quarter PHẢI báo gì — và không cần báo gì
+
+Ranh giới này rút ra từ một vòng rà chung giữa hai session (2026-09-07), và nó
+gọn hơn ta tưởng lúc đầu. Chia theo đúng một câu hỏi: **site có tự suy ra được
+từ dữ liệu không?**
+
+**Không cần báo** — site tự thấy, vì nó đọc qua chính hàm dựng fact:
+
+- thu thêm dữ liệu, chạy lại nguồn, đổi cách gán nguồn cho từng nghề
+- số liệu đổi giá trị → `factsFingerprint` đổi
+- đoạn văn đổi vì bất kỳ lý do gì → `textFingerprint` đổi
+- một market mất/được thêm một nguồn → số của site tự đổi theo
+
+**Phải báo** — không tín hiệu nào phủ được, site không thể suy ra:
+
+| Thay đổi | Vì sao không tự thấy được |
+|---|---|
+| Thêm / bỏ trường trong response | Trường thiếu trông như dữ liệu rỗng (§3.5) |
+| Đổi **ngữ nghĩa** một trường, giá trị giữ nguyên hình dạng | `resolvedAtResolution` đổi nghĩa mà kiểu vẫn là chuỗi — không gì kêu |
+| Đổi cách sinh nội dung mà số liệu KHÔNG đổi | Đây là ca đã xảy ra thật; `textFingerprint` sinh ra chính vì nó |
+| Đổi cách gom cụm / công thức từ khoá hiệu lực | Site khoá trang theo cụm; đổi cụm là thêm/bớt URL (§3.4) |
+| Đổi ngưỡng validator, khiến văn cũ không còn đạt | Văn đã lưu vẫn render bình thường |
+
+Nguyên tắc: **thay đổi DỮ LIỆU thì im lặng được, thay đổi HỢP ĐỒNG thì không.**
+Dữ liệu chảy qua các đường đã có tín hiệu; hợp đồng thì không có tín hiệu nào,
+vì tín hiệu tự nó là một phần của hợp đồng.
+
 ### ⚠️ Khi Head Quarter thêm trường mới: coi là optional trong ít nhất một chu kỳ deploy
 
 Thêm một trường vào response là thay đổi **tương thích ngược ở phía API** —
