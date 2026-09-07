@@ -3,6 +3,7 @@ import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar } from "@/components/sidebar";
+import { loginRequired } from "@/lib/auth/session";
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
@@ -23,7 +24,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full bg-muted">
         <TooltipProvider>
           <div className="flex min-h-screen">
-            <Sidebar />
+            <Sidebar showLogout={loginRequired()} />
             <main className="min-w-0 flex-1 px-8 py-8">
               <div className="mx-auto w-full max-w-6xl">{children}</div>
             </main>

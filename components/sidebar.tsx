@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "cn";
+import { LogoutButton } from "@/components/logout-button";
 import {
   LayoutDashboard,
   DatabaseZap,
@@ -43,8 +44,24 @@ const NAV_GROUPS: NavGroup[] = [
   },
 ];
 
-export function Sidebar() {
+/** showLogout comes from the server (app/layout.tsx) because this is a client
+ * component and cannot read NODE_ENV meaningfully — the value it would see is
+ * the build-time one, not the running server's. */
+export function Sidebar({ showLogout = false }: { showLogout?: boolean }) {
   const pathname = usePathname();
+
+  // Hidden on the login page. The sidebar is a map of the application — every
+  // module, named — and the root layout would otherwise draw it for anyone who
+  // loads the page, logged in or not. None of the links work without a
+  // session, so this is not a way in; it is a free description of what is
+  // behind the door, handed to whoever knocks.
+  //
+  // Done here rather than with a nested layout because Next nests INSIDE the
+  // root layout: app/login/layout.tsx cannot remove what the root already drew.
+  // Placed AFTER the hook, never before — an early return above a hook makes
+  // that hook conditional, which is the bug eslint caught when this was first
+  // written the other way round.
+  if (pathname === "/login") return null;
 
   const isActive = (item: NavItem) =>
     item.exact ? pathname === item.href : pathname === item.href || pathname.startsWith(`${item.href}/`);
@@ -92,7 +109,8 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-sidebar-border px-5 py-4">
+      <div className="flex flex-col gap-2 border-t border-sidebar-border px-5 py-4">
+        {showLogout ? <LogoutButton /> : null}
         <p className="text-xs text-sidebar-foreground/45">
           Công cụ nội bộ — không phải trang công khai.
         </p>
