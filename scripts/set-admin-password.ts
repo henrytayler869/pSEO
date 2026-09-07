@@ -12,8 +12,37 @@
 // long as it takes to hash it and nowhere else — not in the repository, not in
 // .env, not in the database.
 
+import os from "node:os";
 import { setAdminPassword, getAdminPasswordHash } from "../lib/auth/password";
 import { prisma } from "../lib/db/prisma";
+
+/** Where this just wrote, in terms a person can check against where they meant
+ * to write.
+ *
+ * Added after a real incident: the command was run and succeeded, the hash
+ * landed in AppConfig exactly as expected — on the wrong machine. It went to
+ * the developer's laptop instead of the server, because the instructions were
+ * split into two shell blocks and the second one ran fine locally, the repo
+ * being present there too.
+ *
+ * Nothing about that failure looked like a failure. The script reported
+ * success, the row appeared, and the only signal left was a login attempt that
+ * would not work days later.
+ *
+ * The database host does NOT distinguish the two: both are 127.0.0.1:5433. The
+ * machine's hostname does, so that is what gets printed. */
+function whereDidThisGo(): string {
+  const url = process.env.DATABASE_URL ?? "";
+  let target = "(không đọc được DATABASE_URL)";
+  try {
+    const u = new URL(url);
+    // Host, port and database name only — never the credentials in the URL.
+    target = `${u.hostname}:${u.port || "5432"}${u.pathname}`;
+  } catch {
+    /* leave the fallback */
+  }
+  return `${os.hostname()} -> ${target}`;
+}
 
 const MIN_LENGTH = 8;
 
@@ -45,6 +74,8 @@ async function main() {
   await setAdminPassword(password);
 
   console.log(had ? "Đã ĐỔI mật khẩu quản trị." : "Đã ĐẶT mật khẩu quản trị lần đầu.");
+  console.log(`Ghi vào: ${whereDidThisGo()}`);
+  console.log("^ KIỂM DÒNG TRÊN. Nếu đó không phải máy chủ production thì bạn vừa đặt mật khẩu cho máy khác.");
   console.log("Mọi phiên đang đăng nhập vẫn còn hiệu lực tới khi hết hạn (12 giờ) —");
   console.log("phiên ký bằng SESSION_SECRET, không bằng mật khẩu. Cần đá hết mọi phiên");
   console.log("ngay lập tức thì đổi SESSION_SECRET rồi restart service.");
