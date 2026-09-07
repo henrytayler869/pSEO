@@ -158,6 +158,21 @@ curl -s -o /dev/null -w '%{http_code}\n' http://127.0.0.1:3000/api/v1/niches   #
 đang phục vụ, route khớp, và lớp xác thực có chạy — nhiều hơn những gì một
 `200` ở trang chủ chứng minh được.
 
+Nhưng `deploy.sh` **không chỉ đọc mã 401**, nó còn đòi thân phản hồi chứa đúng
+thông điệp của app. Lý do: 401 là thứ rất nhiều bên trả về. Một release cũ chưa
+tắt, một dev server bỏ quên, một proxy đứng trước — bất cứ cái gì đang giữ cổng
+3000 đều có thể trả 401, và deploy sẽ coi đó là "sống" trong khi bản vừa deploy
+chưa hề chạy. So thân phản hồi buộc câu trả lời phải đến từ **lớp xác thực của
+chính app này**, mà vẫn không cần bí mật nào để kiểm.
+
+Đã thử cả hai chiều: app thật → đạt; một server khác trả `401` với thân HTML rỗng
+ở cùng cổng → trượt.
+
+> Health check gọi thẳng `127.0.0.1:3000`, **đi vòng qua Nginx**. Nó trả lời câu
+> "bản release này có phục vụ không", không phải "cổng vào công khai có sống
+> không" — hai câu khác nhau, và chỉ câu đầu trả lời được **trước** khi chuyển
+> traffic sang.
+
 ## Quay lại bản cũ bằng tay
 
 ```bash

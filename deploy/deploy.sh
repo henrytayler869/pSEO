@@ -80,18 +80,35 @@ ln -sfnT "$RELEASE" "$APP_DIR/current"
 sudo systemctl restart "$SERVICE"
 
 # Health check that needs no secret: an unauthenticated request to the dataset
-# API must answer 401. That single number proves more than a 200 on the
-# homepage would — Next is serving, the route matched, and the auth layer ran.
+# API must answer 401 AND must say so in OUR words.
+#
+# The status code alone is not enough, and the reason is the failure mode this
+# project keeps meeting: 401 is what a great many things return. Anything else
+# bound to port 3000 — an old release that never stopped, a stray dev server,
+# a proxy in front — can produce one, and the deploy would call that healthy
+# while this release is not running at all. Matching the body ties the answer
+# to this application's own auth layer, and still needs no credential to
+# perform.
+#
+# (The request goes to 127.0.0.1 deliberately, bypassing Nginx. What is being
+# tested is whether THIS RELEASE serves, not whether the public entry point
+# does — those are different questions and only the first one can be answered
+# before traffic is switched.)
 log "Kiểm tra sống"
 ok=0
 for i in $(seq 1 30); do
-  code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$HEALTH_URL" || true)"
-  if [ "$code" = "401" ]; then ok=1; break; fi
+  body="$(curl -s --max-time 5 -o /tmp/health-body -w '%{http_code}' "$HEALTH_URL" || true)"
+  code="$body"
+  if [ "$code" = "401" ] && grep -q "provide a valid API key" /tmp/health-body 2>/dev/null; then
+    ok=1
+    break
+  fi
   sleep 2
 done
+rm -f /tmp/health-body
 
 if [ "$ok" != "1" ]; then
-  log "KHÔNG SỐNG sau 60s (mã cuối: ${code:-không phản hồi})"
+  log "KHÔNG SỐNG sau 60s (mã cuối: ${code:-không phản hồi}) — 401 phải kèm đúng thông điệp của app"
   rollback
   exit 1
 fi
