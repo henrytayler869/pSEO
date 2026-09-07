@@ -82,6 +82,12 @@ jobs:
       - name: Lint
         run: npx eslint .
 
+      - name: Test — điểm số + số liệu traffic
+        # Pure arithmetic, no data needed. Guards the two calculations that
+        # decide which markets look worth building: a wrong number here does
+        # not crash anything, it quietly reorders the list someone acts on.
+        run: npx tsx scripts/test-scoring-and-traffic.ts
+
       - name: Test — luật đổi mật khẩu
         # Pure, no data needed. The branch that matters is "current password
         # required and must verify": if it ever inverted, a session would
