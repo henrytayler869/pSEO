@@ -83,6 +83,26 @@ export async function validateSnapshot(snapshotId: string): Promise<ValidationSu
   });
 }
 
+/**
+ * Cross-source agreement — and the reason its silence must not be read as
+ * agreement.
+ *
+ * This compares points matched on locationId + METRIC NAME. Every adapter
+ * here writes its own metric namespace (`census_*`, `irs_*`, `solar_*`,
+ * `fema_*`, `noaa_*`, `eia_*`), so as of 2026-09-07 — 7 active sources, 17
+ * metrics — the number of metrics emitted by more than one source is ZERO,
+ * and this rule cannot produce a flag no matter what the data says.
+ *
+ * That is a fine state of affairs; what is not fine is letting "0
+ * cross_source_deviation flags" sit beside rules whose zero means "checked
+ * and clean". Here zero means "nothing was comparable". The counter below
+ * makes the difference observable instead of leaving a reader to infer
+ * reassurance the check never provided.
+ *
+ * The rule stays because it costs nothing and becomes live the moment two
+ * sources report the same metric — which is exactly when a disagreement
+ * would matter most, and exactly when nobody would think to add a check.
+ */
 async function runCrossCheck(
   currentSourceId: string,
   currentPoints: LocationPoint[],
@@ -92,6 +112,9 @@ async function runCrossCheck(
     where: { isActive: true, id: { not: currentSourceId } },
   });
   if (otherSources.length === 0) return [];
+
+  const currentKeys = new Set(currentPoints.map((p) => `${p.locationId}::${p.metric}`));
+  let comparablePairs = 0;
 
   const flags: RuleFlag[] = [];
   for (const source of otherSources) {
@@ -113,7 +136,16 @@ async function runCrossCheck(
       })
       .filter((p): p is LocationPoint => p !== null);
 
+    comparablePairs += otherLocationPoints.filter((p) => currentKeys.has(`${p.locationId}::${p.metric}`)).length;
     flags.push(...checkCrossSource(currentPoints, otherLocationPoints, deviationPct));
+  }
+
+  if (comparablePairs === 0) {
+    console.warn(
+      `[validation] cross-source: 0 cặp so sánh được với ${otherSources.length} nguồn khác — ` +
+        `luật KHÔNG áp dụng cho lần chạy này (không nguồn nào phát cùng metric). ` +
+        `Không cờ nào ở đây nghĩa là "không so được", không phải "các nguồn khớp nhau".`
+    );
   }
   return flags;
 }
