@@ -65,6 +65,33 @@ if ! npm ci --no-audit --no-fund; then
   exit 1
 fi
 
+# A database snapshot immediately before migrating, and the deploy STOPS if it
+# cannot be taken.
+#
+# The rollback below reverses code. It cannot reverse data: "migrate deploy"
+# runs before the build, so a migration that damages data leaves that damage
+# behind even after the checkout goes back to the previous commit — the machine
+# returns to green while the data does not. The nightly backup at 03:17 covers
+# that eventually; this covers the minutes that matter.
+#
+# Taken on EVERY deploy rather than only when migrations are pending. Deciding
+# "are there migrations to run" would put a predicate that can be wrong in
+# front of the thing protecting against being wrong, and a dump of this
+# database costs about a second and under a megabyte.
+#
+# Aborting on failure is the fail-closed choice: migrating anyway would remove
+# the protection silently, at the one moment it was added for. The script is
+# root-owned, not writable by this user on any path component, takes no
+# arguments, serialises with flock, validates each dump with pg_restore -l
+# before it replaces anything, and returns a non-zero exit code when it fails —
+# all verified on the machine, which is why this line can rely on it.
+log "chụp backup database trước khi migrate"
+if ! sudo -n /usr/local/bin/pseo-db-backup.sh; then
+  log "BACKUP HỎNG — dừng trước khi migrate. Database chưa bị đụng tới, app cũ vẫn phục vụ."
+  git reset --hard "$PREVIOUS"
+  exit 1
+fi
+
 # Migrations run while the OLD build is still serving: .next has not been
 # touched yet and the service has not restarted. "migrate deploy" only applies
 # pending migrations and never resets, so a failure here leaves the database

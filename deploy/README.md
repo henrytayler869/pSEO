@@ -99,12 +99,37 @@ Cần một cặp khoá **chỉ dùng cho CI**, và chỉ nửa công khai của
 git fetch --prune origin
 git reset --hard <sha>        # KHÔNG phải origin/main: đúng commit CI đã kiểm
 npm ci
+sudo -n pseo-db-backup.sh     # HỎNG => dừng, chưa đụng database
 npx prisma migrate deploy     # app cũ vẫn đang phục vụ
 npx prisma generate
 npm run build
 sudo systemctl restart pseo
 curl 127.0.0.1:3000/api/v1/niches   # phải 401 + đúng thông điệp của app
 ```
+
+**Vì sao chụp backup ngay trước migrate:** rollback bên dưới đảo được **mã
+nguồn**, không đảo được **dữ liệu**. `migrate deploy` chạy trước build, nên một
+migration phá dữ liệu vẫn để lại hậu quả sau khi checkout đã lùi về commit cũ —
+máy trở lại xanh trong khi dữ liệu thì không. Backup hàng đêm (03:17) phủ được
+chuyện đó về lâu dài; cái này phủ mấy phút đáng kể.
+
+Chụp ở **mọi lần deploy**, không chỉ khi có migration chờ. Xét "có migration
+nào không" là đặt một phán đoán có thể sai ngay trước thứ dùng để phòng khi
+phán đoán sai — mà một dump của database này tốn khoảng một giây và dưới một
+megabyte.
+
+Quyền cần thiết (đúng một dòng, không tham số):
+
+```
+deploy ALL=(root) NOPASSWD: /usr/local/bin/pseo-db-backup.sh
+```
+
+Script phải `root:root`, **và không thư mục cha nào trên đường dẫn ghi được bởi
+`deploy`**. Nếu `deploy` sửa được nội dung script — hoặc thay được file, hoặc
+bất kỳ thư mục cha nào — thì dòng trên **tương đương `NOPASSWD: ALL`**: ghi
+`chmod u+s /bin/bash` vào script rồi gọi sudo là xong. Đã kiểm trên máy: script
+`700 root:root`, mọi thành phần đường dẫn `root:root`, `deploy` không ghi được
+thành phần nào.
 
 Reset theo **SHA** chứ không theo `origin/main`: một push khác có thể rơi vào
 giữa lúc deploy đang chạy, và `origin/main` sẽ lặng lẽ đưa lên máy một commit
