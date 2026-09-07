@@ -100,6 +100,12 @@ sudo systemctl restart "$SERVICE"
 #
 # Sent to 127.0.0.1, deliberately bypassing Nginx: the question is whether THIS
 # release serves, not whether the public entry point does.
+#
+# The phrase below is AUTH_FAILURE_ANCHOR in lib/api/auth.ts. Bash cannot
+# import it, so the two are coupled by hand — deliberately a short fragment
+# rather than the whole sentence, since the surrounding wording is prose and
+# will get edited. If someone moves the anchor, this check fails loudly and the
+# deploy rolls back saying why; it does not quietly start passing.
 log "Kiểm tra sống"
 ok=0
 code=""
