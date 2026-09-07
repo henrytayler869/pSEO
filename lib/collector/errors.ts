@@ -27,3 +27,30 @@ export class LocationFetchError extends Error {
     this.name = "LocationFetchError";
   }
 }
+
+/**
+ * An adapter cannot start because its credential was never configured.
+ *
+ * Deliberately distinct from a failure. A source that has never been turned on
+ * is not a source that broke, and conflating the two makes a scheduled run
+ * report red forever — for NOAA and EIA, every Monday, until somebody signs up
+ * for a free API key they may never want.
+ *
+ * That matters more than tidiness. A red light that never changes is a red
+ * light people stop reading, and the next genuine failure hides inside it. The
+ * scheduled runner therefore treats this as SKIPPED rather than FAILED, but
+ * only for a source that has never produced a good snapshot: if a source used
+ * to work and its credential has since vanished, that IS a regression and
+ * still fails the run.
+ */
+export class MissingCredentialError extends Error {
+  constructor(
+    message: string,
+    /** The credential that is absent, so the runner can name it without
+     * parsing the message. */
+    public readonly credentialName: string
+  ) {
+    super(message);
+    this.name = "MissingCredentialError";
+  }
+}

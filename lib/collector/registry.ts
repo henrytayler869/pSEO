@@ -1,3 +1,4 @@
+import { MissingCredentialError } from "./errors";
 import type { CollectorAdapter } from "./types";
 import { PvWattsAdapter } from "./adapters/pvwatts";
 import { PvWattsMockAdapter } from "./adapters/pvwatts-mock";
@@ -16,18 +17,22 @@ export async function resolveAdapter(adapterKey: string): Promise<CollectorAdapt
       const apiKey = await getCredential("NREL_API_KEY");
       if (apiKey) return new PvWattsAdapter(apiKey);
       if (process.env.ALLOW_PVWATTS_MOCK === "true") return new PvWattsMockAdapter();
-      throw new Error(
+      throw new MissingCredentialError(
         "Chưa cấu hình NREL_API_KEY (ở trang Cài đặt hoặc biến môi trường) và ALLOW_PVWATTS_MOCK không phải là " +
           "\"true\" — không thể thu thập dữ liệu PVWatts. Lấy key miễn phí tại developer.nlr.gov (trước đây là developer.nrel.gov), hoặc đặt " +
           "ALLOW_PVWATTS_MOCK=true để chạy demo cục bộ (dữ liệu giả lập, không phải dữ liệu thật)."
+      ,
+        "NREL_API_KEY"
       );
     }
     case "census_acs_housing": {
       const apiKey = await getCredential("CENSUS_API_KEY");
       if (!apiKey) {
-        throw new Error(
+        throw new MissingCredentialError(
           "Chưa cấu hình CENSUS_API_KEY (ở trang Cài đặt hoặc biến môi trường) — không thể thu thập dữ liệu Census ACS5. " +
             "Lấy key miễn phí, cấp tức thì tại api.census.gov/data/key_signup.html. Không có đường tắt giả lập cho nguồn này."
+        ,
+          "CENSUS_API_KEY"
         );
       }
       return new CensusAcsHousingAdapter(apiKey);
@@ -35,9 +40,11 @@ export async function resolveAdapter(adapterKey: string): Promise<CollectorAdapt
     case "census_mobility": {
       const apiKey = await getCredential("CENSUS_API_KEY");
       if (!apiKey) {
-        throw new Error(
+        throw new MissingCredentialError(
           "Chưa cấu hình CENSUS_API_KEY (ở trang Cài đặt hoặc biến môi trường) — không thể thu thập dữ liệu Census B07003. " +
             "Lấy key miễn phí, cấp tức thì tại api.census.gov/data/key_signup.html. Không có đường tắt giả lập cho nguồn này."
+        ,
+          "CENSUS_API_KEY"
         );
       }
       return new CensusMobilityAdapter(apiKey);
@@ -47,9 +54,11 @@ export async function resolveAdapter(adapterKey: string): Promise<CollectorAdapt
     case "noaa_climate_normals": {
       const apiToken = await getCredential("NOAA_API_TOKEN");
       if (!apiToken) {
-        throw new Error(
+        throw new MissingCredentialError(
           "Chưa cấu hình NOAA_API_TOKEN (ở trang Cài đặt hoặc biến môi trường) — không thể thu thập dữ liệu NOAA Climate Normals. " +
             "Lấy token miễn phí qua email tại ncdc.noaa.gov/cdo-web/token. Không có đường tắt giả lập cho nguồn này."
+        ,
+          "NOAA_API_TOKEN"
         );
       }
       return new NoaaClimateNormalsAdapter(apiToken);
@@ -57,9 +66,11 @@ export async function resolveAdapter(adapterKey: string): Promise<CollectorAdapt
     case "eia_electricity": {
       const apiKey = await getCredential("EIA_API_KEY");
       if (!apiKey) {
-        throw new Error(
+        throw new MissingCredentialError(
           "Chưa cấu hình EIA_API_KEY (ở trang Cài đặt hoặc biến môi trường) — không thể thu thập dữ liệu EIA Electricity Prices. " +
             "Lấy key miễn phí, cấp tức thì tại eia.gov/opendata. Không có đường tắt giả lập cho nguồn này."
+        ,
+          "EIA_API_KEY"
         );
       }
       return new EiaElectricityAdapter(apiKey);

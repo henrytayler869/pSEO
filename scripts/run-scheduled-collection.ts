@@ -25,6 +25,7 @@ import { runCollection } from "../lib/collector/run";
 import { validateSnapshot } from "../lib/validation/run";
 import { compareToPreviousSnapshot, formatPercentChange } from "../lib/collector/compare";
 import { getTransportStats } from "../lib/net/curl-fetch";
+import { MissingCredentialError } from "../lib/collector/errors";
 
 const IMPLEMENTED_ADAPTER_KEYS = [
   "nrel_pvwatts",
@@ -62,6 +63,7 @@ async function main() {
   const refs = locations.map((l) => ({ locationId: l.id, zip: l.zip, city: l.city, state: l.state, lat: l.lat, lon: l.lon, countyFips: l.countyFips }));
 
   let anyFailure = false;
+  const skipped: { name: string; credential: string }[] = [];
 
   for (const source of sources) {
     console.log(`\n--- Nguồn: ${source.name} (${source.adapterKey}) ---`);
@@ -74,7 +76,17 @@ async function main() {
           `${result.locationsFailed} địa điểm lấy dữ liệu thất bại.`
       );
       if (result.status === "SUSPECT") {
-        console.error(`CẢNH BÁO: snapshot bị đánh dấu SUSPECT (lệch schema) — ${result.driftMessage ?? "không rõ lý do"}.`);
+        // SUSPECT has three causes now, not one. This line used to name
+        // schema drift unconditionally, which sent a reader hunting for a
+        // response-shape change that never happened — the message itself was
+        // the misleading signal.
+        const reason = result.driftMessage
+          ? `lệch schema: ${result.driftMessage}`
+          : result.pointCount === 0
+            ? "không thu được điểm dữ liệu nào"
+            : `${result.locationsFailed}/${result.locationsFailed + result.locationsSucceeded} địa điểm thất bại — quá nửa`;
+        console.error(`CẢNH BÁO: snapshot bị đánh dấu SUSPECT — ${reason}.`);
+        console.error(`  Dữ liệu cũ vẫn được phục vụ: chỉ snapshot OK mới được đọc xuống dưới.`);
       }
 
       const validation = await validateSnapshot(result.snapshotId);
@@ -99,6 +111,31 @@ async function main() {
         console.log("Snapshot đầu tiên của nguồn này — chưa có dữ liệu cũ để so sánh.");
       }
     } catch (err) {
+      // A source whose credential was never configured is SKIPPED, not failed
+      // — but only if it has never produced a good snapshot.
+      //
+      // Without this, the weekly timer reports failed every Monday forever
+      // because NOAA and EIA have no free-tier keys entered. A red light that
+      // never changes is a red light people stop reading, and the next real
+      // failure hides inside it. That is the same shape as every silent-signal
+      // problem this project has chased, arriving through the exit code.
+      //
+      // The "never produced a snapshot" condition is what keeps this honest.
+      // A source that used to work and whose credential has since vanished is
+      // a regression, not an unconfigured extra, and still fails the run.
+      if (err instanceof MissingCredentialError) {
+        const everWorked = await prisma.dataSnapshot.count({ where: { sourceId: source.id, status: "OK" } });
+        if (everWorked === 0) {
+          skipped.push({ name: source.name, credential: err.credentialName });
+          console.log(`BỎ QUA ${source.name}: chưa cấu hình ${err.credentialName} (nguồn này chưa từng chạy).`);
+          continue;
+        }
+        console.error(
+          `LỖI ${source.name}: ${err.credentialName} biến mất, nhưng nguồn này TỪNG chạy được — đây là hồi quy, không phải nguồn chưa bật.`
+        );
+        anyFailure = true;
+        continue;
+      }
       console.error(`LỖI khi thu thập từ ${source.name}:`, err instanceof Error ? err.message : err);
       anyFailure = true;
     }
@@ -122,6 +159,12 @@ async function main() {
     if (transport.native === 0) {
       console.log(`  fetch() KHÔNG phục vụ được request nào — đường mạng chính đang hỏng hoàn toàn, chỉ là fallback che đi.`);
     }
+  }
+
+  if (skipped.length > 0) {
+    console.log(`\nBỎ QUA ${skipped.length} nguồn chưa cấu hình (KHÔNG tính là lỗi):`);
+    for (const s of skipped) console.log(`  ${s.name} — thiếu ${s.credential}`);
+    console.log(`  Nhập ở trang Cài đặt là chúng tự chạy ở lần kế tiếp; không cần sửa lịch.`);
   }
 
   console.log(`\n[${new Date().toISOString()}] Hoàn tất.`);
