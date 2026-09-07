@@ -162,6 +162,23 @@ Chậm hơn đổi symlink vì phải build lại — cái giá của layout t�
   vờ.
 - **Không thu thập dữ liệu.** Thu thập có lịch riêng
   (`scripts/run-scheduled-collection.ts`).
+- **Không lọc access log, và hiện không cần.** Nginx ghi log `combined`, tức là
+  **có ghi query string**, giữ 14 ngày, nén. Đã kiểm 2026-09-07: không dòng nào
+  chứa key/token/pass/secret. Lý do là cấu trúc chứ không phải may — credential
+  chỉ được đọc từ **header** (`lib/api/auth.ts`: `authorization` và
+  `x-api-key`), không route nào dưới `app/api/v1` đọc nó từ `searchParams`, và
+  các tham số query đang dùng đều vô hại (`generate`, `cachedOnly`, `import`,
+  `older`, `newer`, `tab`).
+
+  > **Cam kết đứng:** nếu về sau có endpoint nào nhận **tham số nhạy cảm qua
+  > query**, phải báo session điều khiển VPS để họ thêm lọc — lúc đó việc lọc
+  > mới có mục tiêu cụ thể. Thêm quy tắc lọc lúc bề mặt đang sạch thì tệ hơn là
+  > không có: nó tạo cảm giác an toàn cho thứ nó không thật sự bao phủ.
+  >
+  > Đây cũng là lý do middleware chỉ mang `pathname` vào tham số `next` của
+  > trang đăng nhập và **bỏ query string** — thứ gì rơi vào access log thì nằm
+  > im ở đó 14 ngày, và không ai đọc lại.
+
 - **Không đụng tới Nginx, và không được đụng.** TLS do certbot quản (tự gia
   hạn, `certbot.timer`). Đặc biệt **đừng ghi đè
   `/etc/nginx/sites-available/00-default-drop`**: certbot thêm block `443` vào
