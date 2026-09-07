@@ -1,0 +1,207 @@
+import { getRealDataPointsForZipAndVertical, getCountyKeywordForZip } from "@/lib/queries/collector";
+import { prisma } from "@/lib/db/prisma";
+import { latestPerKeyword } from "@/lib/keywords/latest";
+import { ROUNDING_TOLERANCE } from "./validate";
+import { computeTrafficValues } from "@/lib/keywords/traffic-metrics";
+import crypto from "node:crypto";
+
+/**
+ * One measured figure the model is allowed to mention, with the scope it is
+ * allowed to claim for it.
+ *
+ * `scope` is the whole point: a COUNTY-resolution figure attributed to a zip
+ * is a false statement even though the number itself is real, so scope
+ * travels with the value everywhere instead of being reconstructed later.
+ */
+export interface Fact {
+  key: string;
+  label: string;
+  value: number;
+  /** How the figure is written into the prompt.
+   *
+   * Not cosmetic. A raw 6343845000 invites the model to write "$6.3
+   * billion" — a reasonable rounding that lands 0.69% away from the real
+   * value and would be REJECTED by the validator's 0.5% tolerance. Showing
+   * "6.34 billion" instead gets the exact phrasing back. Raw percentages
+   * are worse still: 14 decimal places of noise that costs tokens and
+   * invites arbitrary rounding.
+   *
+   * The fix belongs here rather than in a looser tolerance — widening the
+   * check to admit sloppy rounding would also admit numbers that are
+   * genuinely wrong. */
+  display: string;
+  unit: string;
+  /** "ZIP" — measured for this zip; "COUNTY"/"STATE" — measured for a wider
+   * area and attributed down, so any sentence using it must say so. */
+  scope: "ZIP" | "COUNTY" | "STATE";
+  /** Human-readable place the figure actually describes, e.g. "Bexar County".
+   * null when the source has no name for it — then the text must fall back
+   * to "the county containing ZIP 78245" rather than invent one. */
+  scopeName: string | null;
+}
+
+export interface FactSet {
+  vertical: string;
+  zip: string;
+  city: string | null;
+  state: string;
+  county: string | null;
+  facts: Fact[];
+  mainKeyword: string | null;
+  /** Set when the county has its own measured search term (NYC boroughs). */
+  countyKeyword: string | null;
+  fingerprint: string;
+}
+
+/**
+ * Decimal places that keep a rounded figure inside the validator's tolerance.
+ *
+ * Rounding to d decimals moves a number by at most 0.5 x 10^-d, so the
+ * displayed figure stays acceptable only while that error is within
+ * ROUNDING_TOLERANCE of the value itself. The catch is that this is a
+ * RELATIVE test: one decimal is ample for 67.4% (0.04% off) and not enough
+ * for 7.9% (0.51% off, just past the line). A fixed decimal count therefore
+ * cannot be right for both, and picking one silently broke the smaller
+ * figures — the prompt printed "7.9%", the model quoted it exactly as
+ * instructed, and validation rejected its own instruction. Roughly one
+ * generation in seven, each paying for a doomed retry first.
+ */
+function decimalsWithinTolerance(value: number): number {
+  const magnitude = Math.abs(value);
+  if (magnitude === 0) return 1;
+  let decimals = 1; // at least one — "8%" for 7.94% reads as a different figure
+  while (decimals < 6 && 0.5 * Math.pow(10, -decimals) > ROUNDING_TOLERANCE * magnitude) decimals++;
+  return decimals;
+}
+
+/** Renders a figure the way a writer would say it, so the model quotes it
+ * back verbatim instead of inventing its own rounding. */
+function formatForPrompt(value: number, unit: string): string {
+  if (unit === "%") return `${value.toFixed(decimalsWithinTolerance(value))}%`;
+  if (unit.startsWith("USD")) {
+    // Scaled figures round against the SCALED number, which is what the
+    // model actually writes — "$1.01 billion" is a rounding of 1.0058, not
+    // of 1,005,800,000.
+    for (const [scale, word] of [
+      [1_000_000_000, "billion"],
+      [1_000_000, "million"],
+    ] as const) {
+      if (Math.abs(value) >= scale) {
+        const scaled = value / scale;
+        return `$${scaled.toFixed(decimalsWithinTolerance(scaled))} ${word}`;
+      }
+    }
+    return `$${Math.round(value).toLocaleString("en-US")}`;
+  }
+  if (unit === "year") return String(Math.round(value));
+  if (Number.isInteger(value)) return value.toLocaleString("en-US");
+  return value.toFixed(decimalsWithinTolerance(value));
+}
+
+const METRIC_LABELS: Record<string, string> = {
+  census_median_home_value_usd: "median home value",
+  census_median_household_income_usd: "median household income",
+  census_median_year_built: "median year homes were built",
+  census_homeownership_rate_pct: "homeownership rate",
+  census_moved_within_county: "people who moved in from elsewhere in the same county last year",
+  census_moved_from_different_county: "people who moved in from another county last year",
+  census_moved_from_different_state: "people who moved in from another state last year",
+  census_moved_from_abroad: "people who moved in from abroad last year",
+  census_mobility_rate_pct: "share of residents who lived somewhere else a year ago",
+  irs_migration_inflow_households: "households that moved in (IRS returns)",
+  irs_migration_outflow_households: "households that moved out (IRS returns)",
+  irs_migration_net_households: "net household migration",
+  irs_migration_inflow_agi_usd: "total income arriving with in-movers",
+  fema_disaster_declarations_10yr: "federal disaster declarations in the last 10 years",
+  solar_ac_annual_kwh: "annual solar output for a reference 4kW system",
+  solar_radiation_avg_kwh_per_m2_day: "average daily solar radiation",
+  solar_capacity_factor_pct: "solar capacity factor",
+  noaa_heating_degree_days_annual: "annual heating degree days",
+  noaa_cooling_degree_days_annual: "annual cooling degree days",
+  noaa_precipitation_annual: "annual precipitation",
+  eia_residential_electricity_price_cents_per_kwh: "residential electricity price",
+};
+
+/**
+ * Everything the model is permitted to say about one (vertical, zip),
+ * assembled ONLY from this app's own measured data. Nothing is derived,
+ * rounded or combined here — a figure the model receives is a figure some
+ * adapter actually collected, so the validator can later check the text
+ * against exactly this list.
+ *
+ * Returns null when the zip has no keyword data (the API's own 404
+ * condition) — there is nothing honest to write about it.
+ */
+export async function buildFactSet(vertical: string, zip: string): Promise<FactSet | null> {
+  const identity = await prisma.marketIdentity.findUnique({
+    where: { zip_vertical: { zip, vertical } },
+    include: { keywordMetrics: true },
+  });
+  if (!identity) return null;
+
+  const values = computeTrafficValues(identity.keywordMetrics);
+  if (!values) return null;
+
+  const location = await prisma.location.findFirst({ where: { zip } });
+  const dataPoints = await getRealDataPointsForZipAndVertical(zip, vertical);
+  const countyKeyword = await getCountyKeywordForZip(zip, vertical);
+
+  const facts: Fact[] = [];
+
+  // Search volume is DELIBERATELY NOT a fact here.
+  //
+  // It was, and the result was systematic: 29 of 35 generations worked it
+  // into reader-facing copy ("the main keyword draws 18,100 monthly
+  // searches, so it is reasonable to compare quotes"). Two things wrong
+  // with that. It is internal SEO telemetry — a person looking for movers
+  // has no use for it, and printing it advertises that a machine wrote the
+  // page. Worse, the model kept reasoning from it: "2,400 monthly searches,
+  // so expect several providers competing for the same calls" infers a
+  // claim about SUPPLY from a measurement of DEMAND. That is a fabricated
+  // assertion about the local market, dressed as a fact — the same category
+  // as an invented number, except written in words where a numeric check
+  // cannot see it.
+  //
+  // Removing it also removed most scope_overclaim rejections: it was the
+  // main city-scoped figure the model kept trying to attach to a zip.
+  //
+  // It remains available to consumers through the dataset API, where it
+  // belongs — as data for deciding what to build, not as page copy.
+
+  for (const p of dataPoints) {
+    facts.push({
+      key: p.metric,
+      label: METRIC_LABELS[p.metric] ?? p.metric,
+      value: p.value,
+      display: formatForPrompt(p.value, p.unit),
+      unit: p.unit,
+      scope: p.resolvedAtResolution === "ZIP" ? "ZIP" : p.resolvedAtResolution === "STATE" ? "STATE" : "COUNTY",
+      scopeName:
+        p.resolvedAtResolution === "ZIP"
+          ? `ZIP ${zip}`
+          : p.resolvedAtResolution === "STATE"
+            ? identity.state
+            : (location?.county ?? null),
+    });
+  }
+
+  // The fingerprint must change whenever any figure changes, so cached text
+  // can never outlive the numbers it describes.
+  const fingerprint = crypto
+    .createHash("sha256")
+    .update(JSON.stringify({ vertical, zip, facts: facts.map((f) => [f.key, f.value, f.scope]) }))
+    .digest("hex")
+    .slice(0, 32);
+
+  return {
+    vertical,
+    zip,
+    city: location?.city ?? identity.city,
+    state: identity.state,
+    county: location?.county ?? null,
+    facts,
+    mainKeyword: latestPerKeyword(identity.keywordMetrics)[0]?.keyword ?? null,
+    countyKeyword: countyKeyword?.keyword ?? null,
+    fingerprint,
+  };
+}

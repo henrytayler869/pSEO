@@ -628,6 +628,129 @@ Staten Island ban đầu bị báo là **10 SV** ("quá nhỏ, bỏ qua"). Con s
 
 ---
 
+## 3.7 `/interpretation` — lớp diễn giải AI, tập trung ở Head Quarter
+
+```
+GET /api/v1/niches/{vertical}/markets/{zip}/interpretation
+```
+
+Trả về 3–5 câu văn xuôi mô tả thị trường đó, **chỉ dùng số đã đo**.
+
+```json
+{
+  "text": "In ZIP 80013, 12.9% of residents lived somewhere else a year earlier…",
+  "cached": true,
+  "factsFingerprint": "56f07843c091fea6b6dd9cc37cc4853f"
+}
+```
+
+### Đã sinh sẵn những zip nào (moving-services, 2026-09-07)
+
+**127/127 zip standalone đã có text đạt và nằm sẵn trong cache.** Site gọi
+endpoint sẽ nhận `"cached": true` ngay, không tốn phí, không chờ.
+
+129 zip còn lại **nằm chung trang cụm và cố ý KHÔNG sinh**. Không phải để tiết
+kiệm: text này viết về **một** zip, nên đặt nó lên trang gộp nhiều zip là trình
+bày mô tả của một thành viên như thể mô tả cả cụm — đúng loại "khung sai" mà
+validator sinh ra để chặn, chỉ khác là ở cấp trang thay vì cấp câu. Nếu site cần
+đoạn văn cho **trang cụm**, đó phải là endpoint khác với đầu vào là cả cụm, chứ
+đừng gọi endpoint này cho một zip đại diện.
+
+**Vì sao không để mỗi site tự gọi Anthropic:** không phải để tiết kiệm key, mà
+vì mỗi site tự viết validator nghĩa là N bản kiểm tra chống bịa số, và chúng
+**sẽ trôi khỏi nhau**. Một site đã publish hụt câu *"roughly one resident in
+five"* ngay cạnh con số 29,5% đã đo — ở đúng lớp mà site tin là không thể bịa số.
+
+| Mã | Nghĩa | Xử lý |
+|---|---|---|
+| `404` | Zip không có dữ liệu từ khoá | Bỏ qua |
+| `422` | Sinh ra nhưng **không đạt validation** | **Đừng retry** — thử lại thường ra y hệt. Báo Head Quarter kèm `issues` |
+| `429` | Chạm trần chi tiêu | Dừng batch |
+| `503` | Chưa cấu hình `ANTHROPIC_API_KEY` | Lỗi cấu hình |
+
+`422` là **cơ chế hoạt động đúng**, không phải sự cố: model bịa số và hệ thống
+đã chặn trước khi trả về. Text chỉ được trả khi đã qua kiểm.
+
+### Validator kiểm gì — và KHÔNG kiểm gì
+
+Kiểm: mọi số phải khớp dữ liệu đo · chỉ số cấp county/state không được gán cho
+zip · không dùng tỷ lệ viết bằng chữ · không đặt tên hạt khi dataset không có tên.
+
+**Không** kiểm được: **lỗi đảo chiều** ("gained 11,517" khi thực tế là mất) —
+validator so theo độ lớn, không thấy dấu. Đó là lỗi ngữ nghĩa; ràng buộc nằm ở
+prompt. Nếu site giữ một lớp kiểm riêng, đây là chỗ đáng đặt nó.
+
+### Ranh giới trách nhiệm
+
+```
+Head Quarter: "câu này có ĐÚNG không"       — số, phạm vi, tên địa danh
+Site:         "câu này có THUỘC VỀ ĐÂY không" — đúng ngành, ngữ nghĩa nội bộ site
+```
+
+Head Quarter phục vụ 13 niche nên không biết "plumbing" là lệch ngành với một
+site chuyển nhà, cũng không biết zip nào nằm trong cụm nào của site.
+
+### Ba bài học từ đợt xây (2026-09-07)
+
+**Prompt dùng chung cho mọi ngành thì không đúng ngành nào.** Bản đầu sinh ra
+nội dung nói về *plumbing, wiring, roofing, warranty* trên trang **chuyển nhà** —
+46% số text. Không câu nào sai, chỉ là sai nghề. Độ lệch đến **từ dữ liệu**: năm
+xây nhà thật sự hàm ý điều gì đó về hệ thống toà nhà, chỉ là đó không phải việc
+của người khiêng đồ. Prompt giờ có mô tả từng ngành, và **danh sách cấm** là phần
+chịu lực.
+
+**Dữ liệu nội bộ không được lọt vào nội dung cho người đọc.** Search volume từng
+nằm trong tập fact, và 83% số text đem nó ra khuyên người đọc. Tệ hơn: model suy
+*"2.400 lượt tìm → nhiều nhà cung cấp cạnh tranh"* — suy từ **cầu** ra **cung**.
+Đã bỏ hẳn khỏi tập fact.
+
+**Không dataset nào ở đây đo phía cung.** Tất cả đo cầu, dân số hoặc nhà ở. Nên
+mọi kết luận về độ sẵn có, mức cạnh tranh, áp lực đặt lịch đều **không có nguồn
+theo cấu trúc**. Lời khuyên thực dụng vẫn được phép — nhưng phải đứng thành câu
+riêng, không được trình bày như **hệ quả của một con số**, vì khi đó nó đội lốt
+phát hiện từ dữ liệu.
+
+**Cấm một cấu trúc thì phải cấm ở mọi con số, không chỉ ở con số từng gây lỗi.**
+Luật cấm nối "số → nhận định về nhà cung cấp" ban đầu chỉ ghi cho **số di cư cấp
+county**. Model tuân thủ đúng chữ: nó chuyển sang treo cùng cấu trúc đó lên **số
+mobility cấp ZIP** — *"…1.987 từ nước ngoài — nên movers ở đây làm đủ loại từ
+chuyển trong phố tới hàng quốc tế"*. **44/151 text (29%)** dính, và **validator
+cho qua toàn bộ**, vì mọi con số trong câu đều thật. Luật giờ áp cho *mọi* con số.
+
+**Đợt sinh đầu bị chặn ~13% vì lỗi của chính Head Quarter, không phải model.**
+Prompt làm tròn phần trăm về 1 chữ số thập phân; với giá trị dưới 10 thì mức làm
+tròn đó lệch **0,51%**, vừa quá ngưỡng 0,5% của validator. Prompt đưa `7.9%`,
+model trích đúng nguyên văn, validator chặn chính chỉ thị của mình — mỗi zip tốn
+2 lượt gọi trước khi hỏng. Đã sửa ở **độ chính xác hiển thị** (chọn số thập phân
+theo độ lớn), *không* nới ngưỡng: nới ngưỡng cũng sẽ cho lọt số thật sự sai. Sau
+khi sửa: **0/37 bị chặn**.
+
+> Bài học chung: **validator xanh không có nghĩa nội dung đúng.** Validator chỉ
+> biết những luật đã viết. Cả năm vấn đề trên đều qua được validator. Khi thêm
+> nội dung sinh tự động, phải **quét cả tập** chứ không chỉ đọc vài mẫu.
+>
+**Cấm theo một từ định lượng cũng là cấm quá hẹp.** Luật quét bắt `many jobs
+involve` đi thẳng qua `some jobs involve rental units` — cùng khẳng định về khối
+lượng việc, khác đúng một tính từ. Sau khi nới sang mọi từ định lượng, **2 text
+moving-services trước đó tôi báo "sạch" hoá ra vẫn vi phạm** (85142, 90280). Con
+số 0 khi ấy là sai; đã sinh lại.
+
+**Luật quét phải theo từng nghề, không dùng chung.** Bản đầu của
+`scan-generated-copy.ts` hard-code danh sách lạc nghề của moving-services, nên
+chạy cho `roofing-replacement` thì chính chữ "roofing" bị gắn cờ — văn đúng báo
+100% lạc nghề. Nay lạc-nghề được **suy ra**: của nghề V = từ vựng của mọi nghề
+KHÁC V, nên từ của một nghề không thể lạc nghề với chính nó. Hai ngoại lệ phải
+khai tay vì suy diễn không biết được: nghề dùng chung từ hợp pháp (thợ điện mặt
+trời **phải** nói về mái nhà), và từ chỉ cấm ở một nghề ("bảo hành" chính đáng
+với thợ lợp, nhưng bên chuyển nhà không bảo hành nhà bạn).
+
+> Và bộ quét cũng phải **tự chứng minh là nó bắt được**: lần chạy đầu báo "0 lỗi"
+> trên 123 text — không phân biệt được là prompt đã sạch hay regex đã chết. Nay
+> `scripts/scan-generated-copy.ts` chạy 9 câu lỗi đã biết + 3 câu đúng đã biết
+> qua chính bộ regex đó **trước khi** in kết quả, và thoát lỗi nếu trượt.
+
+---
+
 ## 4. Nguồn dữ liệu chính phủ hiện có
 
 Mỗi nguồn được gắn nhãn niche (`relevantVerticals`) để biết dùng cho việc gì.

@@ -57,6 +57,14 @@ export const CREDENTIAL_FIELDS: CredentialField[] = [
     helpText: "Miễn phí, cấp qua email tức thì tại eia.gov/opendata.",
   },
   {
+    name: "ANTHROPIC_API_KEY",
+    label: "Anthropic API Key",
+    group: "Sinh nội dung AI",
+    secret: true,
+    helpText:
+      "Lấy tại console.anthropic.com. Đặt ở đây thay vì trong .env của từng website: một key duy nhất, một bộ kiểm tra chống bịa số duy nhất, và một trần chi tiêu duy nhất cho mọi site. Trần mặc định $5 — đổi ở AppConfig key \"ai\".",
+  },
+  {
     name: "CLOUDFLARE_API_TOKEN",
     label: "Cloudflare API Token",
     group: "Domain (Cloudflare)",

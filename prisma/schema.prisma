@@ -424,6 +424,69 @@ model ValidationFlag {
   @@index([locationId])
 }
 
+// ---------------------------------------------------------------------------
+// AI interpretation layer — centralised here, NOT in each website.
+//
+// Each consuming site could call Anthropic itself, but then every site holds
+// a copy of the key, and — far worse — every site reimplements the
+// anti-fabrication validator. That validator is the only thing standing
+// between "a page states a real measured figure" and "a page states a
+// number nobody measured", and N implementations of it drift: one site
+// already shipped a hardcoded "roughly one resident in five" next to a
+// measured 29.5%, in the layer it believed could not invent numbers.
+//
+// So generation lives where the data lives: one key, one validator, one
+// spend ceiling, one cache.
+// ---------------------------------------------------------------------------
+
+model AiGeneration {
+  id       String @id @default(cuid())
+  vertical String
+  zip      String
+
+  // Fingerprint of the exact facts the text was generated from. Cache hits
+  // require an identical fingerprint, so re-collecting data (new snapshot,
+  // re-measured keyword) can never serve text written about the old
+  // numbers — the stalest possible failure, since the text would still read
+  // as confidently true.
+  factsFingerprint String
+
+  prompt String // stored verbatim: without it, a suspect output can't be diagnosed
+  text   String
+
+  model            String
+  inputTokens      Int
+  outputTokens     Int
+  costUsd          Float
+
+  // Write-time verdict. Text that fails validation is still stored (with
+  // the reason) rather than dropped — a rejected generation is evidence
+  // about the prompt, and silently discarding it hides a systematic problem.
+  validationPassed Boolean
+  validationNotes  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([vertical, zip])
+  @@index([factsFingerprint])
+}
+
+model AiSpend {
+  id String @id @default(cuid())
+
+  vertical String
+  zip      String
+  model    String
+
+  inputTokens  Int
+  outputTokens Int
+  costUsd      Float
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
 model AppConfig {
   id        String   @id @default(cuid())
   key       String   @unique
