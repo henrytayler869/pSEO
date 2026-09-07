@@ -26,30 +26,51 @@ export async function GET(
 
   const { vertical, zip } = await ctx.params;
 
-  // ?cachedOnly=1 — answer from the cache and never call the model.
+  // Reading NEVER spends. Generating is opt-in via ?generate=1.
   //
-  // Without it, the only way to ask whether copy exists is to request it,
-  // and requesting it generates. A consuming session probing a single zip to
-  // exercise one branch of its own tests bought a generation for a market
-  // that deliberately has none, because it shares a page with others. The
-  // spend cap bounds the damage; it does not give anyone a way to look
-  // without buying. This does.
-  const cachedOnly = new URL(request.url).searchParams.get("cachedOnly") === "1";
+  // This default was the other way round for one day, and one day was enough
+  // to show why it is wrong. A consuming session probing a single zip bought
+  // a generation for a market that deliberately has none. Adding
+  // ?cachedOnly=1 fixed that call — and then the same session found the leak
+  // was not a one-off at all: two of its routine scripts iterate all 127
+  // published markets through this endpoint, so every market this app had not
+  // written copy for would be written by the consumer's next run, silently,
+  // on a schedule.
+  //
+  // A parameter you must remember to pass is not protection; it is a trap
+  // with a workaround. If every consumer needs cachedOnly on every call, that
+  // is the default asking to be changed. Spending money is now something a
+  // caller asks for in writing.
+  //
+  // The boundary this settles: THIS APP decides what gets generated (batch
+  // scripts, deliberately, against a spend cap it can see). Consumers decide
+  // what gets rendered. Cost stops depending on when somebody presses build.
+  //
+  // cachedOnly=1 is still accepted and now redundant — kept so the consumer
+  // that adopted it does not break.
+  const params = new URL(request.url).searchParams;
+  const mayGenerate = params.get("generate") === "1" && params.get("cachedOnly") !== "1";
 
   try {
-    const outcome = cachedOnly
-      ? await getCachedInterpretation(vertical, zip)
-      : await getOrGenerateInterpretation(vertical, zip);
+    const outcome = mayGenerate
+      ? await getOrGenerateInterpretation(vertical, zip)
+      : await getCachedInterpretation(vertical, zip);
     if (!outcome) {
       // Two different absences, told apart explicitly. A consumer polling for
       // "has this been generated yet" must not read "this market does not
       // exist" as the same answer.
       return apiJson(
         {
-          error: cachedOnly
-            ? `No cached interpretation for vertical "${vertical}", zip "${zip}" (nothing was generated, or the stored text no longer passes validation).`
-            : `No researched market with keyword data for vertical "${vertical}", zip "${zip}".`,
-          reason: cachedOnly ? "not_cached" : "no_market_data",
+          error: mayGenerate
+            ? `No researched market with keyword data for vertical "${vertical}", zip "${zip}".`
+            : `No cached interpretation for vertical "${vertical}", zip "${zip}" — nothing generated yet, or the stored text no longer passes today's validation. Pass ?generate=1 to generate one (this spends money).`,
+          // Two different absences, and they resolve differently: not_cached
+          // clears itself on this app's next batch, while no_market_data means
+          // the zip should not have a page at all. Collapsing them would let
+          // the second hide inside the first, and a zip that ought to be
+          // dropped from an inventory would look like one that is merely
+          // waiting.
+          reason: mayGenerate ? "no_market_data" : "not_cached",
         },
         { status: 404 });
     }

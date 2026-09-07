@@ -762,24 +762,36 @@ validator sinh ra để chặn, chỉ khác là ở cấp trang thay vì cấp c
 đoạn văn cho **trang cụm**, đó phải là endpoint khác với đầu vào là cả cụm, chứ
 đừng gọi endpoint này cho một zip đại diện.
 
-### `?cachedOnly=1` — hỏi mà không mua
+### ⚠️ ĐỌC KHÔNG BAO GIỜ TỐN TIỀN — sinh phải xin bằng `?generate=1`
 
 ```
-GET /api/v1/niches/{vertical}/markets/{zip}/interpretation?cachedOnly=1
+GET …/interpretation              → chỉ trả văn ĐÃ CÓ. Không bao giờ gọi model.
+GET …/interpretation?generate=1   → cho phép sinh nếu chưa có. TỐN TIỀN.
 ```
 
-Trả văn **đã có sẵn**, và **không bao giờ gọi model**. Không có sẵn thì `404`
-kèm `"reason": "not_cached"` — phân biệt rõ với `404` +
-`"reason": "no_market_data"` (market không tồn tại / không có dữ liệu từ khoá).
+Không có sẵn thì `404` kèm `"reason": "not_cached"`. Phân biệt rõ với `404` +
+`"reason": "no_market_data"`: **hai loại vắng mặt này tự khỏi theo cách khác
+nhau.** `not_cached` sẽ hết sau đợt sinh kế tiếp của Head Quarter; còn
+`no_market_data` nghĩa là zip đó **không nên có trang**. Gộp chúng thì cái thứ
+hai trốn được trong cái thứ nhất, và một zip lẽ ra phải bị loại khỏi inventory
+sẽ trông như đang chờ.
 
-Có mục này vì trước đó **cách duy nhất để hỏi "đã có văn chưa" là yêu cầu nó, mà
-yêu cầu thì sinh**. Một session dò đúng một zip để chạy thử một nhánh test của
-mình đã mua một bản sinh $0,024 cho market **cố ý không có văn** (nó nằm chung
-trang cụm). Trần chi tiêu chặn được thiệt hại, nhưng trần không phải là cách để
-nhìn mà không mua.
+Mặc định này từng ngược lại, và một ngày là đủ để thấy vì sao nó sai. Một
+session dò đúng **một** zip để chạy thử một nhánh test đã mua một bản sinh
+$0,024 cho market cố ý không có văn. Thêm cờ `cachedOnly` vá được lời gọi đó —
+rồi chính session ấy phát hiện rò rỉ **không phải một lần**: hai script thường
+lệ của họ lặp qua cả 127 market qua endpoint này, nên mọi market Head Quarter
+chưa viết văn sẽ được **consumer viết hộ, im lặng, theo lịch**.
 
-Dùng nó cho mọi việc dò xét: kiểm độ phủ, dựng báo cáo freshness, chạy test.
-Chỉ gọi bản không có cờ khi thật sự cần văn để render.
+> Một tham số phải nhớ bật thì không phải bảo vệ — nó là cái bẫy kèm sẵn cách
+> lách. Nếu mọi consumer đều cần nó ở mọi lời gọi thì đó là **mặc định đang xin
+> được đổi**.
+
+**Ranh giới việc này chốt lại:** Head Quarter quyết **sinh gì** (bằng batch, có
+chủ đích, đối chiếu trần chi tiêu nó nhìn thấy được). Site quyết **render gì**.
+Chi phí thôi phụ thuộc vào việc ai bấm build lúc nào.
+
+`?cachedOnly=1` vẫn được chấp nhận và giờ thừa — giữ để site đã dùng nó không gãy.
 
 > Cùng luật cache như đường sinh: fingerprint phải khớp, và văn đã lưu được
 > **kiểm lại lúc đọc** chứ không tin sẵn — nên một lần dò không bao giờ báo về
