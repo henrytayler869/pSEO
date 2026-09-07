@@ -17,6 +17,18 @@ import { prisma } from "../lib/db/prisma";
 import { buildFactSet, type FactSet } from "../lib/ai/facts";
 import { validateGeneratedText } from "../lib/ai/validate";
 
+/** Every rule validateGeneratedText can raise.
+ *
+ * Listed explicitly so the suite can check TEST CASES against RULES — two
+ * different sets that are easy to mistake for one. Counting cases and
+ * reporting "20/20 passing" says nothing about whether all four rules were
+ * exercised; a rule with no case that trips it has never been observed to
+ * protect anything, and its silence in production is not evidence.
+ *
+ * The site session found five of its thirteen rules in exactly that state
+ * while reporting a green suite. Same trap, one table over. */
+const RULES = ["unsupported_number", "scope_overclaim", "worded_proportion", "invented_place_name"];
+
 interface Case {
   name: string;
   text: (f: FactSet) => string;
@@ -144,6 +156,7 @@ async function main() {
 
   let passed = 0;
   const failures: string[] = [];
+  const rulesTriggered = new Set<string>();
   for (const c of CASES) {
     const fs = c.zipOverride ? await buildFactSet(vertical, c.zipOverride) : factSet;
     if (!fs) {
@@ -152,6 +165,7 @@ async function main() {
     }
     const text = c.text(fs);
     const result = validateGeneratedText(text, fs);
+    for (const i of result.issues) rulesTriggered.add(i.rule);
     const ok = result.passed === c.shouldPass;
     if (ok) passed++;
     else failures.push(c.name);
@@ -167,6 +181,18 @@ async function main() {
   if (failures.length > 0) {
     console.error(`THẤT BẠI: ${failures.join(", ")}`);
     process.exitCode = 1;
+  }
+
+  // Coverage over RULES, not over cases. A green suite that never trips a
+  // rule leaves that rule unobserved, and an unobserved rule's silence in
+  // production means nothing.
+  const neverTriggered = RULES.filter((r) => !rulesTriggered.has(r));
+  if (neverTriggered.length > 0) {
+    console.error(`\nĐỘ PHỦ LUẬT THIẾU — không ca nào làm các luật này kêu: ${neverTriggered.join(", ")}`);
+    console.error(`Luật chưa từng được quan sát là chặn được gì thì lúc nó im cũng không nói lên điều gì.`);
+    process.exitCode = 1;
+  } else {
+    console.log(`Độ phủ: cả ${RULES.length} luật đều có ca làm nó kêu.`);
   }
 }
 

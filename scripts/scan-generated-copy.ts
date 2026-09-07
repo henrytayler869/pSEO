@@ -26,6 +26,15 @@ interface Pattern {
   name: string;
   why: string;
   test: RegExp;
+  /** True when the pattern is BUILT from this trade's vocabulary, so proving
+   * it for one trade proves nothing for another.
+   *
+   * seo_leak and migration_bridge are the same static regex for all 13
+   * trades — one fixture anywhere proves them everywhere, and demanding a
+   * per-trade fixture for them would print a warning that is always true and
+   * never actionable. Warnings that are always on get skimmed, and skimming
+   * is how the real one gets missed. */
+  verticalSpecific: boolean;
 }
 
 /**
@@ -136,16 +145,19 @@ function patternsFor(vertical: string): Pattern[] {
   return [
     {
       name: "seo_leak",
+      verticalSpecific: false,
       why: "Nói về từ khoá/lượt tìm kiếm — đây là số liệu nội bộ, người đọc không dùng đến, và in ra là tự khai trang do máy viết.",
       test: /\b(search(es|ed)?\s+(volume|per\s+month|monthly)|monthly\s+searches|search\s+volume|keyword|query volume|SEO|ranks?\s+for)\b/i,
     },
     {
       name: "off_trade",
+      verticalSpecific: true,
       why: `Viết sang nghề khác — dữ liệu nhà ở gợi ý bảo trì, nhưng "${vertical}" không làm việc đó.`,
       test: new RegExp(`\\b(${[...new Set(foreign)].join("|")})\\b`, "i"),
     },
     {
       name: "migration_bridge",
+      verticalSpecific: false,
       why: "Treo bất cứ thứ gì lên số di cư — số đó tả hộ khai thuế trên cả county, không kéo theo lời khuyên hay nhận định nào.",
       // Deliberately kept narrow to MIGRATION figures, matching what prompt
       // rule 9 actually forbids outright.
@@ -161,6 +173,7 @@ function patternsFor(vertical: string): Pattern[] {
     },
     {
       name: "supply_side_claim",
+      verticalSpecific: true,
       why: "Khẳng định về phía cung (công ty ở đây làm loại việc gì, bận ra sao, giá thế nào) — KHÔNG nguồn nào trong dataset đo phía cung.",
       // "several movers" alone is not a claim: "call several movers and
       // compare quotes" is advice to the reader, which rule 8 explicitly
@@ -212,6 +225,18 @@ const KNOWN_BAD: { vertical: string; pattern: string; text: string }[] = [
   // The trade-specific traps named in prompt rule 9.
   { vertical: "roofing-replacement", pattern: "supply_side_claim", text: "The median build year is 1993, so most jobs here are full tear-offs rather than repairs." },
   { vertical: "hvac-repair", pattern: "supply_side_claim", text: "Homes date from 1993, so many jobs here involve aging systems near the end of their life." },
+  { vertical: "solar-installation", pattern: "supply_side_claim", text: "Radiation here is 6.04 kWh, so many jobs here involve large south-facing arrays." },
+  { vertical: "water-damage-restoration", pattern: "supply_side_claim", text: "With 8 declarations on record, several local restoration companies specialise in storm losses." },
+
+  // off_trade, per trade. These are the ONLY pattern besides supply_side that
+  // is built from the trade's own vocabulary, so a fixture from another trade
+  // proves nothing here. Each names a neighbouring trade the data would
+  // plausibly tempt the model toward — housing figures suggest maintenance,
+  // and maintenance belongs to whichever trade actually does it.
+  { vertical: "roofing-replacement", pattern: "off_trade", text: "Ask the crew about the furnace and ductwork while they are in the attic." },
+  { vertical: "hvac-repair", pattern: "off_trade", text: "Ask whether they also handle the roof flashing and any shingle damage above the unit." },
+  { vertical: "water-damage-restoration", pattern: "off_trade", text: "Ask about remodelling the kitchen and rewiring while the walls are open." },
+  { vertical: "solar-installation", pattern: "off_trade", text: "Ask the installer to check the furnace and ductwork at the same visit." },
 ];
 
 /**
@@ -349,14 +374,37 @@ function assertScannerWorks(vertical: string): void {
     `Tự kiểm (${vertical}): ${bad.length} câu lỗi đã biết đều bị bắt · ${good.length} câu đúng thật không bị báo nhầm · ` +
       `${Object.keys(TRADE_VOCAB).length} nghề không nghề nào lạc nghề với chính mình.`
   );
-  // Coverage is stated, not assumed. A trade with few fixtures has a less
-  // proven scanner, and saying so is more useful than a confident "0 found"
-  // that rests on nothing.
-  if (bad.length === 0 || good.length === 0) {
+
+  // Coverage counted over PATTERNS, not over fixtures — they are different
+  // sets and it is easy to mistake one for the other. "9 ca đều bị bắt" says
+  // nothing about whether all four patterns were exercised: nine cases could
+  // all hit the same pattern while three others have never been observed to
+  // catch anything. The site session found five of its thirteen rules in
+  // exactly that state while reporting a green suite.
+  //
+  // Reported per trade rather than enforced, because a trade whose fixture
+  // set is still small is a REAL state of this project, not a bug — and
+  // naming which patterns are unproven for it is more useful than either a
+  // confident zero or a blocked run.
+  const provenHere = new Set(
+    patterns.filter((p) => bad.some((f) => f.pattern === p.name && p.test.test(f.text))).map((p) => p.name)
+  );
+  const provenAnywhere = new Set(
+    patterns.filter((p) => KNOWN_BAD.some((f) => f.pattern === p.name && p.test.test(f.text))).map((p) => p.name)
+  );
+  const unproven = patterns
+    .filter((p) => (p.verticalSpecific ? !provenHere.has(p.name) : !provenAnywhere.has(p.name)))
+    .map((p) => p.name);
+  if (unproven.length > 0) {
     console.log(
-      `  ⚠️  Ngành này mới có ${bad.length} ca sai / ${good.length} ca đúng làm chuẩn — kết quả quét bên dưới YẾU hơn ` +
-        `so với ngành đã có đủ ca. Đọc tay vài đoạn trước khi tin số 0.`
+      `  ⚠️  Chưa có ca nào chứng minh các mẫu này BẮT ĐƯỢC cho "${vertical}": ${unproven.join(", ")}`
     );
+    console.log(
+      `      Số 0 của các mẫu đó bên dưới nghĩa là "chưa từng thấy nó bắt gì", không phải "đã kiểm và sạch". Đọc tay trước khi tin.`
+    );
+  }
+  if (good.length === 0) {
+    console.log(`  ⚠️  Chưa có câu ĐÚNG thật nào làm chuẩn cho "${vertical}" — chưa loại trừ được khả năng báo nhầm.`);
   }
   console.log();
 }
