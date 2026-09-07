@@ -164,6 +164,43 @@ export interface GenerateOutcome {
  * near-miss), and text stored under the old rules must clear today's, not
  * the ones it was born under.
  */
+/**
+ * Returns already-generated text, or null, WITHOUT ever calling the model.
+ *
+ * Exists because the only way to ask "is there copy for this market?" was to
+ * request it, and requesting it generates. A consuming session probing one
+ * zip to exercise a branch of its own test suite spent real money and got a
+ * generation nobody wanted — for a market deliberately left ungenerated,
+ * because it shares a page with others. The spend cap bounds that, but a
+ * ceiling is not the same as a way to look without buying.
+ *
+ * Same cache rules as the generating path: fingerprint must match, and stored
+ * text is re-validated on read rather than trusted, so a read-only probe can
+ * never report text that today's rules would reject.
+ */
+export async function getCachedInterpretation(vertical: string, zip: string): Promise<GenerateOutcome | null> {
+  const factSet = await buildFactSet(vertical, zip);
+  if (!factSet) return null;
+
+  const cached = await prisma.aiGeneration.findFirst({
+    where: { vertical, zip, factsFingerprint: factSet.fingerprint, validationPassed: true },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!cached) return null;
+
+  const recheck = validateGeneratedText(cached.text, factSet);
+  if (!recheck.passed) return null;
+
+  return {
+    text: cached.text,
+    cached: true,
+    validation: recheck,
+    factsFingerprint: factSet.fingerprint,
+    attempts: 0,
+    costUsd: 0,
+  };
+}
+
 export async function getOrGenerateInterpretation(vertical: string, zip: string): Promise<GenerateOutcome | null> {
   const factSet = await buildFactSet(vertical, zip);
   if (!factSet) return null;

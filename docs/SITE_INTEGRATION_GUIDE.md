@@ -762,6 +762,29 @@ validator sinh ra để chặn, chỉ khác là ở cấp trang thay vì cấp c
 đoạn văn cho **trang cụm**, đó phải là endpoint khác với đầu vào là cả cụm, chứ
 đừng gọi endpoint này cho một zip đại diện.
 
+### `?cachedOnly=1` — hỏi mà không mua
+
+```
+GET /api/v1/niches/{vertical}/markets/{zip}/interpretation?cachedOnly=1
+```
+
+Trả văn **đã có sẵn**, và **không bao giờ gọi model**. Không có sẵn thì `404`
+kèm `"reason": "not_cached"` — phân biệt rõ với `404` +
+`"reason": "no_market_data"` (market không tồn tại / không có dữ liệu từ khoá).
+
+Có mục này vì trước đó **cách duy nhất để hỏi "đã có văn chưa" là yêu cầu nó, mà
+yêu cầu thì sinh**. Một session dò đúng một zip để chạy thử một nhánh test của
+mình đã mua một bản sinh $0,024 cho market **cố ý không có văn** (nó nằm chung
+trang cụm). Trần chi tiêu chặn được thiệt hại, nhưng trần không phải là cách để
+nhìn mà không mua.
+
+Dùng nó cho mọi việc dò xét: kiểm độ phủ, dựng báo cáo freshness, chạy test.
+Chỉ gọi bản không có cờ khi thật sự cần văn để render.
+
+> Cùng luật cache như đường sinh: fingerprint phải khớp, và văn đã lưu được
+> **kiểm lại lúc đọc** chứ không tin sẵn — nên một lần dò không bao giờ báo về
+> đoạn văn mà luật hôm nay sẽ chặn.
+
 **Vì sao không để mỗi site tự gọi Anthropic:** không phải để tiết kiệm key, mà
 vì mỗi site tự viết validator nghĩa là N bản kiểm tra chống bịa số, và chúng
 **sẽ trôi khỏi nhau**. Một site đã publish hụt câu *"roughly one resident in

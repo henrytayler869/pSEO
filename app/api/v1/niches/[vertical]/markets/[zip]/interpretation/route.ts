@@ -1,5 +1,5 @@
 import { requireApiKey } from "@/lib/api/auth";
-import { getOrGenerateInterpretation, fingerprintText } from "@/lib/ai/generate";
+import { getOrGenerateInterpretation, getCachedInterpretation, fingerprintText } from "@/lib/ai/generate";
 import { SpendCapExceededError, getTotalSpendUsd, getAiConfig } from "@/lib/ai/anthropic";
 import { apiJson } from "@/lib/api/cache-policy";
 
@@ -26,11 +26,31 @@ export async function GET(
 
   const { vertical, zip } = await ctx.params;
 
+  // ?cachedOnly=1 — answer from the cache and never call the model.
+  //
+  // Without it, the only way to ask whether copy exists is to request it,
+  // and requesting it generates. A consuming session probing a single zip to
+  // exercise one branch of its own tests bought a generation for a market
+  // that deliberately has none, because it shares a page with others. The
+  // spend cap bounds the damage; it does not give anyone a way to look
+  // without buying. This does.
+  const cachedOnly = new URL(request.url).searchParams.get("cachedOnly") === "1";
+
   try {
-    const outcome = await getOrGenerateInterpretation(vertical, zip);
+    const outcome = cachedOnly
+      ? await getCachedInterpretation(vertical, zip)
+      : await getOrGenerateInterpretation(vertical, zip);
     if (!outcome) {
+      // Two different absences, told apart explicitly. A consumer polling for
+      // "has this been generated yet" must not read "this market does not
+      // exist" as the same answer.
       return apiJson(
-        { error: `No researched market with keyword data for vertical "${vertical}", zip "${zip}".` },
+        {
+          error: cachedOnly
+            ? `No cached interpretation for vertical "${vertical}", zip "${zip}" (nothing was generated, or the stored text no longer passes validation).`
+            : `No researched market with keyword data for vertical "${vertical}", zip "${zip}".`,
+          reason: cachedOnly ? "not_cached" : "no_market_data",
+        },
         { status: 404 });
     }
 
