@@ -143,6 +143,27 @@ Sai key → `401`:
 
 ---
 
+### 3.0 `GET /api/v1/version` — server đang chạy commit nào
+
+```json
+{ "commit": "66dc79539d0eb21a3960a5b7791456f10e942af1", "builtAt": "2026-09-07T15:15:40.225Z" }
+```
+
+Cả hai giá trị được **nướng vào lúc build**, nên chúng mô tả **bản đang được
+phục vụ** — không phải thứ đang nằm trên đĩa, vốn có thể khác nếu một lần deploy
+hỏng giữa chừng hoặc ai đó chạy `git` bằng tay.
+
+Dùng để trả lời câu "bản mới đã lên chưa" mà không phải hỏi ai:
+
+```bash
+curl -s -H "x-api-key: $KEY" https://hq.cornships.com/api/v1/version
+```
+
+So `commit` với SHA bạn vừa push. Khớp là xong; không khớp nghĩa là deploy chưa
+chạy hoặc đã hỏng — **"workflow xanh" và "tiến trình đang phục vụ commit đó" là
+hai khẳng định khác nhau**, và trước đây chỉ khẳng định thứ nhất quan sát được
+từ bên ngoài.
+
 ### 3.1 `GET /api/v1/niches` — danh sách niche đã nghiên cứu
 
 Dùng để biết Head Quarter đang có sẵn dữ liệu cho những niche nào.
