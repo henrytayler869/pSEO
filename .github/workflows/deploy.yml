@@ -1,0 +1,115 @@
+name: CI + Deploy
+
+# Push to main = deploy, but only after the gates pass. The deploy job depends
+# on the ci job, so a red build never reaches the VPS.
+on:
+  push:
+    branches: [main]
+  # Lets you re-run a deploy without pushing an empty commit.
+  workflow_dispatch:
+
+# One deploy at a time. Two overlapping runs would race on the release symlink
+# and could leave `current` pointing at a half-built release.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    # A real Postgres, not a mock. The migrations are hand-written SQL and the
+    # build touches Prisma — running them against nothing would test nothing.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pseo
+          POSTGRES_PASSWORD: pseo
+          POSTGRES_DB: pseo_control_panel
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pseo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://pseo:pseo@localhost:5432/pseo_control_panel
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Prisma client
+        run: npx prisma generate
+
+      - name: Áp migration lên DB sạch
+        # Proves the migration chain applies from zero. A migration that only
+        # works against a database that already has the previous state by
+        # accident fails here rather than on the VPS.
+        run: npx prisma migrate deploy
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npx eslint .
+
+      - name: Build
+        run: npm run build
+
+      - name: Test — luật xác thực dữ liệu
+        # Pure functions, no data needed. Proves each collector rule can fire
+        # AND stay quiet, and that an empty snapshot is refused.
+        run: npx tsx scripts/test-validation-rules.ts
+
+      # NOT run here: test-ai-validator.ts and scan-generated-copy.ts. Both
+      # assert against REAL collected data and real generated copy, which a
+      # blank CI database does not have. Running them against an empty
+      # database would report green while checking nothing — the exact failure
+      # this project keeps finding. They stay as commands to run against the
+      # live database instead of a gate that lies.
+
+  deploy:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Chuẩn bị SSH
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.VPS_KNOWN_HOSTS }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # Host key is PINNED from a secret rather than accepted on first
+          # sight. Trust-on-first-use in a pipeline means a run that happens
+          # during a MITM silently trusts the attacker for every run after.
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Đóng gói mã nguồn tại đúng commit này
+        # git archive, not rsync of the working tree: what ships is exactly
+        # what this commit contains — no stray local files, no .env, and the
+        # SHA is the release name so the VPS can say what it is running.
+        run: git archive --format=tar.gz -o /tmp/release.tar.gz "$GITHUB_SHA"
+
+      - name: Gửi lên VPS và deploy
+        env:
+          HOST: ${{ secrets.VPS_HOST }}
+          USER_NAME: ${{ secrets.VPS_USER }}
+          PORT: ${{ secrets.VPS_PORT || '22' }}
+        run: |
+          set -euo pipefail
+          SSH="ssh -i ~/.ssh/deploy_key -p $PORT -o BatchMode=yes"
+          scp -i ~/.ssh/deploy_key -P "$PORT" /tmp/release.tar.gz "$USER_NAME@$HOST:/tmp/release-$GITHUB_SHA.tar.gz"
+          $SSH "$USER_NAME@$HOST" "bash -s -- $GITHUB_SHA" < deploy/deploy.sh

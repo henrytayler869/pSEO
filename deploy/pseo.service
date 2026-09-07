@@ -1,0 +1,38 @@
+[Unit]
+Description=pSEO Control Panel (Next.js)
+# Postgres runs in Docker on this box, so the app must not start before the
+# Docker daemon. It still retries below if the database is slow to accept
+# connections.
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pseo
+# The symlink, not a release path: `systemctl restart` after the symlink moves
+# is what makes a deploy take effect, and what makes a rollback take effect
+# too.
+WorkingDirectory=/srv/pseo/current
+EnvironmentFile=/srv/pseo/shared/.env
+Environment=NODE_ENV=production
+Environment=PORT=3000
+ExecStart=/usr/bin/npm start
+
+Restart=always
+RestartSec=5
+
+# Bind to loopback only is enforced by Nginx sitting in front; this app has no
+# TLS of its own and its API key is the only gate on the dataset endpoints.
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pseo
+
+# Modest hardening. The app writes nothing outside its release directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/srv/pseo
+
+[Install]
+WantedBy=multi-user.target

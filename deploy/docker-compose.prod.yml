@@ -1,0 +1,38 @@
+# Postgres for the VPS. Mirrors docker-compose.yml (local) with the
+# differences that matter in production spelled out rather than assumed.
+#
+# Run from /srv/pseo/shared:
+#   docker compose -f docker-compose.prod.yml up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: pseo-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pseo
+      # No default here on purpose. Local uses pseo/pseo; a production box
+      # reading its password from a file you had to create is one fewer way to
+      # ship the development password by accident.
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+      POSTGRES_DB: pseo_control_panel
+    secrets:
+      - pg_password
+    # Bound to loopback, NOT 0.0.0.0. The default `5432:5432` publishes the
+    # port on every interface, which on a VPS with a public IP means the
+    # database is exposed to the internet behind nothing but a password.
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - pseo_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pseo -d pseo_control_panel"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+secrets:
+  pg_password:
+    file: ./pg_password.txt
+
+volumes:
+  pseo_pgdata:
