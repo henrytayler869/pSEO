@@ -24,6 +24,7 @@ import { resolveAdapter } from "../lib/collector/registry";
 import { runCollection } from "../lib/collector/run";
 import { validateSnapshot } from "../lib/validation/run";
 import { compareToPreviousSnapshot, formatPercentChange } from "../lib/collector/compare";
+import { getTransportStats } from "../lib/net/curl-fetch";
 
 const IMPLEMENTED_ADAPTER_KEYS = [
   "nrel_pvwatts",
@@ -100,6 +101,26 @@ async function main() {
     } catch (err) {
       console.error(`LỖI khi thu thập từ ${source.name}:`, err instanceof Error ? err.message : err);
       anyFailure = true;
+    }
+  }
+
+  // Which transport served the run. Printed because the curl fallback is
+  // silent by design and therefore hides whether the primary network path
+  // still works at all: a run where every request fell back succeeds exactly
+  // like a healthy one, only slower. First time this was measured, native
+  // fetch was serving ZERO requests to api.census.gov — every collection this
+  // project has ever done went through curl, and nothing had said so.
+  const transport = getTransportStats();
+  if (transport.curl > 0) {
+    const total = transport.native + transport.curl;
+    console.log(
+      `\nMạng: ${transport.native}/${total} request đi bằng fetch, ${transport.curl} phải dùng curl thay thế.`
+    );
+    for (const [host, reason] of Object.entries(transport.fallbackReasons)) {
+      console.log(`  ${host}: ${reason}`);
+    }
+    if (transport.native === 0) {
+      console.log(`  fetch() KHÔNG phục vụ được request nào — đường mạng chính đang hỏng hoàn toàn, chỉ là fallback che đi.`);
     }
   }
 
