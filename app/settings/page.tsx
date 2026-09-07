@@ -7,8 +7,13 @@ import { ServiceAccountManager } from "@/components/service-account-manager";
 import { CREDENTIAL_FIELDS, getCredentialStatuses, type CredentialField } from "@/lib/settings/credentials";
 import { getApiKeyStatus } from "@/lib/settings/api-key";
 import { getServiceAccountStatus } from "@/lib/google/service-account";
+import { ChangePasswordForm } from "@/components/change-password-form";
+import { getAdminPasswordHash } from "@/lib/auth/password";
+import { loginRequired } from "@/lib/auth/session";
 
 export default async function SettingsPage() {
+  const hasAdminPassword = (await getAdminPasswordHash()) !== null;
+  const gateOn = loginRequired();
   const statuses = await getCredentialStatuses();
   const statusByName = new Map(statuses.map((s) => [s.name, s]));
   const apiKeyStatus = await getApiKeyStatus();
@@ -51,6 +56,19 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       ))}
+      <Card>
+        <CardHeader>
+          <CardTitle>Mật khẩu quản trị</CardTitle>
+          <CardDescription>
+            Mật khẩu đăng nhập vào chính bảng điều khiển này. Chỉ lưu dạng băm scrypt trong database —
+            không nằm trong repo, không nằm trong .env. Đây là lớp xác thực của app; nó tách biệt với
+            Basic Auth ở Nginx và với API key của <code>/api/v1</code>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ChangePasswordForm hasPassword={hasAdminPassword} gateOn={gateOn} />
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Cổng API (cho plugin/website)</CardTitle>

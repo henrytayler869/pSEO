@@ -82,6 +82,13 @@ jobs:
       - name: Lint
         run: npx eslint .
 
+      - name: Test — luật đổi mật khẩu
+        # Pure, no data needed. The branch that matters is "current password
+        # required and must verify": if it ever inverted, a session would
+        # silently become permanent ownership of the account and nothing about
+        # the UI would look different.
+        run: npx tsx scripts/test-password-change.ts
+
       - name: Test — luật xác thực dữ liệu
         # Pure functions, no data needed. Proves each collector rule can fire
         # AND stay quiet, and that an empty snapshot is refused.
