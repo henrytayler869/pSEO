@@ -8,8 +8,9 @@ on:
   # Lets you re-run a deploy without pushing an empty commit.
   workflow_dispatch:
 
-# One deploy at a time. Two overlapping runs would race on the release symlink
-# and could leave `current` pointing at a half-built release.
+# One deploy at a time. The VPS updates a single checkout in place, so two
+# overlapping runs would git-reset the same working tree from under each other
+# and leave /opt/pseo at neither commit.
 concurrency:
   group: deploy-production
   cancel-in-progress: false
@@ -44,6 +45,15 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+
+      # Pinned to the version the VPS runs, so npm ci here is the SAME operation
+      # it will be there. The lockfile currently installs cleanly on both
+      # 10.9.8 and 11.6.2 (checked in Docker), but "currently" is not a
+      # guarantee, and a lockfile that resolves differently on the build
+      # machine than on the server is a class of bug worth closing rather than
+      # re-testing.
+      - name: Ghim npm khớp VPS
+        run: npm i -g npm@11.6.2
 
       - run: npm ci
 
@@ -104,19 +114,20 @@ jobs:
           printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
 
-      - name: Đóng gói mã nguồn tại đúng commit này
-        # git archive, not rsync of the working tree: what ships is exactly
-        # what this commit contains — no stray local files, no .env, and the
-        # SHA is the release name so the VPS can say what it is running.
-        run: git archive --format=tar.gz -o /tmp/release.tar.gz "$GITHUB_SHA"
-
-      - name: Gửi lên VPS và deploy
+      # No tarball, no scp: the VPS already holds a READ-ONLY GitHub deploy key
+      # and fetches the commit itself. One code-transfer mechanism instead of
+      # two, and CI needs no write access to anything on the server beyond
+      # running one script.
+      #
+      # The script is streamed rather than stored on the box, so what runs is
+      # always the version in this commit — a deploy script living on the
+      # server drifts from the repo silently.
+      - name: Chạy deploy trên VPS
         env:
           HOST: ${{ secrets.VPS_HOST }}
           USER_NAME: ${{ secrets.VPS_USER }}
           PORT: ${{ secrets.VPS_PORT || '22' }}
         run: |
           set -euo pipefail
-          SSH="ssh -i ~/.ssh/deploy_key -p $PORT -o BatchMode=yes"
-          scp -i ~/.ssh/deploy_key -P "$PORT" /tmp/release.tar.gz "$USER_NAME@$HOST:/tmp/release-$GITHUB_SHA.tar.gz"
-          $SSH "$USER_NAME@$HOST" "bash -s -- $GITHUB_SHA" < deploy/deploy.sh
+          ssh -i ~/.ssh/deploy_key -p "$PORT" -o BatchMode=yes \
+            "$USER_NAME@$HOST" "bash -s -- $GITHUB_SHA" < deploy/deploy.sh

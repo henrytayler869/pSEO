@@ -1,38 +1,41 @@
+# The unit as it ACTUALLY runs on 46.225.145.196 (read from the box
+# 2026-09-07). Kept here for provenance, NOT as something to install over what
+# is there — the machine was configured before this file existed, and the
+# machine is authoritative.
+#
+# Two things are deliberate and easy to "fix" wrongly:
+#
+#   No EnvironmentFile=. /opt/pseo/.env is loaded by Next itself from the
+#   working directory. Pointing systemd at the same file would parse it a
+#   second time under different quoting rules. Scripts run outside Next (tsx)
+#   must load dotenv themselves.
+#
+#   -H 127.0.0.1. The app never binds a public interface; Nginx is the only way
+#   in. Dropping the flag would publish it on every interface.
 [Unit]
 Description=pSEO Control Panel (Next.js)
-# Postgres runs in Docker on this box, so the app must not start before the
-# Docker daemon. It still retries below if the database is slow to accept
-# connections.
 After=network-online.target docker.service
 Wants=network-online.target
+Requires=docker.service
 
 [Service]
 Type=simple
-User=pseo
-# The symlink, not a release path: `systemctl restart` after the symlink moves
-# is what makes a deploy take effect, and what makes a rollback take effect
-# too.
-WorkingDirectory=/srv/pseo/current
-EnvironmentFile=/srv/pseo/shared/.env
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/pseo
 Environment=NODE_ENV=production
-Environment=PORT=3000
-ExecStart=/usr/bin/npm start
-
+ExecStart=/usr/bin/npm run start -- -H 127.0.0.1 -p 3000
 Restart=always
 RestartSec=5
-
-# Bind to loopback only is enforced by Nginx sitting in front; this app has no
-# TLS of its own and its API key is the only gate on the dataset endpoints.
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=pseo
 
-# Modest hardening. The app writes nothing outside its release directory.
 NoNewPrivileges=true
 PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=/srv/pseo
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/pseo
 
 [Install]
 WantedBy=multi-user.target
