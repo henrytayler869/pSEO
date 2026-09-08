@@ -13,6 +13,7 @@
 import { applyStateSuffix, renderTemplate, pickBestCandidate } from "../lib/keywords/patterns";
 import { computeMetricDeltas, formatPercentChange } from "../lib/collector/compare";
 import { assertValidGscProperty } from "../lib/google/search-console";
+import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "../lib/google/analytics-data";
 
 interface Case {
   name: string;
@@ -238,6 +239,67 @@ const CASES: Case[] = [
     name: "GSC property: chuỗi rỗng -> từ chối",
     expect: "từ chối",
     run: () => { try { assertValidGscProperty("   "); return "NHẬN NHẦM"; } catch { return "từ chối"; } },
+  },
+
+  // --- hai mã GA4 ---
+  // Chúng đến từ cùng màn hình, trông cùng chính thức, và làm việc ngược
+  // nhau. Dán lộn thì cả hai chiều đều hỏng im lặng, nên mỗi bên phải nhận ra
+  // HÌNH DẠNG của bên kia và nói đúng ô cần dán.
+  {
+    name: "GA4: Measurement ID hợp lệ -> nhận",
+    expect: "ok",
+    run: () => { assertValidGa4MeasurementId("G-1TL8MDDEJH"); return "ok"; },
+  },
+  {
+    name: "GA4: property ID hợp lệ -> nhận",
+    expect: "ok",
+    run: () => { assertValidGa4PropertyId("553102895"); return "ok"; },
+  },
+  {
+    // Kiểu dán nhầm tệ nhất: script tải được, trang render bình thường, không
+    // lỗi console, sự kiện không đi đâu cả.
+    name: "REGRESSION GA4: dán dãy SỐ vào ô Measurement -> từ chối, chỉ đúng ô kia",
+    expect: "chỉ đúng ô",
+    run: () => {
+      try { assertValidGa4MeasurementId("553102895"); return "NHẬN NHẦM"; }
+      catch (e) {
+        const m = e instanceof Error ? e.message : "";
+        return m.includes("GA4 property ID") && m.includes("dán nhầm") ? "chỉ đúng ô" : `thiếu hướng dẫn: ${m}`;
+      }
+    },
+  },
+  {
+    name: "REGRESSION GA4: dán G- vào ô property ID -> từ chối, chỉ đúng ô kia",
+    expect: "chỉ đúng ô",
+    run: () => {
+      try { assertValidGa4PropertyId("G-1TL8MDDEJH"); return "NHẬN NHẦM"; }
+      catch (e) {
+        const m = e instanceof Error ? e.message : "";
+        return m.includes("Measurement ID") && m.includes("dán nhầm") ? "chỉ đúng ô" : `thiếu hướng dẫn: ${m}`;
+      }
+    },
+  },
+  {
+    // GA4 hiển thị "properties/553102895" ở vài chỗ trong giao diện.
+    name: "GA4: property ID kèm tiền tố properties/ -> từ chối và nêu phần số cần dùng",
+    expect: "553102895",
+    run: () => {
+      try { assertValidGa4PropertyId("properties/553102895"); return "NHẬN NHẦM"; }
+      catch (e) {
+        const m = e instanceof Error ? e.message : "";
+        return m.includes("553102895") && m.includes("thừa tiền tố") ? "553102895" : `thiếu gợi ý: ${m}`;
+      }
+    },
+  },
+  {
+    name: "GA4: Measurement ID viết thường vẫn nhận (người dùng hay gõ g-)",
+    expect: "ok",
+    run: () => { assertValidGa4MeasurementId("g-1tl8mddejh"); return "ok"; },
+  },
+  {
+    name: "GA4: chuỗi rác ở ô Measurement -> từ chối",
+    expect: "từ chối",
+    run: () => { try { assertValidGa4MeasurementId("UA-12345-1"); return "NHẬN NHẦM"; } catch { return "từ chối"; } },
   },
 
   // --- formatPercentChange ---

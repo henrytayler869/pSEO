@@ -1,3 +1,54 @@
+/**
+ * The two GA4 identifiers, and why each is validated against the other's shape.
+ *
+ * A GA4 property has two IDs that arrive from the same screens, look equally
+ * official, and do opposite jobs:
+ *
+ *   ga4PropertyId    553102895        numeric — READS reports (Data API)
+ *   measurementId    G-1TL8MDDEJH     "G-" —   WRITES events (gtag on the site)
+ *
+ * Neither can be derived from the other, and swapping them fails quietly in
+ * both directions. A "G-" string sent to the Data API is rejected with an error
+ * nobody sees until a dashboard stays empty. A numeric ID placed in a gtag call
+ * is worse: the script loads, the page renders normally, no console error
+ * appears, and the events go nowhere — indistinguishable from a site with no
+ * visitors, for as long as anyone is willing to believe that.
+ *
+ * So each is checked for the other's shape specifically, and told which field
+ * it probably belongs in. A validator that only says "invalid" leaves the
+ * person staring at a value that is perfectly valid — somewhere else.
+ */
+export function assertValidGa4MeasurementId(value: string): void {
+  const v = value.trim();
+  if (/^G-[A-Z0-9]{6,}$/i.test(v)) return;
+  if (/^\d+$/.test(v)) {
+    throw new Error(
+      `"${v}" là GA4 property ID (dãy số), không phải Measurement ID. Measurement ID có dạng G-XXXXXXXXXX và nằm ở Admin > Data streams. Có thể bạn đã dán nhầm sang ô này — dãy số thuộc về ô "GA4 property ID".`
+    );
+  }
+  throw new Error(
+    `Measurement ID "${v}" sai định dạng. Phải có dạng G-XXXXXXXXXX (chữ G, gạch ngang, rồi chữ và số), lấy ở Admin > Data streams của property GA4.`
+  );
+}
+
+/**
+ * The numeric property ID, guarded against the same confusion from the other
+ * side. See assertValidGa4MeasurementId for why both directions matter.
+ */
+export function assertValidGa4PropertyId(value: string): void {
+  const v = value.trim();
+  if (/^\d+$/.test(v)) return;
+  if (/^G-/i.test(v)) {
+    throw new Error(
+      `"${v}" là Measurement ID, không phải property ID. GA4 Data API dùng property ID dạng dãy số (VD 553102895), lấy ở Admin > Property settings. Có thể bạn đã dán nhầm sang ô này.`
+    );
+  }
+  if (/^properties\/\d+$/.test(v)) {
+    throw new Error(`"${v}" thừa tiền tố "properties/". Chỉ nhập phần số: ${v.slice("properties/".length)}.`);
+  }
+  throw new Error(`GA4 property ID "${v}" phải là một dãy số (VD 553102895), lấy ở Admin > Property settings.`);
+}
+
 import { getGoogleAccessToken } from "./service-account";
 
 const GA4_DATA_API_BASE = "https://analyticsdata.googleapis.com/v1beta";

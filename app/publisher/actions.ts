@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
 import { assertValidGscProperty } from "@/lib/google/search-console";
+import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "@/lib/google/analytics-data";
 
 export interface ActionResult {
   ok: boolean;
@@ -16,6 +17,7 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
   const gscPropertyUrl = String(formData.get("gscPropertyUrl") ?? "").trim();
   const ga4PropertyId = String(formData.get("ga4PropertyId") ?? "").trim();
   const wpApiBaseUrlRaw = String(formData.get("wpApiBaseUrl") ?? "").trim();
+  const ga4MeasurementIdRaw = String(formData.get("ga4MeasurementId") ?? "").trim();
 
   if (!name || !url || !gscPropertyUrl || !ga4PropertyId) {
     return { ok: false, message: "Vui lòng nhập đủ Tên, URL, GSC property, và GA4 property ID." };
@@ -26,8 +28,13 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
   // with a 403 that reads like a permissions problem.
   try {
     assertValidGscProperty(gscPropertyUrl);
+    assertValidGa4PropertyId(ga4PropertyId);
+    // Optional — but if something WAS typed, it gets checked. An empty field
+    // means "no analytics yet"; a filled one that is wrong means a site that
+    // reports zero forever, so the two must not be treated alike.
+    if (ga4MeasurementIdRaw) assertValidGa4MeasurementId(ga4MeasurementIdRaw);
   } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : "GSC property không hợp lệ." };
+    return { ok: false, message: err instanceof Error ? err.message : "Thông tin kết nối không hợp lệ." };
   }
 
   try {
@@ -37,6 +44,7 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
         url,
         gscPropertyUrl,
         ga4PropertyId,
+        ga4MeasurementId: ga4MeasurementIdRaw || null,
         wpApiBaseUrl: wpApiBaseUrlRaw || deriveWpApiBaseUrl(url),
       },
     });
@@ -55,5 +63,46 @@ export async function removeWebsiteAction(_prev: ActionResult, formData: FormDat
     return { ok: true, message: "Đã gỡ kết nối." };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Gỡ kết nối thất bại." };
+  }
+}
+
+/**
+ * Sets or clears a site's measurement ID after it has been connected.
+ *
+ * Separate from connecting because the two happen at different times and by
+ * different people: a site is registered as soon as it exists, and analytics
+ * often arrives days later. Requiring it up front would push someone to invent
+ * a value to get past the form, and an invented measurement ID is the failure
+ * this whole field exists to prevent — it collects nothing and looks fine.
+ *
+ * An empty submission CLEARS it rather than being rejected as invalid input.
+ * Removing analytics is a real thing to want, and a field that can only be
+ * filled and never emptied traps a wrong value in place.
+ */
+export async function updateMeasurementIdAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const websiteId = String(formData.get("websiteId") ?? "").trim();
+  const raw = String(formData.get("ga4MeasurementId") ?? "").trim();
+  if (!websiteId) return { ok: false, message: "Thiếu websiteId." };
+
+  if (raw) {
+    try {
+      assertValidGa4MeasurementId(raw);
+    } catch (err) {
+      return { ok: false, message: err instanceof Error ? err.message : "Measurement ID không hợp lệ." };
+    }
+  }
+
+  try {
+    await prisma.website.update({ where: { id: websiteId }, data: { ga4MeasurementId: raw || null } });
+    revalidatePath(`/publisher/${websiteId}`);
+    revalidatePath("/publisher");
+    return {
+      ok: true,
+      message: raw
+        ? `Đã lưu ${raw}. Site sẽ nhận mã này ở lần build tiếp theo — giá trị được nhúng lúc build, restart không đủ.`
+        : "Đã xoá Measurement ID. Site sẽ ngừng gửi sự kiện sau lần build tiếp theo.",
+    };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Lưu thất bại." };
   }
 }

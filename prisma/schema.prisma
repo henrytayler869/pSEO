@@ -551,6 +551,21 @@ model Website {
   // numeric Analytics property ID, not the measurement ID).
   ga4PropertyId String
 
+  // The OTHER GA4 identifier: the "G-XXXXXXXXXX" measurement ID that the
+  // site itself sends events with. Stored here so it is managed in one place
+  // rather than hand-edited into a file on the server.
+  //
+  // The two are not interchangeable and neither one can be derived from the
+  // other. ga4PropertyId READS reports; this one WRITES events. Swapping them
+  // fails in the quietest possible way — the Data API rejects a "G-" string,
+  // and a numeric ID in a gtag call collects nothing while every page still
+  // renders — so both are validated on entry.
+  //
+  // Optional: a site can be connected for GSC and WordPress reporting before
+  // anyone has set up analytics, and refusing the connection until then would
+  // be inventing a dependency that does not exist.
+  ga4MeasurementId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

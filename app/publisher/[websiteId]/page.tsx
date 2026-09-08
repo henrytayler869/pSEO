@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
 import { getWebsiteDetail } from "@/lib/queries/publisher";
+import { MeasurementIdForm } from "@/components/measurement-id-form";
 
 export default async function WebsiteDetailPage({ params }: { params: Promise<{ websiteId: string }> }) {
   const { websiteId } = await params;
@@ -31,6 +32,20 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
           </>
         }
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Mã đo GA4</CardTitle>
+          <CardDescription>
+            Đây là mã site dùng để GỬI sự kiện (G-XXXXXXXXXX), khác với GA4 property ID ở trên vốn dùng để ĐỌC báo cáo.
+            Lưu ở đây thì site tự lấy qua Head Quarter, không phải sửa file trên máy chủ. Giá trị được nhúng lúc build,
+            nên nó có hiệu lực từ lần build kế tiếp — restart không đủ.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <MeasurementIdForm websiteId={website.id} current={website.ga4MeasurementId} />
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard label="Bài viết (WordPress)" value={postCount !== null ? postCount.toLocaleString() : "—"} error={postCountError} />
