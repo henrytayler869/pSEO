@@ -49,7 +49,7 @@ export function assertValidGa4PropertyId(value: string): void {
   throw new Error(`GA4 property ID "${v}" phải là một dãy số (VD 553102895), lấy ở Admin > Property settings.`);
 }
 
-import { getGoogleAccessToken } from "./service-account";
+import { getGoogleAccessToken, explainGoogleApiError } from "./service-account";
 
 const GA4_DATA_API_BASE = "https://analyticsdata.googleapis.com/v1beta";
 const GA4_READONLY_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
@@ -116,7 +116,10 @@ async function runReport(
     body: JSON.stringify(body),
   });
   if (!response.ok) {
-    throw new Error(`GA4 runReport thất bại cho property ${ga4PropertyId}: HTTP ${response.status}.`);
+    const body = await response.text();
+    throw new Error(
+      `GA4 runReport thất bại cho property ${ga4PropertyId}: ${explainGoogleApiError(response.status, body)}`
+    );
   }
   const parsed: unknown = await response.json();
   if (typeof parsed !== "object" || parsed === null) {

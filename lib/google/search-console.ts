@@ -1,4 +1,4 @@
-import { getGoogleAccessToken } from "./service-account";
+import { getGoogleAccessToken, explainGoogleApiError } from "./service-account";
 
 const SEARCH_ANALYTICS_BASE = "https://www.googleapis.com/webmasters/v3";
 const GSC_READONLY_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -149,15 +149,25 @@ async function querySearchAnalytics(
     body: JSON.stringify(params),
   });
   if (!response.ok) {
-    // 403 has two unrelated causes here and the response cannot tell them
-    // apart, so the message carries both rather than picking the likelier one.
-    const hint =
-      response.status === 403 || response.status === 404
+    // CORRECTED. This used to name exactly two causes for a 403 — missing
+    // permission, or the wrong property format — and both were wrong the first
+    // time it fired. The real cause was a third one it did not mention: the
+    // Search Console API was never enabled in the Google Cloud project, so the
+    // request never reached Search Console at all.
+    //
+    // That is the cause that hits every new project FIRST, and the message sent
+    // someone to re-check property permissions they had already set correctly.
+    // Google's own response says precisely what is wrong, with the console URL
+    // to fix it; explainGoogleApiError surfaces that instead of paraphrasing.
+    const body = await response.text();
+    const explained = explainGoogleApiError(response.status, body);
+    const formatHint =
+      (response.status === 403 || response.status === 404) && !/has not been used in project|is disabled/i.test(body)
         ? propertyUrl.startsWith("sc-domain:")
-          ? ` Hai khả năng: (a) service account chưa được thêm làm người dùng của property này trong Search Console, hoặc (b) property thực ra là dạng URL-prefix chứ không phải Domain — khi đó phải dùng "https://..." thay vì "${propertyUrl}".`
-          : ` Hai khả năng: (a) service account chưa được thêm làm người dùng của property này trong Search Console, hoặc (b) property thực ra là dạng Domain (xác minh bằng DNS) — khi đó phải dùng "sc-domain:<tên miền>" thay vì URL.`
+          ? ` Nếu quyền đã cấp đúng: property có thể là dạng URL-prefix chứ không phải Domain — khi đó dùng "https://..." thay vì "${propertyUrl}".`
+          : ` Nếu quyền đã cấp đúng: property có thể là dạng Domain (xác minh bằng DNS) — khi đó dùng "sc-domain:<tên miền>" thay vì URL.`
         : "";
-    throw new Error(`GSC searchAnalytics.query thất bại cho ${propertyUrl}: HTTP ${response.status}.${hint}`);
+    throw new Error(`GSC searchAnalytics.query thất bại cho ${propertyUrl}: ${explained}${formatHint}`);
   }
   const body: unknown = await response.json();
   if (typeof body !== "object" || body === null) {

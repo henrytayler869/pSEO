@@ -110,3 +110,41 @@ export async function getGoogleAccessToken(scopes: string[]): Promise<string> {
   }
   return (body as Record<string, unknown>).access_token as string;
 }
+
+/**
+ * Google's 403 carries the actual reason in its body. Pull it out.
+ *
+ * The status alone is ambiguous between three unrelated causes, and the one
+ * that hits every new project FIRST — the API not being enabled — was missing
+ * from this repo's error messages entirely. Someone acting on those messages
+ * would go and re-check property permissions they had already set correctly,
+ * because nothing told them the request never reached Search Console or
+ * Analytics at all.
+ *
+ * Google's own sentence is better than any paraphrase: it names the API, the
+ * project number, and the exact console URL. So it is quoted rather than
+ * replaced.
+ */
+export function explainGoogleApiError(status: number, body: string): string {
+  let message = "";
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: unknown } };
+    if (typeof parsed.error?.message === "string") message = parsed.error.message;
+  } catch {
+    // Not JSON — an HTML error page from a proxy, most likely. Fall through.
+  }
+
+  if (/has not been used in project|is disabled/i.test(message)) {
+    return (
+      `API CHƯA ĐƯỢC BẬT trong project Google Cloud — KHÔNG phải vấn đề quyền trên property. ` +
+      `Bật nó rồi đợi vài phút. Nguyên văn Google: ${message}`
+    );
+  }
+  if (status === 403) {
+    return (
+      `HTTP 403. ${message || "(không có thông điệp)"} — kiểm theo thứ tự: (1) API đã bật trong project Google Cloud chưa, ` +
+      `(2) email service account đã được thêm quyền đọc chưa, (3) đúng property/định dạng chưa.`
+    );
+  }
+  return `HTTP ${status}. ${message || body.slice(0, 200)}`;
+}

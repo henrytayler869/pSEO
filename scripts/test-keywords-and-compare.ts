@@ -14,6 +14,7 @@ import { applyStateSuffix, renderTemplate, pickBestCandidate } from "../lib/keyw
 import { computeMetricDeltas, formatPercentChange } from "../lib/collector/compare";
 import { assertValidGscProperty } from "../lib/google/search-console";
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "../lib/google/analytics-data";
+import { explainGoogleApiError } from "../lib/google/service-account";
 
 interface Case {
   name: string;
@@ -300,6 +301,41 @@ const CASES: Case[] = [
     name: "GA4: chuỗi rác ở ô Measurement -> từ chối",
     expect: "từ chối",
     run: () => { try { assertValidGa4MeasurementId("UA-12345-1"); return "NHẬN NHẦM"; } catch { return "từ chối"; } },
+  },
+
+  // --- giải thích lỗi Google ---
+  // REGRESSION cho một thông điệp SAI mà tôi tự viết: nó nêu đúng hai nguyên
+  // nhân cho 403, và cả hai đều sai ở lần đầu tiên nó kêu. Nguyên nhân thật là
+  // cái thứ ba nó không nhắc — API chưa bật trong project — tức request chưa
+  // hề tới được Search Console. Thông điệp cũ đẩy người ta đi kiểm lại quyền
+  // mà họ đã cấp đúng rồi.
+  {
+    name: "REGRESSION Google 403: API chưa bật -> nói ĐÚNG là chưa bật, không đổ cho quyền",
+    expect: "chưa bật",
+    run: () => {
+      const body = JSON.stringify({
+        error: { code: 403, message: "Google Analytics Data API has not been used in project 441097379236 before or it is disabled. Enable it by visiting ..." },
+      });
+      const m = explainGoogleApiError(403, body);
+      return m.includes("API CHƯA ĐƯỢC BẬT") && m.includes("KHÔNG phải vấn đề quyền") ? "chưa bật" : `sai: ${m.slice(0, 90)}`;
+    },
+  },
+  {
+    // 403 thật vì thiếu quyền vẫn phải dẫn người ta đi kiểm quyền — và theo
+    // đúng thứ tự, vì bật API là việc phải làm trước.
+    name: "Google 403: thiếu quyền thật -> liệt kê thứ tự kiểm, có nhắc bật API trước",
+    expect: "có thứ tự",
+    run: () => {
+      const body = JSON.stringify({ error: { code: 403, message: "User does not have sufficient permission for site." } });
+      const m = explainGoogleApiError(403, body);
+      return m.includes("(1)") && m.includes("(2)") && m.includes("sufficient permission") ? "có thứ tự" : `sai: ${m.slice(0, 90)}`;
+    },
+  },
+  {
+    // Một proxy trả HTML thì không được làm hàm này ném lỗi.
+    name: "Google lỗi: body không phải JSON -> vẫn trả thông điệp dùng được",
+    expect: "ok",
+    run: () => (explainGoogleApiError(500, "<html>Bad Gateway</html>").includes("500") ? "ok" : "thiếu mã lỗi"),
   },
 
   // --- formatPercentChange ---
