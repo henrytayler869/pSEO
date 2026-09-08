@@ -1,5 +1,5 @@
 import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types";
-import { SchemaDriftError, LocationFetchError } from "../errors";
+import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
 const FEMA_BASE_URL = "https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries";
@@ -104,9 +104,7 @@ export class FemaDisasterDeclarationsAdapter implements CollectorAdapter {
     });
 
     const { status, body } = await fetchWithCurlFallback(`${FEMA_BASE_URL}?${params.toString()}`);
-    if (status !== 200) {
-      throw new SchemaDriftError(`FEMA request failed: HTTP ${status}. Body: ${body.toString("utf-8").slice(0, 300)}`);
-    }
+    assertHttpOk(status, body, "FEMA request failed");
 
     let parsed: unknown;
     try {

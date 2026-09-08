@@ -1,5 +1,5 @@
 import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types";
-import { SchemaDriftError, LocationFetchError } from "../errors";
+import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
 /**
@@ -55,9 +55,7 @@ export class EiaElectricityAdapter implements CollectorAdapter {
       "&sort[0][column]=period&sort[0][direction]=desc&length=5000";
 
     const { status, body } = await fetchWithCurlFallback(url);
-    if (status !== 200) {
-      throw new SchemaDriftError(`EIA request failed: HTTP ${status}. Body: ${body.toString("utf-8").slice(0, 300)}`);
-    }
+    assertHttpOk(status, body, "EIA request failed");
 
     let parsed: unknown;
     try {

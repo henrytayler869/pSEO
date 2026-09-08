@@ -54,3 +54,41 @@ export class MissingCredentialError extends Error {
     this.name = "MissingCredentialError";
   }
 }
+
+/**
+ * Turns a non-200 HTTP status into the RIGHT kind of error.
+ *
+ * Five adapters independently wrote `if (status !== 200) throw new
+ * SchemaDriftError(...)`, which says a transport failure is a change in the
+ * response shape. It is not, and the mislabelling costs real time: FEMA
+ * returned 403 with an HTML body and the run announced schema drift, sending
+ * whoever read it looking for a field that had changed. NOAA had the same
+ * confusion in a different form. Both were found by someone reading a message
+ * that confidently named the wrong cause.
+ *
+ * SchemaDriftError means "this source is still answering, but I no longer
+ * understand what it says" — and it stops the whole run, because nothing else
+ * from that source can be trusted either. A 403, 429 or 500 means the source
+ * did not answer at all, which is a different situation with a different fix
+ * and, usually, a different person to call.
+ *
+ * The distinction survives downstream: a run where every location hits 429 ends
+ * up SUSPECT through the majority-failed rule, with "N/M locations failed"
+ * reported instead of a schema change that never happened.
+ */
+export function assertHttpOk(status: number, body: Buffer | string, context: string): void {
+  if (status === 200) return;
+
+  const snippet = (typeof body === "string" ? body : body.toString("utf-8")).slice(0, 200).replace(/\s+/g, " ").trim();
+
+  // Named explicitly because it is transient and self-healing, and because the
+  // fix is "wait" rather than anything in this repository — a distinction worth
+  // handing the reader rather than making them infer it from a number.
+  if (status === 429) {
+    throw new LocationFetchError(`${context}: HTTP 429 — bị giới hạn tần suất, thử lại sau. ${snippet}`);
+  }
+  if (status === 401 || status === 403) {
+    throw new LocationFetchError(`${context}: HTTP ${status} — bị từ chối (khoá sai/hết hạn/thiếu quyền), KHÔNG phải lệch schema. ${snippet}`);
+  }
+  throw new LocationFetchError(`${context}: HTTP ${status}. ${snippet}`);
+}

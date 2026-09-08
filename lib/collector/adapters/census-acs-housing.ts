@@ -1,5 +1,5 @@
 import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types";
-import { SchemaDriftError, LocationFetchError } from "../errors";
+import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
 const ACS_YEAR = 2023;
@@ -82,9 +82,7 @@ export class CensusAcsHousingAdapter implements CollectorAdapter {
       `&for=zip%20code%20tabulation%20area:*&key=${this.apiKey}`;
 
     const { status, body } = await fetchWithCurlFallback(url);
-    if (status !== 200) {
-      throw new SchemaDriftError(`Census ACS5 request failed: HTTP ${status}.`);
-    }
+    assertHttpOk(status, body, "Census ACS5 request failed");
 
     let parsed: unknown;
     try {

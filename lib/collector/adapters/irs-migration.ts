@@ -1,5 +1,5 @@
 import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types";
-import { SchemaDriftError, LocationFetchError } from "../errors";
+import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
 // Verified live (2026-09-06): real, current (2022-2023) IRS Statistics of
@@ -127,9 +127,7 @@ export class IrsMigrationAdapter implements CollectorAdapter {
     countyNameCol: string
   ): Promise<Map<string, { households: number; agiThousands: number }>> {
     const { status, body } = await fetchWithCurlFallback(url);
-    if (status !== 200) {
-      throw new SchemaDriftError(`IRS migration file request failed (${url}): HTTP ${status}.`);
-    }
+    assertHttpOk(status, body, "IRS migration file request failed (${url})");
 
     const text = body.toString("utf-8");
     const lines = text.split("\n").filter((l) => l.trim().length > 0);

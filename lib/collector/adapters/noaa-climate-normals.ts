@@ -1,5 +1,5 @@
 import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types";
-import { SchemaDriftError, LocationFetchError } from "../errors";
+import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
 const NOAA_BASE_URL = "https://www.ncei.noaa.gov/cdo-web/api/v2/data";
@@ -127,9 +127,7 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
     if (status === 404) {
       throw new LocationFetchError(`Không có dữ liệu NOAA cho hạt ${countyFips} (404 — có thể không có trạm gần)`);
     }
-    if (status !== 200) {
-      throw new LocationFetchError(`Gọi NOAA thất bại cho hạt ${countyFips}: HTTP ${status}`);
-    }
+    assertHttpOk(status, body, `NOAA hạt ${countyFips}`);
 
     let parsed: unknown;
     try {
