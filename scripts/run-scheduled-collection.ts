@@ -37,6 +37,14 @@ const IMPLEMENTED_ADAPTER_KEYS = [
   "fema_disaster_declarations",
 ];
 
+// NOAA's 5 req/sec cap is enforced INSIDE its adapter now, by spacing requests
+// in time. It is left at a low concurrency here as well, but that is belt and
+// braces rather than the mechanism: a concurrency limit caps how many requests
+// are in flight, not how many start per second, and four fast requests in
+// flight is forty per second. Relying on this line alone is what produced 88
+// rejected locations quoting CDO's own words back at us.
+//
+// Original note, kept because it explains why the number is low:
 // NOAA CDO API enforces a hard 5 req/sec cap — the default concurrency (5)
 // plus retry bursts can exceed that, so this source alone runs throttled.
 const CONCURRENCY_OVERRIDES: Record<string, number> = { noaa_climate_normals: 4 };

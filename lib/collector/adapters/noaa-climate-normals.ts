@@ -1,5 +1,6 @@
 import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types";
 import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
+import { sleep } from "../concurrency";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
 const NOAA_BASE_URL = "https://www.ncei.noaa.gov/cdo-web/api/v2/data";
@@ -10,6 +11,8 @@ const NOAA_BASE_URL = "https://www.ncei.noaa.gov/cdo-web/api/v2/data";
 // enddate=2010-12-01 regardless of which real 30-year normals period is
 // being served. NOT independently confirmed against a live response — see
 // the adapter docstring below.
+const NOAA_MIN_REQUEST_INTERVAL_MS = 250; // 4 req/s — CDO cấm quá 5 req/s
+
 const NORMAL_PERIOD_START = "2010-01-01";
 const NORMAL_PERIOD_END = "2010-12-01";
 
@@ -73,6 +76,42 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
   private readonly byCounty = new Map<string, Promise<CollectedDataPoint[]>>();
 
   /**
+   * A real rate limit, because CDO enforces one and concurrency does not.
+   *
+   * The runner used to hold this source at concurrency 4, which sounds like a
+   * throttle and is not: four requests in flight, each finishing in 100ms, is
+   * forty requests per second. CDO caps at five, and the live run came back
+   * with 88 locations rejected carrying its exact words — "this token has
+   * reached its temporary request limit of 5 per second".
+   *
+   * A limit measured in requests-per-second can only be enforced by spacing
+   * requests in TIME. This chains every outbound call so each one waits out
+   * the interval since the last, whatever concurrency the runner is set to —
+   * the adapter knows the rule, so the adapter enforces it. Leaving it to a
+   * runner setting means the next person who tunes concurrency for an
+   * unrelated reason silently breaks this.
+   *
+   * 250ms is four per second, one below the cap. The margin is deliberate:
+   * the limit is enforced on CDO's clock, not ours, and network jitter can
+   * bunch two requests that left here properly spaced.
+   */
+  private gate: Promise<unknown> = Promise.resolve();
+  private lastRequestAt = 0;
+
+  private async spaced<T>(fn: () => Promise<T>): Promise<T> {
+    const run = this.gate.then(async () => {
+      const wait = NOAA_MIN_REQUEST_INTERVAL_MS - (Date.now() - this.lastRequestAt);
+      if (wait > 0) await sleep(wait);
+      this.lastRequestAt = Date.now();
+      return fn();
+    });
+    // Swallow rejection on the CHAIN only, so one failed request does not stop
+    // every later one. The caller still receives the original rejection.
+    this.gate = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
    * Queried by county FIPS because NORMAL_MLY has no ZIP mapping AT ALL.
    *
    * This adapter shipped querying `ZIP:{zip}` and returned nothing, for every
@@ -120,9 +159,9 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
       params.append("datatypeid", datatypeId);
     }
 
-    const { status, body } = await fetchWithCurlFallback(`${NOAA_BASE_URL}?${params.toString()}`, {
-      token: this.apiToken,
-    });
+    const { status, body } = await this.spaced(() =>
+      fetchWithCurlFallback(`${NOAA_BASE_URL}?${params.toString()}`, { token: this.apiToken })
+    );
 
     if (status === 404) {
       throw new LocationFetchError(`Không có dữ liệu NOAA cho hạt ${countyFips} (404 — có thể không có trạm gần)`);
