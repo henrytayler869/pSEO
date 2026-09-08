@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
+import { assertValidGscProperty } from "@/lib/google/search-console";
 
 export interface ActionResult {
   ok: boolean;
@@ -18,6 +19,15 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
 
   if (!name || !url || !gscPropertyUrl || !ga4PropertyId) {
     return { ok: false, message: "Vui lòng nhập đủ Tên, URL, GSC property, và GA4 property ID." };
+  }
+
+  // Checked here, at the only moment a person is looking at the field they
+  // typed. Left to query time it surfaces as an empty dashboard days later,
+  // with a 403 that reads like a permissions problem.
+  try {
+    assertValidGscProperty(gscPropertyUrl);
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "GSC property không hợp lệ." };
   }
 
   try {

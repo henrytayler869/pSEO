@@ -96,6 +96,48 @@ interface RawSearchAnalyticsRow {
   position: number;
 }
 
+/**
+ * A Search Console property is addressed by a STRING, and the string is not a
+ * URL for half of all properties.
+ *
+ * Two kinds exist and they are not interchangeable:
+ *
+ *   Domain property      sc-domain:atmovingservices.com
+ *   URL-prefix property  https://atmovingservices.com/
+ *
+ * The API matches the value EXACTLY against how the property was registered.
+ * Passing the URL form for a Domain property does not fall back or redirect —
+ * it returns 403, the same status a genuine permissions problem returns, and
+ * the two are indistinguishable from the response alone.
+ *
+ * That collision is why this is validated up front rather than left to fail at
+ * query time. Verifying through a DNS provider (Cloudflare's one-click flow,
+ * which is the easier and better path) always produces a DOMAIN property, so
+ * the person most likely to hit this is the person who did the setup correctly.
+ *
+ * Deliberately does NOT normalise a bare "example.com" into either form.
+ * Guessing would pick one of two real properties that may both exist with
+ * different data, and a wrong guess here surfaces as an empty dashboard rather
+ * than an error — the worst available outcome. Ask instead.
+ */
+export function assertValidGscProperty(propertyUrl: string): void {
+  const value = propertyUrl.trim();
+  if (value.startsWith("sc-domain:")) {
+    const host = value.slice("sc-domain:".length);
+    if (host.length > 0 && !host.includes("/") && host.includes(".")) return;
+    throw new Error(
+      `GSC property "${value}" sai định dạng. Dạng Domain phải là sc-domain:<tên miền>, ví dụ sc-domain:atmovingservices.com — không kèm https:// và không có dấu / nào.`
+    );
+  }
+  if (value.startsWith("http://") || value.startsWith("https://")) return;
+  throw new Error(
+    `GSC property "${value}" không hợp lệ. Search Console có HAI dạng và API phân biệt chúng:\n` +
+      `  • Domain (xác minh bằng DNS, kể cả qua Cloudflare):  sc-domain:atmovingservices.com\n` +
+      `  • URL-prefix (xác minh bằng file/thẻ HTML):          https://atmovingservices.com/\n` +
+      `Dùng đúng dạng mà property đã được tạo. Dán nhầm dạng sẽ nhận HTTP 403 giống hệt lỗi thiếu quyền.`
+  );
+}
+
 async function querySearchAnalytics(
   propertyUrl: string,
   accessToken: string,
@@ -107,7 +149,15 @@ async function querySearchAnalytics(
     body: JSON.stringify(params),
   });
   if (!response.ok) {
-    throw new Error(`GSC searchAnalytics.query thất bại cho ${propertyUrl}: HTTP ${response.status}.`);
+    // 403 has two unrelated causes here and the response cannot tell them
+    // apart, so the message carries both rather than picking the likelier one.
+    const hint =
+      response.status === 403 || response.status === 404
+        ? propertyUrl.startsWith("sc-domain:")
+          ? ` Hai khả năng: (a) service account chưa được thêm làm người dùng của property này trong Search Console, hoặc (b) property thực ra là dạng URL-prefix chứ không phải Domain — khi đó phải dùng "https://..." thay vì "${propertyUrl}".`
+          : ` Hai khả năng: (a) service account chưa được thêm làm người dùng của property này trong Search Console, hoặc (b) property thực ra là dạng Domain (xác minh bằng DNS) — khi đó phải dùng "sc-domain:<tên miền>" thay vì URL.`
+        : "";
+    throw new Error(`GSC searchAnalytics.query thất bại cho ${propertyUrl}: HTTP ${response.status}.${hint}`);
   }
   const body: unknown = await response.json();
   if (typeof body !== "object" || body === null) {

@@ -12,6 +12,7 @@
 
 import { applyStateSuffix, renderTemplate, pickBestCandidate } from "../lib/keywords/patterns";
 import { computeMetricDeltas, formatPercentChange } from "../lib/collector/compare";
+import { assertValidGscProperty } from "../lib/google/search-console";
 
 interface Case {
   name: string;
@@ -187,6 +188,56 @@ const CASES: Case[] = [
     name: "so sánh: GIẢM 12% cũng đáng kể, không chỉ tăng",
     expect: "1",
     run: () => String(computeMetricDeltas([pt("A", "m", 88)], [pt("A", "m", 100)])[0].significantChangeCount),
+  },
+
+  // --- assertValidGscProperty ---
+  // Verifying through a DNS provider always produces a DOMAIN property, so the
+  // person most likely to paste the wrong form is the one who did the setup
+  // the better way. The API answers a wrong form with 403 — the same status as
+  // a real permissions problem.
+  {
+    name: "GSC property: dạng Domain hợp lệ -> nhận",
+    expect: "ok",
+    run: () => { assertValidGscProperty("sc-domain:atmovingservices.com"); return "ok"; },
+  },
+  {
+    name: "GSC property: dạng URL-prefix hợp lệ -> nhận",
+    expect: "ok",
+    run: () => { assertValidGscProperty("https://atmovingservices.com/"); return "ok"; },
+  },
+  {
+    // The exact mistake this exists to catch: a Domain property addressed the
+    // way it looks in a browser.
+    name: "REGRESSION GSC property: sc-domain kèm https:// -> từ chối, nêu đúng dạng",
+    expect: "từ chối",
+    run: () => {
+      try { assertValidGscProperty("sc-domain:https://atmovingservices.com"); return "NHẬN NHẦM"; }
+      catch (e) { return e instanceof Error && e.message.includes("không kèm https://") ? "từ chối" : `sai lý do: ${e}`; }
+    },
+  },
+  {
+    name: "GSC property: tên miền trần -> từ chối và nêu CẢ HAI dạng, không đoán bừa",
+    expect: "từ chối",
+    run: () => {
+      try { assertValidGscProperty("atmovingservices.com"); return "NHẬN NHẦM"; }
+      catch (e) {
+        const m = e instanceof Error ? e.message : "";
+        return m.includes("sc-domain:") && m.includes("https://") ? "từ chối" : `thiếu hướng dẫn: ${m}`;
+      }
+    },
+  },
+  {
+    name: "GSC property: sc-domain có dấu / -> từ chối",
+    expect: "từ chối",
+    run: () => {
+      try { assertValidGscProperty("sc-domain:atmovingservices.com/blog"); return "NHẬN NHẦM"; }
+      catch { return "từ chối"; }
+    },
+  },
+  {
+    name: "GSC property: chuỗi rỗng -> từ chối",
+    expect: "từ chối",
+    run: () => { try { assertValidGscProperty("   "); return "NHẬN NHẦM"; } catch { return "từ chối"; } },
   },
 
   // --- formatPercentChange ---
