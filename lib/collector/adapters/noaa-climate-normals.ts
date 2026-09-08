@@ -209,6 +209,23 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
       rows.push({ date: row.date, datatype: row.datatype, value: row.value });
     }
 
+    // NOAA encodes "no data" as a large negative sentinel (-9999 missing,
+    // -7777 trace, and relatives). They arrive as numbers, so the type check
+    // above lets them through, and summing them produced annual precipitation
+    // of -34.7 inches and degree-day totals of -21,690.
+    //
+    // Rejected by DOMAIN rather than by matching the specific sentinels:
+    // precipitation and degree-days cannot be negative, whatever encoding a
+    // provider chooses and whatever unit conversion is applied on the way. A
+    // list of known sentinel numbers would need updating every time NOAA adds
+    // one, and would silently miss a scaled variant — this cannot.
+    //
+    // Note this is a SEPARATE bug from the incomplete-month one below, and the
+    // month check does not catch it: twelve months can all be present with some
+    // of them sentinels, and the count still reads 12.
+    const usableRows = rows.filter((r) => r.value >= 0);
+    const rejectedSentinels = rows.length - usableRows.length;
+
     // An annual total requires all TWELVE months. Anything less is not one.
     //
     // This used to skip only when zero months came back, and summed whatever
@@ -231,7 +248,7 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
     const incomplete: string[] = [];
     for (const datatypeId of Object.values(DATATYPES)) {
       const byMonth = new Map<string, number[]>();
-      for (const row of rows) {
+      for (const row of usableRows) {
         if (row.datatype !== datatypeId) continue;
         const month = row.date.slice(0, 7); // "2010-01"
         if (!byMonth.has(month)) byMonth.set(month, []);
@@ -274,8 +291,9 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
 
     if (points.length === 0) {
       const detail = incomplete.length > 0 ? ` Thiếu tháng: ${incomplete.join("; ")}.` : "";
+      const sentinels = rejectedSentinels > 0 ? ` Đã loại ${rejectedSentinels}/${rows.length} dòng có giá trị âm (sentinel báo thiếu dữ liệu).` : "";
       throw new LocationFetchError(
-        `NOAA trả về dữ liệu cho hạt ${countyFips} nhưng không datatype nào đủ 12 tháng.${detail}`
+        `NOAA trả về dữ liệu cho hạt ${countyFips} nhưng không datatype nào đủ 12 tháng.${detail}${sentinels}`
       );
     }
     return points;

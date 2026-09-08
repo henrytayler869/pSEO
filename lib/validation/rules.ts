@@ -176,3 +176,54 @@ export function checkCrossSource(
   }
   return flags;
 }
+
+/**
+ * Metrics that CAN legitimately be negative. Everything else cannot.
+ *
+ * An allow-list rather than a block-list, because the failure mode being
+ * guarded against is a new metric arriving with no rule attached. A block-list
+ * would let it through by default; this refuses it by default, and adding a
+ * genuinely signed metric is one line and a moment's thought.
+ */
+const METRICS_THAT_MAY_BE_NEGATIVE = new Set([
+  // Net migration is inflow minus outflow — negative wherever a county loses
+  // more households than it gains, which is most of them in some years.
+  "irs_migration_net_households",
+]);
+
+/**
+ * BLOCK a value that cannot exist, regardless of what the other values look
+ * like.
+ *
+ * Added after the statistical rules missed 466 impossible points while
+ * flagging 18 correct ones. NOAA's missing-data sentinels were being summed as
+ * measurements, producing annual precipitation of -34.7 inches and degree-day
+ * totals of -21,690. Not one was flagged — the negatives dragged each state's
+ * mean down, so the impossible values sat CLOSER to the broken average than
+ * the real ones did, and checkOutliers dutifully reported the real ones.
+ *
+ * That is the difference between a relative check and an absolute one. A
+ * comparison against neighbours can only find a value that disagrees with its
+ * neighbours; when the neighbours are wrong in the same direction it points
+ * confidently at whatever is right. Some facts do not depend on the
+ * neighbours: rain does not fall in negative inches.
+ *
+ * Deliberately not a range with an upper bound. "Too large" is a judgement
+ * that varies by metric and place and would need tuning; "negative rainfall"
+ * needs none, and a rule that requires no tuning is one nobody will be tempted
+ * to loosen when it fires inconveniently.
+ */
+export function checkImpossibleValues(allPoints: LocationPoint[]): RuleFlag[] {
+  const flags: RuleFlag[] = [];
+  for (const p of allPoints) {
+    if (p.value >= 0) continue;
+    if (METRICS_THAT_MAY_BE_NEGATIVE.has(p.metric)) continue;
+    flags.push({
+      locationId: p.locationId,
+      severity: "BLOCK",
+      rule: "impossible_value",
+      message: `${p.metric} = ${p.value} cho mã zip ${p.zip} — chỉ số này không thể âm. Gần như chắc chắn là giá trị sentinel báo thiếu dữ liệu bị đọc như số đo thật.`,
+    });
+  }
+  return flags;
+}

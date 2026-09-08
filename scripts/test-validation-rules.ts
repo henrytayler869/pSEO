@@ -22,6 +22,7 @@
 
 import { snapshotStatusFor } from "../lib/collector/run";
 import {
+  checkImpossibleValues,
   checkCompleteness,
   checkOutliers,
   checkFreshness,
@@ -32,7 +33,7 @@ import {
 /** Rule names are written into ValidationFlag.rule and read back by the UI
  * and by grouped queries. Renaming one silently empties whatever counts it,
  * so the names are asserted, not just the behaviour. */
-const EXPECTED_RULE_NAMES = ["missing_required_metric", "outlier_vs_regional_mean", "stale_data", "cross_source_deviation"];
+const EXPECTED_RULE_NAMES = ["missing_required_metric", "impossible_value", "outlier_vs_regional_mean", "stale_data", "cross_source_deviation"];
 
 /**
  * Snapshot-level trust, checked separately because it sits UPSTREAM of every
@@ -112,6 +113,38 @@ const CASES: Case[] = [
         new Map([["loc-1", [point("77494", "census_median_home_value_usd", 450100)]]]),
         ["census_median_home_value_usd"]
       ),
+  },
+
+  // --- checkImpossibleValues ---
+  {
+    // REGRESSION: 466 of 869 NOAA points were negative — sentinels summed as
+    // measurements — and the statistical rules flagged none of them.
+    name: "REGRESSION impossible: lượng mưa ÂM -> chặn",
+    expect: "impossible_value",
+    run: () => checkImpossibleValues([point("A", "noaa_precipitation_annual", -34.7)]),
+  },
+  {
+    name: "impossible: degree-days âm -> chặn",
+    expect: "impossible_value",
+    run: () => checkImpossibleValues([point("A", "noaa_heating_degree_days_annual", -21690)]),
+  },
+  {
+    // The whole point of an allow-list: this one really is signed.
+    name: "impossible: di cư ròng ÂM là hợp lệ -> im",
+    expect: null,
+    run: () => checkImpossibleValues([point("A", "irs_migration_net_households", -12084)]),
+  },
+  {
+    name: "impossible: 0 hợp lệ, không phải âm -> im",
+    expect: null,
+    run: () => checkImpossibleValues([point("A", "noaa_precipitation_annual", 0)]),
+  },
+  {
+    // REGRESSION for the exact blind spot: the value the outlier rule flagged
+    // was correct, and it must not be flagged by this rule either.
+    name: "REGRESSION impossible: 14.6 inch mưa ở San Diego là ĐÚNG -> im",
+    expect: null,
+    run: () => checkImpossibleValues([point("A", "noaa_precipitation_annual", 14.61)]),
   },
 
   // --- checkOutliers ---

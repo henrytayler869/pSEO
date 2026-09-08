@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { getValidationConfig, REQUIRED_METRICS_BY_ADAPTER } from "./config";
-import { checkCompleteness, checkOutliers, checkFreshness, checkCrossSource, type RuleFlag, type LocationPoint } from "./rules";
+import { checkCompleteness, checkOutliers, checkFreshness, checkCrossSource, checkImpossibleValues, type RuleFlag, type LocationPoint } from "./rules";
 
 export interface ValidationSummary {
   validationRunId: string;
@@ -67,6 +67,9 @@ export async function validateSnapshot(snapshotId: string): Promise<ValidationSu
     pointsByLocation,
     requiredMetrics
   );
+  // Runs alongside the statistical rules, not instead of them: they answer
+  // different questions, and this one caught what the other could not see.
+  const impossibleFlags = checkImpossibleValues(currentPoints);
   const outlierFlags = checkOutliers(currentPoints, config.outlierMultiplier);
   const freshnessFlags = checkFreshness(
     allLocations.map((l) => ({ locationId: l.id, zip: l.zip })),
@@ -78,7 +81,7 @@ export async function validateSnapshot(snapshotId: string): Promise<ValidationSu
   return persistRun({
     snapshotId,
     totalLocations: allLocations.length,
-    flags: [...completenessFlags, ...outlierFlags, ...freshnessFlags, ...crossCheckFlags],
+    flags: [...completenessFlags, ...impossibleFlags, ...outlierFlags, ...freshnessFlags, ...crossCheckFlags],
     config,
   });
 }
