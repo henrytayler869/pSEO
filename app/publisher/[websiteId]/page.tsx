@@ -7,6 +7,7 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@
 import { PageHeader } from "@/components/page-header";
 import { getWebsiteDetail } from "@/lib/queries/publisher";
 import { MeasurementIdForm } from "@/components/measurement-id-form";
+import { RevalidateSecretForm } from "@/components/revalidate-secret-form";
 
 export default async function WebsiteDetailPage({ params }: { params: Promise<{ websiteId: string }> }) {
   const { websiteId } = await params;
@@ -44,6 +45,30 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
         </CardHeader>
         <CardContent>
           <MeasurementIdForm websiteId={website.id} current={website.ga4MeasurementId} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Revalidate secret</CardTitle>
+          <CardDescription>
+            Dùng để BÁO NGAY cho site khi đổi thiết lập ở đây. Không có nó, site vẫn tự lấy giá trị mới nhưng phải chờ
+            cache hết hạn — HTML nằm ở Cloudflare tới 24 giờ, đủ để người vừa đổi tưởng là hỏng. Giá trị phải khớp
+            REVALIDATE_SECRET trong .env.production của site. Bấm Lưu sẽ dùng thử nó ngay và báo site trả lời gì.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {/*
+            Chỉ truyền boolean sang client — giá trị đã lưu không bao giờ rời khỏi máy chủ.
+
+            Boolean(...) chứ KHÔNG phải `!== null`. Trường này có thể là
+            undefined chứ không phải null: một Prisma Client sinh ra trước khi
+            cột tồn tại sẽ không chọn nó, và `undefined !== null` cho ra true —
+            nhãn sẽ báo "đã đặt" cho một secret không hề tồn tại. Đã xảy ra
+            đúng như vậy ngay khi thêm ô này. Chuỗi rỗng cũng vậy: nó không
+            phải một secret dùng được, nên không được đọc là "đã đặt".
+          */}
+          <RevalidateSecretForm websiteId={website.id} hasSecret={Boolean(website.revalidateSecret)} />
         </CardContent>
       </Card>
 

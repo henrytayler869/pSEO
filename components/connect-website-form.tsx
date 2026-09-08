@@ -13,6 +13,7 @@ const EMPTY_FIELDS = {
   ga4PropertyId: "",
   ga4MeasurementId: "",
   wpApiBaseUrl: "",
+  revalidateSecret: "",
 };
 
 export function ConnectWebsiteForm() {
@@ -47,11 +48,12 @@ export function ConnectWebsiteForm() {
     );
   }
 
-  const field = (name: keyof typeof EMPTY_FIELDS, label: string, placeholder: string) => (
+  const field = (name: keyof typeof EMPTY_FIELDS, label: string, placeholder: string, secret = false) => (
     <label className="flex flex-col gap-1 text-sm">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
       <input
         name={name}
+        type={secret ? "password" : "text"}
         value={fields[name]}
         onChange={(e) => setFields((f) => ({ ...f, [name]: e.target.value }))}
         placeholder={placeholder}
@@ -70,6 +72,7 @@ export function ConnectWebsiteForm() {
         {field("ga4PropertyId", "GA4 property ID (đọc báo cáo)", "553102895")}
         {field("ga4MeasurementId", "GA4 Measurement ID (site gửi sự kiện)", "G-XXXXXXXXXX")}
         {field("wpApiBaseUrl", "WP REST API base (tuỳ chọn)", "Mặc định: {URL}/wp-json/wp/v2")}
+        {field("revalidateSecret", "Revalidate secret (tuỳ chọn)", "Khớp REVALIDATE_SECRET trên site", true)}
       </div>
       <div className="flex items-center gap-2">
         <Button type="submit" size="sm" variant="secondary" disabled={pending}>

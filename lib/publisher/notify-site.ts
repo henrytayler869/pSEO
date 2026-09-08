@@ -27,6 +27,9 @@ export async function notifySiteConfigChanged(website: {
   url: string;
   revalidateSecret: string | null;
 }): Promise<NotifyResult> {
+  // Truthiness, not a null check: undefined (stale client, partial select) and
+  // "" are both "no usable secret", and treating either as configured would
+  // send a request guaranteed to 401.
   if (!website.revalidateSecret) {
     return {
       attempted: false,

@@ -19,6 +19,7 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
   const ga4PropertyId = String(formData.get("ga4PropertyId") ?? "").trim();
   const wpApiBaseUrlRaw = String(formData.get("wpApiBaseUrl") ?? "").trim();
   const ga4MeasurementIdRaw = String(formData.get("ga4MeasurementId") ?? "").trim();
+  const revalidateSecretRaw = String(formData.get("revalidateSecret") ?? "").trim();
 
   if (!name || !url || !gscPropertyUrl || !ga4PropertyId) {
     return { ok: false, message: "Vui lòng nhập đủ Tên, URL, GSC property, và GA4 property ID." };
@@ -46,6 +47,7 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
         gscPropertyUrl,
         ga4PropertyId,
         ga4MeasurementId: ga4MeasurementIdRaw || null,
+        revalidateSecret: revalidateSecretRaw || null,
         wpApiBaseUrl: wpApiBaseUrlRaw || deriveWpApiBaseUrl(url),
       },
     });
@@ -107,6 +109,54 @@ export async function updateMeasurementIdAction(_prev: ActionResult, formData: F
     const notify = await notifySiteConfigChanged(website);
     const saved = raw ? `Đã lưu ${raw}.` : "Đã xoá Measurement ID.";
     return { ok: true, message: `${saved} ${notify.detail}` };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Lưu thất bại." };
+  }
+}
+
+/**
+ * Sets or clears the shared secret used to notify a site of a settings change.
+ *
+ * WRITE-ONLY. The stored value is never sent back to the browser — the form
+ * shows whether one exists, not what it is. A secret rendered into HTML so
+ * someone can "see the current value" is a secret in every page cache, browser
+ * history entry and screenshot from then on, and the only thing that buys is
+ * saving a paste.
+ *
+ * TESTED ON SAVE, which is the point. A mistyped secret is silent: it sits in
+ * the database looking configured, and the first sign of trouble is a
+ * measurement ID that quietly fails to reach the site weeks later. So the save
+ * immediately uses it for a real notification and reports what the site
+ * actually said — 401 means the value is wrong and it says so now, while the
+ * person who typed it is still here.
+ */
+export async function updateRevalidateSecretAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const websiteId = String(formData.get("websiteId") ?? "").trim();
+  const raw = String(formData.get("revalidateSecret") ?? "").trim();
+  if (!websiteId) return { ok: false, message: "Thiếu websiteId." };
+
+  try {
+    const website = await prisma.website.update({
+      where: { id: websiteId },
+      data: { revalidateSecret: raw || null },
+    });
+    revalidatePath(`/publisher/${websiteId}`);
+
+    if (!raw) {
+      return {
+        ok: true,
+        message:
+          "Đã xoá secret. Từ giờ đổi thiết lập sẽ KHÔNG báo ngay cho site được — site chỉ tự lấy khi cache hết hạn.",
+      };
+    }
+
+    const notify = await notifySiteConfigChanged(website);
+    return {
+      ok: notify.ok,
+      message: notify.ok
+        ? `Đã lưu và kiểm: ${notify.detail}`
+        : `Đã lưu, NHƯNG chưa dùng được. ${notify.detail}`,
+    };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Lưu thất bại." };
   }
