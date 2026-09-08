@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { getValidationConfig, REQUIRED_METRICS_BY_ADAPTER } from "./config";
+import { getValidationConfig, REQUIRED_METRICS_BY_ADAPTER, EXPECTED_METRICS_BY_ADAPTER, ALL_VALIDATION_RULES } from "./config";
 import { checkCompleteness, checkOutliers, checkFreshness, checkCrossSource, checkImpossibleValues, type RuleFlag, type LocationPoint } from "./rules";
 
 export interface ValidationSummary {
@@ -62,10 +62,22 @@ export async function validateSnapshot(snapshotId: string): Promise<ValidationSu
   }
 
   const requiredMetrics = REQUIRED_METRICS_BY_ADAPTER[snapshot.source.adapterKey] ?? [];
+  const expectedMetrics = EXPECTED_METRICS_BY_ADAPTER[snapshot.source.adapterKey] ?? [];
+  // An adapter in neither list is not "a source with no requirements" — it is
+  // a source nobody registered, and the completeness rule will silently pass
+  // it forever. Said out loud, because the alternative is a clean-looking zero.
+  if (requiredMetrics.length === 0 && expectedMetrics.length === 0) {
+    console.warn(
+      `[validation] completeness: adapter "${snapshot.source.adapterKey}" KHÔNG có chỉ số nào được đăng ký ` +
+        `(cả REQUIRED lẫn EXPECTED) — luật completeness KHÔNG kiểm gì cho lần chạy này. ` +
+        `0 cờ ở đây nghĩa là "không kiểm", không phải "đủ chỉ số".`
+    );
+  }
   const completenessFlags = checkCompleteness(
     allLocations.map((l) => ({ locationId: l.id, zip: l.zip })),
     pointsByLocation,
-    requiredMetrics
+    requiredMetrics,
+    expectedMetrics
   );
   // Runs alongside the statistical rules, not instead of them: they answer
   // different questions, and this one caught what the other could not see.
@@ -226,7 +238,11 @@ async function persistRun(params: {
     }
   }
 
-  const flagCounts: Record<string, number> = {};
+  // Seeded with EVERY known rule at zero, so the report distinguishes a rule
+  // that found nothing from a rule that never ran. Counting only the flags
+  // that exist can never mention the second kind — which is the kind that
+  // needs mentioning.
+  const flagCounts: Record<string, number> = Object.fromEntries(ALL_VALIDATION_RULES.map((r) => [r, 0]));
   for (const f of flags) flagCounts[f.rule] = (flagCounts[f.rule] ?? 0) + 1;
 
   return {

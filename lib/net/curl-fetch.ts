@@ -20,10 +20,21 @@ import path from "node:path";
  * delegation in the .gov TLD — `dig SOA nrel.gov` answered NOERROR with the
  * `gov.` SOA in AUTHORITY, i.e. the parent saying "no such delegation" — while
  * fema.gov, census.gov, noaa.gov and eia.gov all resolved normally from the
- * same machine at the same second. The preceding days had seen genuine HTTP
- * 429s from that same host, so the two failures were one keystroke apart in
- * the logs and a hair apart in meaning: "we hit the quota" invites waiting,
- * "the domain no longer exists in DNS" does not.
+ * same machine at the same second.
+ *
+ * CORRECTION, and it is the more useful half of the story: that dead zone was
+ * never ours to worry about. The solar adapter had already moved to
+ * developer.nlr.gov after the lab renamed, and nlr.gov resolves and answers
+ * normally. Two people — one watching the server, one reading the code —
+ * spent a round trip on a retired hostname because a collector that HAD been
+ * returning HTTP 429 from the live host looked, at the log level, exactly like
+ * a collector talking to a host that no longer exists.
+ *
+ * Which is the point. The two failures were a hair apart in meaning — "we hit
+ * the quota" invites waiting, "the domain is gone" does not — and identical on
+ * screen, because both arrived as the string "fetch failed". The fix below is
+ * worth having on its own merits; the incident that prompted it turned out to
+ * be a misreading that this exact fix is what prevents.
  */
 export class HostUnreachableError extends Error {
   constructor(

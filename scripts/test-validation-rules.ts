@@ -21,6 +21,7 @@
 // Usage: tsx scripts/test-validation-rules.ts
 
 import { snapshotStatusFor } from "../lib/collector/run";
+import { ALL_VALIDATION_RULES } from "../lib/validation/config";
 import { describeTransportFailure } from "../lib/net/curl-fetch";
 import {
   checkImpossibleValues,
@@ -34,7 +35,25 @@ import {
 /** Rule names are written into ValidationFlag.rule and read back by the UI
  * and by grouped queries. Renaming one silently empties whatever counts it,
  * so the names are asserted, not just the behaviour. */
-const EXPECTED_RULE_NAMES = ["missing_required_metric", "impossible_value", "outlier_vs_regional_mean", "stale_data", "cross_source_deviation"];
+/**
+ * Rules that exist but cannot be made to fire by a pure-function test, named
+ * one by one rather than skipped as a category — a category would quietly
+ * absorb the next rule someone forgets to test.
+ */
+const RULES_EMITTED_ELSEWHERE = new Set<string>([
+  // Set by validateSnapshot from the snapshot's own status, which needs a DB.
+  "schema_drift",
+]);
+
+/**
+ * Derived from the registry instead of hand-listed beside it.
+ *
+ * A duplicate list is a list that drifts. The registry decides what a report
+ * prints as "0" — so a rule missing from it is a rule whose silence never
+ * appears anywhere, and a rule in it that nothing can make fire is a zero that
+ * means nothing. Both directions are checked below.
+ */
+const EXPECTED_RULE_NAMES = ALL_VALIDATION_RULES.filter((r) => !RULES_EMITTED_ELSEWHERE.has(r));
 
 /**
  * Snapshot-level trust, checked separately because it sits UPSTREAM of every
@@ -183,6 +202,41 @@ const CASES: Case[] = [
         new Map([["loc-1", [point("77494", "census_median_home_value_usd", 450100)]]]),
         ["census_median_home_value_usd"]
       ),
+  },
+
+  {
+    // REGRESSION. Six of seven adapters had no registered metrics, so this
+    // rule returned early and reported zero flags forever — read as "đủ chỉ
+    // số" when it meant "không kiểm gì".
+    name: "REGRESSION completeness: thiếu chỉ số THƯỜNG CÓ -> cảnh báo, không chặn",
+    expect: "missing_expected_metric",
+    run: () =>
+      checkCompleteness(
+        [{ locationId: "A", zip: "90001" }],
+        new Map([["A", [point("A", "noaa_precipitation_annual", 16.6)]]]),
+        [],
+        ["noaa_precipitation_annual", "noaa_heating_degree_days_annual", "noaa_cooling_degree_days_annual"]
+      ),
+  },
+  {
+    name: "completeness: đủ chỉ số thường có -> im",
+    expect: null,
+    run: () =>
+      checkCompleteness(
+        [{ locationId: "A", zip: "90001" }],
+        new Map([["A", [point("A", "noaa_precipitation_annual", 16.6), point("A", "noaa_heating_degree_days_annual", 1200)]]]),
+        [],
+        ["noaa_precipitation_annual", "noaa_heating_degree_days_annual"]
+      ),
+  },
+  {
+    // A location the source never reached did not get a partial answer. Saying
+    // "thiếu 3 chỉ số" about all 300 zips when a source is down buries the one
+    // fact that matters under 300 copies of it.
+    name: "REGRESSION completeness: địa điểm KHÔNG có điểm nào -> không cảnh báo thiếu-từng-phần",
+    expect: null,
+    run: () =>
+      checkCompleteness([{ locationId: "A", zip: "90001" }], new Map(), [], ["noaa_precipitation_annual"]),
   },
 
   // --- checkImpossibleValues ---
@@ -361,6 +415,16 @@ function main() {
   // A rule with no firing case is a rule this suite does not actually cover,
   // and its silence in production would mean nothing.
   const neverFired = EXPECTED_RULE_NAMES.filter((r) => !rulesSeen.has(r));
+  // The other direction: a rule a test just made fire, that the registry does
+  // not know about. It would be invisible in every flagCounts report — the
+  // exact failure the registry exists to prevent.
+  const unregistered = [...rulesSeen].filter((r) => !ALL_VALIDATION_RULES.includes(r as (typeof ALL_VALIDATION_RULES)[number]));
+  if (unregistered.length > 0) {
+    failures.push(
+      `Luật kêu được nhưng CHƯA ĐĂNG KÝ trong ALL_VALIDATION_RULES: ${unregistered.join(", ")} — ` +
+        `báo cáo sẽ không bao giờ nhắc tới chúng khi chúng im.`
+    );
+  }
 
   console.log();
   if (failures.length > 0) {

@@ -19,9 +19,13 @@ export interface LocationPoint {
 export function checkCompleteness(
   locations: { locationId: string; zip: string }[],
   pointsByLocation: Map<string, LocationPoint[]>,
-  requiredMetrics: string[]
+  requiredMetrics: string[],
+  /** Metrics whose absence is reported but does not block. Separate list, and
+   * separate severity, because "this location got nothing usable" and "this
+   * location got less than usual" call for different responses. */
+  expectedMetrics: string[] = []
 ): RuleFlag[] {
-  if (requiredMetrics.length === 0) return [];
+  if (requiredMetrics.length === 0 && expectedMetrics.length === 0) return [];
   const flags: RuleFlag[] = [];
   for (const loc of locations) {
     const points = pointsByLocation.get(loc.locationId) ?? [];
@@ -34,6 +38,23 @@ export function checkCompleteness(
         rule: "missing_required_metric",
         message: `Thiếu chỉ số bắt buộc cho mã zip ${loc.zip}: ${missing.join(", ")}`,
       });
+    }
+    // Only for locations this source actually reached. A location with no
+    // points at all did not get a partial answer, it got none — saying "thiếu
+    // 3 chỉ số" about all 300 zips when a source is down buries the one fact
+    // that matters (the source is down) under 300 repetitions of it.
+    if (points.length > 0) {
+      const missingExpected = expectedMetrics.filter((m) => !haveMetrics.has(m));
+      if (missingExpected.length > 0) {
+        flags.push({
+          locationId: loc.locationId,
+          severity: "WARN",
+          rule: "missing_expected_metric",
+          message:
+            `Mã zip ${loc.zip} có dữ liệu nhưng thiếu ${missingExpected.length}/${expectedMetrics.length} chỉ số ` +
+            `thường có: ${missingExpected.join(", ")}. Địa điểm vẫn dùng được, chỉ ít số liệu hơn.`,
+        });
+      }
     }
   }
   return flags;

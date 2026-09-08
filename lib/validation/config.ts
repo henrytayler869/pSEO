@@ -25,6 +25,94 @@ export const REQUIRED_METRICS_BY_ADAPTER: Record<string, string[]> = {
   nrel_pvwatts: ["solar_ac_annual_kwh", "solar_radiation_avg_kwh_per_m2_day", "solar_capacity_factor_pct"],
 };
 
+/**
+ * Metrics a source normally returns, whose absence is worth SAYING rather
+ * than blocking.
+ *
+ * Added because six of the seven adapters appeared in neither list, and
+ * checkCompleteness returns immediately on an empty requirement list. So for
+ * NOAA, Census, IRS, EIA and FEMA the completeness rule reported zero flags
+ * every single run — and zero read exactly like "checked, nothing missing".
+ * It meant "nothing was checked". The same disease as cross_source_deviation,
+ * in the one rule specifically built to catch missing data.
+ *
+ * What it was missing is not hypothetical. NOAA v7 returned precipitation for
+ * 272 locations but degree-days for only 184 and 180: roughly a third of
+ * locations carry rainfall and no degree-days, because the adapter queries
+ * each datatype independently and a county can have twelve months of one and
+ * ten of another. Nothing surfaced that. It was found by a person reading
+ * three row counts side by side and noticing they disagreed.
+ *
+ * WARN, not BLOCK, and the distinction is the whole point. These locations
+ * are not broken — a market page with rainfall and no degree-days is a page
+ * with one fewer fact, not a wrong page. Blocking them would mark the NOAA
+ * snapshot SUSPECT over its own 5% batch gate and discard 636 good points to
+ * punish a gap that costs one sentence of copy.
+ *
+ * WHY EVERYTHING STARTS HERE RATHER THAN IN THE REQUIRED LIST: promoting a
+ * metric to BLOCK is a claim about how reliably the source publishes it, and
+ * that claim needs measurement — per-metric coverage against the production
+ * database — not a guess from reading adapter code. Census suppresses values
+ * for small ZCTAs by design; requiring a suppressed field would block
+ * locations for behaving exactly as documented. Make the gap visible first,
+ * measure, then promote what the numbers support.
+ */
+export const EXPECTED_METRICS_BY_ADAPTER: Record<string, string[]> = {
+  noaa_climate_normals: [
+    "noaa_precipitation_annual",
+    "noaa_heating_degree_days_annual",
+    "noaa_cooling_degree_days_annual",
+  ],
+  census_acs_housing: [
+    "census_median_home_value_usd",
+    "census_median_household_income_usd",
+    "census_homeownership_rate_pct",
+    "census_median_year_built",
+  ],
+  census_mobility: [
+    "census_mobility_rate_pct",
+    "census_moved_within_county",
+    "census_moved_from_different_county",
+    "census_moved_from_different_state",
+    "census_moved_from_abroad",
+  ],
+  irs_migration: [
+    "irs_migration_net_households",
+    "irs_migration_inflow_households",
+    "irs_migration_outflow_households",
+    "irs_migration_inflow_agi_usd",
+  ],
+  eia_electricity: ["eia_residential_electricity_price_cents_per_kwh"],
+  fema_disaster_declarations: ["fema_disaster_declarations_10yr"],
+  // nrel_pvwatts is absent on purpose: all three of its metrics are already
+  // REQUIRED, and listing them twice would flag the same gap at two severities.
+};
+
+/**
+ * Every rule this system can emit.
+ *
+ * Exists so a report can show a rule that found nothing, which is not the same
+ * as a rule that never ran. Reports built by counting the flags that exist can
+ * only ever list rules that fired — a rule silently disabled by configuration
+ * is invisible in exactly the output meant to prove the data was checked.
+ *
+ * Concretely: a run was reported as "missing_required_metric 0,
+ * outlier_vs_regional_mean 0, schema_drift 0" and read as three clean checks.
+ * Two of the three were clean. The first had no metrics registered and
+ * inspected nothing, and impossible_value did not appear at all — not because
+ * it passed, but because a DISTINCT over the flag table cannot name a rule
+ * that has never written a row.
+ */
+export const ALL_VALIDATION_RULES = [
+  "missing_required_metric",
+  "missing_expected_metric",
+  "impossible_value",
+  "outlier_vs_regional_mean",
+  "stale_data",
+  "cross_source_deviation",
+  "schema_drift",
+] as const;
+
 export async function getValidationConfig(): Promise<ValidationConfig> {
   const config = await prisma.appConfig.findUnique({ where: { key: "validation" } });
   if (config && typeof config.value === "object" && config.value !== null) {
