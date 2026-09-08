@@ -127,7 +127,7 @@ export class IrsMigrationAdapter implements CollectorAdapter {
     countyNameCol: string
   ): Promise<Map<string, { households: number; agiThousands: number }>> {
     const { status, body } = await fetchWithCurlFallback(url);
-    assertHttpOk(status, body, "IRS migration file request failed (${url})");
+    assertHttpOk(status, body, `IRS migration file request failed (${url})`, { unauthenticated: true });
 
     const text = body.toString("utf-8");
     const lines = text.split("\n").filter((l) => l.trim().length > 0);

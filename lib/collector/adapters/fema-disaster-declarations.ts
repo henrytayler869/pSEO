@@ -104,7 +104,7 @@ export class FemaDisasterDeclarationsAdapter implements CollectorAdapter {
     });
 
     const { status, body } = await fetchWithCurlFallback(`${FEMA_BASE_URL}?${params.toString()}`);
-    assertHttpOk(status, body, "FEMA request failed");
+    assertHttpOk(status, body, "FEMA request failed", { unauthenticated: true });
 
     let parsed: unknown;
     try {

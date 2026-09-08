@@ -76,7 +76,25 @@ export class MissingCredentialError extends Error {
  * up SUSPECT through the majority-failed rule, with "N/M locations failed"
  * reported instead of a schema change that never happened.
  */
-export function assertHttpOk(status: number, body: Buffer | string, context: string): void {
+export function assertHttpOk(
+  status: number,
+  body: Buffer | string,
+  context: string,
+  opts?: {
+    /** True when this endpoint takes NO credential at all.
+     *
+     * It changes what a 403 means, and therefore who should be called. On an
+     * authenticated API a 403 points at the key. On a public one there is no
+     * key to be wrong, so it points at the network path — a WAF, an IP
+     * reputation rule, a geo block.
+     *
+     * Not hypothetical: FEMA is public and returned 403 with an Akamai block
+     * page for every request from the server, while the identical URL answered
+     * 200 from a residential connection. The generic message would have sent
+     * someone looking for a credential that does not exist. */
+    unauthenticated?: boolean;
+  }
+): void {
   if (status === 200) return;
 
   const snippet = (typeof body === "string" ? body : body.toString("utf-8")).slice(0, 200).replace(/\s+/g, " ").trim();
@@ -88,7 +106,11 @@ export function assertHttpOk(status: number, body: Buffer | string, context: str
     throw new LocationFetchError(`${context}: HTTP 429 — bị giới hạn tần suất, thử lại sau. ${snippet}`);
   }
   if (status === 401 || status === 403) {
-    throw new LocationFetchError(`${context}: HTTP ${status} — bị từ chối (khoá sai/hết hạn/thiếu quyền), KHÔNG phải lệch schema. ${snippet}`);
+    const cause = opts?.unauthenticated
+      ? "API này KHÔNG dùng khoá, nên đây KHÔNG phải vấn đề credential — nhiều khả năng bị chặn theo IP/WAF. " +
+        "Kiểm bằng cách gọi cùng URL từ một mạng khác trước khi sửa bất cứ thứ gì trong repo."
+      : "khoá sai, hết hạn, hoặc thiếu quyền";
+    throw new LocationFetchError(`${context}: HTTP ${status} — bị từ chối. ${cause} KHÔNG phải lệch schema. ${snippet}`);
   }
   throw new LocationFetchError(`${context}: HTTP ${status}. ${snippet}`);
 }
