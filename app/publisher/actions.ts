@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/prisma";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
 import { assertValidGscProperty } from "@/lib/google/search-console";
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "@/lib/google/analytics-data";
+import { notifySiteConfigChanged } from "@/lib/publisher/notify-site";
 
 export interface ActionResult {
   ok: boolean;
@@ -93,15 +94,19 @@ export async function updateMeasurementIdAction(_prev: ActionResult, formData: F
   }
 
   try {
-    await prisma.website.update({ where: { id: websiteId }, data: { ga4MeasurementId: raw || null } });
+    const website = await prisma.website.update({
+      where: { id: websiteId },
+      data: { ga4MeasurementId: raw || null },
+    });
     revalidatePath(`/publisher/${websiteId}`);
     revalidatePath("/publisher");
-    return {
-      ok: true,
-      message: raw
-        ? `Đã lưu ${raw}. Site sẽ nhận mã này ở lần build tiếp theo — giá trị được nhúng lúc build, restart không đủ.`
-        : "Đã xoá Measurement ID. Site sẽ ngừng gửi sự kiện sau lần build tiếp theo.",
-    };
+
+    // Saved first, notified second, and the notification's outcome is carried
+    // into the message rather than assumed. "Đã lưu" alone would be true and
+    // still leave someone waiting a day for a tag they think is live.
+    const notify = await notifySiteConfigChanged(website);
+    const saved = raw ? `Đã lưu ${raw}.` : "Đã xoá Measurement ID.";
+    return { ok: true, message: `${saved} ${notify.detail}` };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Lưu thất bại." };
   }

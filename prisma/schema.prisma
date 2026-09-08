@@ -566,6 +566,11 @@ model Website {
   // be inventing a dependency that does not exist.
   ga4MeasurementId String?
 
+  // Shared secret for POSTing to the site's own /api/revalidate, so a setting
+  // changed here takes effect immediately instead of waiting out a cache.
+  // Optional — without it the site still updates, just on the slow path.
+  revalidateSecret String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
