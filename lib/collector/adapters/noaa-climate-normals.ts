@@ -209,8 +209,26 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
       rows.push({ date: row.date, datatype: row.datatype, value: row.value });
     }
 
-    // Sum 12 cross-station-averaged monthly values into one annual figure per datatype.
+    // An annual total requires all TWELVE months. Anything less is not one.
+    //
+    // This used to skip only when zero months came back, and summed whatever
+    // else it found under the name "annual". A county returning three months
+    // produced an annual precipitation of about three inches — a number no
+    // location in the United States has, sitting in the database looking like
+    // a measurement.
+    //
+    // It was caught by the outlier rule, and by the specific shape of what it
+    // flagged: 17 of 18 blocks were precipitation, all in California, all
+    // coastal values of 13-15 inches against a state mean of 2.7. Those flagged
+    // points were the CORRECT ones. The silent majority were partial sums, and
+    // they dragged the baseline so far down that real data looked anomalous.
+    //
+    // Worth keeping in mind before touching a threshold: raising the gate from
+    // 5% to 10% would have silenced the only signal that any of this was wrong,
+    // and every number involved would have stayed exactly as broken.
+    const MONTHS_IN_YEAR = 12;
     const annualTotals = new Map<string, number>();
+    const incomplete: string[] = [];
     for (const datatypeId of Object.values(DATATYPES)) {
       const byMonth = new Map<string, number[]>();
       for (const row of rows) {
@@ -220,6 +238,14 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
         byMonth.get(month)!.push(row.value);
       }
       if (byMonth.size === 0) continue;
+      if (byMonth.size !== MONTHS_IN_YEAR) {
+        // Recorded rather than silently dropped: a county consistently short
+        // of a full year is a fact about NOAA's coverage there, and it should
+        // be visible in the failure message rather than inferred later from a
+        // suspiciously small number.
+        incomplete.push(`${datatypeId}: ${byMonth.size}/12 tháng`);
+        continue;
+      }
       let total = 0;
       for (const monthValues of byMonth.values()) {
         total += monthValues.reduce((a, b) => a + b, 0) / monthValues.length;
@@ -247,7 +273,10 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
     }
 
     if (points.length === 0) {
-      throw new LocationFetchError(`NOAA trả về dữ liệu cho hạt ${countyFips} nhưng không dòng nào khớp datatype mong đợi.`);
+      const detail = incomplete.length > 0 ? ` Thiếu tháng: ${incomplete.join("; ")}.` : "";
+      throw new LocationFetchError(
+        `NOAA trả về dữ liệu cho hạt ${countyFips} nhưng không datatype nào đủ 12 tháng.${detail}`
+      );
     }
     return points;
   }
