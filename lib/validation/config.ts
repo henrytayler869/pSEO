@@ -26,16 +26,24 @@ const DEFAULTS: ValidationConfig = {
  * than from reading adapter code.
  *
  * Measured 2026-09-08 against the latest OK snapshot of each source, over the
- * full registry of 300 Locations. The result separated into three groups with
- * a wide, unambiguous gap between them:
+ * full registry of 300 Locations:
  *
  *   100.0%       8 metrics — Census ACS housing (4), Census mobility (4), FEMA
  *   98.0-98.7%   9 metrics — EIA, IRS (4), NREL (3), mobility_rate_pct
- *   60.0-90.7%   3 metrics — NOAA
+ *   96.0-97.7%   3 metrics — NOAA
  *
- * Nothing at all lands between 90.7% and 98.0%. That empty band is what makes
- * the line safe to draw: the boundary is not a threshold someone picked, it is
- * a place where the data has no members.
+ * NOAA's row is the second measurement. The first read 60.0-90.7%, and that
+ * number was not a fact about NOAA — it was two bugs of ours wearing a
+ * coverage statistic. Once pagination and the trace sentinel were fixed,
+ * degree-days went from 61% to 96%.
+ *
+ * Worth keeping, because the first version of this comment used the empty band
+ * between 90.7% and 98.0% to argue the boundary was "a place where the data
+ * has no members" rather than a threshold someone picked. That band no longer
+ * exists: NOAA now sits inside it. The argument was sound about the data in
+ * front of it and wrong about how much of that data was real, which is the
+ * ordinary way a measured threshold goes stale — quietly, while still reading
+ * as rigorous.
  *
  * The 98% group is required, not excused. Six missing locations out of 300 is
  * 2% — under the 5% batch gate, so flagging them costs nothing today, and if
@@ -43,9 +51,19 @@ const DEFAULTS: ValidationConfig = {
  * location NREL rate-limited genuinely has no solar data; saying so is
  * accurate, not strict.
  *
- * NOAA stays out. At 60% coverage, requiring degree-days would block 40% of
- * locations, blow the 5% gate, mark the snapshot SUSPECT and discard 636 good
- * points — punishing a real gap by destroying the data around it.
+ * NOAA stays out, and the reason changed with the numbers. At 60% the argument
+ * was arithmetic: blocking 40% of locations would blow the 5% gate and destroy
+ * the snapshot. At 96% that argument is gone — 12 locations short of the full
+ * registry is a 4% block rate, under the gate.
+ *
+ * It stays out on a different ground: its remaining gap CANNOT BE CLOSED. The
+ * five counties left are Puerto Rico (3), Prince William VA, and Richmond NY,
+ * and NOAA publishes no NORMAL_MLY for them. Making a metric required means
+ * "its absence is a failure someone can act on". Here nobody can, ever, so a
+ * required NOAA metric would hold the block rate permanently near 4% — a
+ * signal that can never reach zero, on a gate whose whole value is that a
+ * reader trusts it when it moves. A red light that is always on is a red light
+ * nobody reads, and the next real NOAA failure would hide inside it.
  */
 export const REQUIRED_METRICS_BY_ADAPTER: Record<string, string[]> = {
   nrel_pvwatts: ["solar_ac_annual_kwh", "solar_radiation_avg_kwh_per_m2_day", "solar_capacity_factor_pct"],
