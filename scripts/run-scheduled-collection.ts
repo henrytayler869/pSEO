@@ -26,16 +26,11 @@ import { validateSnapshot } from "../lib/validation/run";
 import { compareToPreviousSnapshot, formatPercentChange } from "../lib/collector/compare";
 import { getTransportStats } from "../lib/net/curl-fetch";
 import { MissingCredentialError } from "../lib/collector/errors";
+import { ALL_ADAPTER_KEYS } from "../lib/collector/registry";
 
-const IMPLEMENTED_ADAPTER_KEYS = [
-  "nrel_pvwatts",
-  "census_acs_housing",
-  "census_mobility",
-  "irs_migration",
-  "noaa_climate_normals",
-  "eia_electricity",
-  "fema_disaster_declarations",
-];
+// Imported, not re-listed. A second copy of this list silently drops a source
+// from every scheduled run while the report stays green.
+const IMPLEMENTED_ADAPTER_KEYS = [...ALL_ADAPTER_KEYS];
 
 // NOAA's 5 req/sec cap is enforced INSIDE its adapter now, by spacing requests
 // in time. It is left at a low concurrency here as well, but that is belt and

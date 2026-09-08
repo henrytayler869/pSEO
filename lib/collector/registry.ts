@@ -10,6 +10,26 @@ import { EiaElectricityAdapter } from "./adapters/eia-electricity";
 import { FemaDisasterDeclarationsAdapter } from "./adapters/fema-disaster-declarations";
 import { getCredential } from "@/lib/settings/credentials";
 
+/**
+ * Every adapter this system implements — one list, so the others cannot drift.
+ *
+ * There were two: the switch below, and a copy in
+ * scripts/run-scheduled-collection.ts deciding which sources a scheduled run
+ * touches. A third was about to appear in the validation config. Copies of a
+ * list like this do not fail loudly when they disagree; a source simply stops
+ * being collected, or stops being checked, and the reports stay green because
+ * nothing is missing from the list that produced them.
+ */
+export const ALL_ADAPTER_KEYS = [
+  "nrel_pvwatts",
+  "census_acs_housing",
+  "census_mobility",
+  "irs_migration",
+  "noaa_climate_normals",
+  "eia_electricity",
+  "fema_disaster_declarations",
+] as const;
+
 /** Maps a DataSource.adapterKey to a live adapter instance. */
 export async function resolveAdapter(adapterKey: string): Promise<CollectorAdapter> {
   switch (adapterKey) {

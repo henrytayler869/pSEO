@@ -21,7 +21,8 @@
 // Usage: tsx scripts/test-validation-rules.ts
 
 import { snapshotStatusFor } from "../lib/collector/run";
-import { ALL_VALIDATION_RULES } from "../lib/validation/config";
+import { ALL_VALIDATION_RULES, REQUIRED_METRICS_BY_ADAPTER, EXPECTED_METRICS_BY_ADAPTER } from "../lib/validation/config";
+import { ALL_ADAPTER_KEYS } from "../lib/collector/registry";
 import { describeTransportFailure } from "../lib/net/curl-fetch";
 import {
   checkImpossibleValues,
@@ -388,6 +389,33 @@ function main() {
     }
   }
 
+  // --- config integrity ---
+  // Neither of these fails visibly in production. An unregistered adapter
+  // reports "0 cờ" forever; a metric listed twice reports one gap as both a
+  // block and a warning. Both look like healthy output.
+  for (const key of ALL_ADAPTER_KEYS) {
+    const required = REQUIRED_METRICS_BY_ADAPTER[key] ?? [];
+    const expected = EXPECTED_METRICS_BY_ADAPTER[key] ?? [];
+    const name = `cấu hình: adapter "${key}" có đăng ký chỉ số`;
+    if (required.length > 0 || expected.length > 0) {
+      passed++;
+      console.log(`✓ ${name}`);
+    } else {
+      failures.push(`${name} — không có mục nào trong REQUIRED lẫn EXPECTED, luật completeness sẽ im vĩnh viễn`);
+      console.log(`✗ ${name}`);
+    }
+    const both = required.filter((m) => expected.includes(m));
+    const dupName = `cấu hình: "${key}" không liệt kê trùng chỉ số ở hai mức`;
+    if (both.length === 0) {
+      passed++;
+      console.log(`✓ ${dupName}`);
+    } else {
+      failures.push(`${dupName} — trùng: ${both.join(", ")}, một khoảng trống sẽ bị báo hai lần ở hai mức`);
+      console.log(`✗ ${dupName}`);
+    }
+  }
+  const CONFIG_CASE_COUNT = ALL_ADAPTER_KEYS.length * 2;
+
   for (const c of TRANSPORT_CASES) {
     let got: string;
     try {
@@ -428,10 +456,10 @@ function main() {
 
   console.log();
   if (failures.length > 0) {
-    console.log(`${passed}/${CASES.length + TRANSPORT_CASES.length + SNAPSHOT_CASES.length} test đúng. Hỏng:\n`);
+    console.log(`${passed}/${CASES.length + TRANSPORT_CASES.length + SNAPSHOT_CASES.length + CONFIG_CASE_COUNT} test đúng. Hỏng:\n`);
     for (const f of failures) console.log(`  ${f}\n`);
   } else {
-    console.log(`${passed}/${CASES.length + TRANSPORT_CASES.length + SNAPSHOT_CASES.length} test đúng.`);
+    console.log(`${passed}/${CASES.length + TRANSPORT_CASES.length + SNAPSHOT_CASES.length + CONFIG_CASE_COUNT} test đúng.`);
   }
   if (neverFired.length > 0) {
     console.log(`\n⚠️  Luật chưa có ca nào làm nó kêu: ${neverFired.join(", ")}`);
