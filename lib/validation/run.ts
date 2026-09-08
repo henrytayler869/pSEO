@@ -186,6 +186,43 @@ async function persistRun(params: {
     });
   }
 
+  // A failed batch gate now MARKS the snapshot, instead of only being recorded.
+  //
+  // Until this, batchGatePassed was written into ValidationRun and had no other
+  // effect: downstream reads the latest OK snapshot regardless of what
+  // validation concluded, so a gate that said "do not use this" was ignored by
+  // the only code that decides what gets used. A gate with no consequence is
+  // not a gate.
+  //
+  // It showed up as a gap between two thresholds. snapshotStatusFor refuses a
+  // collection when MORE THAN HALF the locations fail outright; the batch gate
+  // refuses one when more than 5% are BLOCKED by validation. Between those
+  // numbers sat a real snapshot — 528 points, 124 locations blocked, 41.3% —
+  // that the gate rejected and production served anyway.
+  //
+  // SUSPECT rather than deleting it: the snapshot stays for inspection, the
+  // previous OK one keeps serving, and the reason is written down. On a
+  // source's very first collection there is no previous snapshot, so a failed
+  // gate means no data at all — which is the right answer, not a regression.
+  if (!batchGatePassed) {
+    const current = await prisma.dataSnapshot.findUnique({
+      where: { id: snapshotId },
+      select: { status: true, statusNote: true },
+    });
+    if (current?.status === "OK") {
+      const note =
+        `Cổng xác thực KHÔNG ĐẠT: ${blockedLocationIds.size}/${totalLocations} địa điểm bị chặn ` +
+        `(${(blockRate * 100).toFixed(1)}% > ngưỡng ${(config.batchBlockRateThreshold * 100).toFixed(1)}%).`;
+      await prisma.dataSnapshot.update({
+        where: { id: snapshotId },
+        data: {
+          status: "SUSPECT",
+          statusNote: current.statusNote ? `${current.statusNote} | ${note}` : note,
+        },
+      });
+    }
+  }
+
   const flagCounts: Record<string, number> = {};
   for (const f of flags) flagCounts[f.rule] = (flagCounts[f.rule] ?? 0) + 1;
 
