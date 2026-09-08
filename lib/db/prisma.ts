@@ -29,6 +29,31 @@ if (!process.env.DATABASE_URL) {
   }
 }
 
+/**
+ * Say out loud when this process is pointed at production.
+ *
+ * With local and production sharing one database over an SSH tunnel, every
+ * command in this repo can write real data — and nothing about running
+ * `tsx scripts/…` looks any different than it did when the target was a
+ * throwaway container on this laptop.
+ *
+ * The port is what distinguishes them: 5433 is the local container, 55433 is
+ * the tunnel. Printed rather than merely documented, because this project has
+ * already had one operation land on the wrong database while everyone believed
+ * otherwise, and the only thing missing at the time was a line saying where it
+ * went.
+ */
+function announceIfProduction(): void {
+  const url = process.env.DATABASE_URL ?? "";
+  if (!url.includes(":55433")) return;
+  // Once per process. A warning on every query is a warning nobody reads.
+  const g = globalThis as unknown as { __pseoDbAnnounced?: boolean };
+  if (g.__pseoDbAnnounced) return;
+  g.__pseoDbAnnounced = true;
+  console.warn("⚠️  DATABASE PRODUCTION (qua tunnel cổng 55433) — mọi thay đổi là thật, không có undo.");
+}
+announceIfProduction();
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };

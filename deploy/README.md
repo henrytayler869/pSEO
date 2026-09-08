@@ -93,6 +93,64 @@ Cần một cặp khoá **chỉ dùng cho CI**, và chỉ nửa công khai của
 
 ---
 
+## Dùng CHUNG database với production (từ máy dev)
+
+```bash
+npm run db:tunnel     # giữ terminal này mở
+```
+
+Cửa sổ khác:
+
+```bash
+npm run db:which      # LUÔN chạy trước khi làm gì
+```
+
+`.env` ở máy dev đổi cổng `5433` → `55433`:
+
+```
+DATABASE_URL="postgresql://pseo:<mật-khẩu-production>@127.0.0.1:55433/pseo_control_panel?schema=public"
+```
+
+Mật khẩu đọc từ `/opt/pseo/.env` trên VPS. **Tôi không lấy hộ và không nên có ai
+gửi nó qua chat** — bạn tự đọc, tự dán.
+
+### Vì sao cổng 55433 chứ không phải 5433
+
+Production Postgres cũng nghe **5433** trên loopback của nó. Tunnel về đúng số
+đó thì hai `DATABASE_URL` **giống hệt nhau về mặt chữ** — `127.0.0.1:5433` ở cả
+hai — và không còn cách nào nhìn URL mà biết lệnh sắp ghi vào đâu.
+
+Đúng sự mơ hồ đó đã tốn của dự án này một lần: mật khẩu quản trị được đặt vào
+database trên laptop trong khi mọi người tin nó đã lên server, và **không có gì
+trong output phân biệt hai nơi**. Một số cổng khác nhau là thứ rẻ nhất mua được
+sự phân biệt đó.
+
+`lib/db/prisma.ts` cũng in cảnh báo một lần mỗi tiến trình khi thấy `:55433`.
+
+### ⚠️ Ba lệnh không bao giờ được chạy khi tunnel đang mở
+
+```
+prisma migrate dev     ← xoá sạch rồi dựng lại database
+prisma migrate reset   ← như trên
+prisma db push         ← đổi schema không qua migration, không để lại dấu vết
+```
+
+Đổi schema ở production **chỉ đi một đường**: viết migration → push → CI áp lên
+DB trắng để kiểm → `migrate deploy` trên VPS, sau khi backup đã chụp.
+
+### Cái giá của việc dùng chung, nói thẳng
+
+- **Mọi script chạy ở local ghi vào dữ liệu thật.** Không có bản nháp. Trong
+  chính dự án này đã có hai lần thao tác đi nhầm chỗ (`git clean -fdx` xoá
+  `.env`, và mật khẩu đặt nhầm máy) — với DB chung, cả hai đã đánh vào production.
+- **Thử nghiệm tốn tiền thật.** Sinh nội dung AI ăn vào cùng một trần; chạy
+  keyword research ăn vào cùng tài khoản DataForSEO.
+- **Mất tunnel là mất khả năng làm việc.** Không SSH được thì không có database.
+- Container Postgres trên máy dev vẫn còn nguyên ở cổng 5433 — đổi `.env` về
+  `5433` là quay lại làm việc offline, dữ liệu cũ vẫn đó.
+
+---
+
 ## `deploy.sh` làm gì, và cố ý KHÔNG làm gì
 
 ```

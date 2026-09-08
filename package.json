@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:tunnel": "./scripts/db-tunnel.sh",
+    "db:which": "tsx scripts/db-which.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
