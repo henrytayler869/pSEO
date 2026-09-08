@@ -75,8 +75,22 @@ export async function resolveAdapter(adapterKey: string): Promise<CollectorAdapt
       }
       return new EiaElectricityAdapter(apiKey);
     }
-    case "fema_disaster_declarations":
-      return new FemaDisasterDeclarationsAdapter(); // public OpenFEMA API, no credential needed
+    case "fema_disaster_declarations": {
+      // OpenFEMA needs no credential — but Akamai blocks fema.gov from
+      // datacenter IP ranges, so the server gets 403 on every request while the
+      // same URL answers 200 from a residential connection. An optional proxy
+      // origin routes around that; leaving it unset calls FEMA directly, which
+      // is correct anywhere the block does not apply.
+      const proxyOrigin = (await getCredential("FEMA_API_BASE_URL")) ?? null;
+      const proxySecret = (await getCredential("FEMA_PROXY_SECRET")) ?? null;
+      if (proxyOrigin && !proxySecret) {
+        throw new MissingCredentialError(
+          "Đã cấu hình FEMA_API_BASE_URL nhưng thiếu FEMA_PROXY_SECRET — proxy sẽ từ chối mọi request.",
+          "FEMA_PROXY_SECRET"
+        );
+      }
+      return new FemaDisasterDeclarationsAdapter(proxyOrigin, proxySecret);
+    }
     default:
       throw new Error(`Chưa có adapter được triển khai cho "${adapterKey}".`);
   }

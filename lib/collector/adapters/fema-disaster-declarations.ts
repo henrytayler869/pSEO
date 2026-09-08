@@ -2,7 +2,14 @@ import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types
 import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
-const FEMA_BASE_URL = "https://www.fema.gov/api/open/v2/DisasterDeclarationsSummaries";
+const FEMA_DEFAULT_ORIGIN = "https://www.fema.gov";
+const FEMA_PATH = "/api/open/v2/DisasterDeclarationsSummaries";
+
+/** Set by the proxy on everything it forwards, so a failure can be attributed
+ * without guessing. A 403 WITH this header came from FEMA; a 403 WITHOUT it,
+ * while a proxy origin is configured, means the request never reached the
+ * proxy — two different problems that look identical in a status code. */
+const PROXIED_BY_HEADER = "x-proxied-by";
 const LOOKBACK_YEARS = 10;
 
 // Verified live (2026-09-06), no API key required: fetching all 25,065 US
@@ -61,6 +68,15 @@ interface FemaDeclarationRow {
  * matching row nationwide in one response.
  */
 export class FemaDisasterDeclarationsAdapter implements CollectorAdapter {
+  /**
+   * @param proxyOrigin  Origin to call instead of fema.gov, or null for direct.
+   * @param proxySecret  Sent as X-Proxy-Secret so the proxy is not open to all.
+   */
+  constructor(
+    private readonly proxyOrigin: string | null = null,
+    private readonly proxySecret: string | null = null
+  ) {}
+
   adapterKey = "fema_disaster_declarations";
   nativeGeoResolution = "COUNTY" as const;
 
@@ -103,8 +119,27 @@ export class FemaDisasterDeclarationsAdapter implements CollectorAdapter {
       $inlinecount: "allpages",
     });
 
-    const { status, body } = await fetchWithCurlFallback(`${FEMA_BASE_URL}?${params.toString()}`);
-    assertHttpOk(status, body, "FEMA request failed", { unauthenticated: true });
+    const origin = this.proxyOrigin ?? FEMA_DEFAULT_ORIGIN;
+    const headers = this.proxySecret ? { "X-Proxy-Secret": this.proxySecret } : undefined;
+
+    const { status, body, headers: responseHeaders } = await fetchWithCurlFallback(
+      `${origin}${FEMA_PATH}?${params.toString()}`,
+      headers
+    );
+
+    // Attribute the failure before reporting it. With a proxy configured, a
+    // response that did NOT come through the proxy means the request bypassed
+    // it — a different problem from FEMA refusing, and indistinguishable by
+    // status code alone.
+    if (status !== 200 && this.proxyOrigin && !responseHeaders[PROXIED_BY_HEADER]) {
+      throw new LocationFetchError(
+        `FEMA HTTP ${status} và phản hồi KHÔNG có header ${PROXIED_BY_HEADER} — request không đi qua proxy ` +
+          `(${origin}). Đây là lỗi cấu hình proxy, không phải FEMA từ chối.`
+      );
+    }
+    assertHttpOk(status, body, `FEMA request failed (qua ${this.proxyOrigin ? "proxy" : "trực tiếp"})`, {
+      unauthenticated: true,
+    });
 
     let parsed: unknown;
     try {

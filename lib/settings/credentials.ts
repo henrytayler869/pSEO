@@ -65,6 +65,26 @@ export const CREDENTIAL_FIELDS: CredentialField[] = [
       "Lấy tại console.anthropic.com. Đặt ở đây thay vì trong .env của từng website: một key duy nhất, một bộ kiểm tra chống bịa số duy nhất, và một trần chi tiêu duy nhất cho mọi site. Trần mặc định $5 — đổi ở AppConfig key \"ai\".",
   },
   {
+    name: "FEMA_API_BASE_URL",
+    label: "FEMA — Base URL (proxy)",
+    group: "Thu thập dữ liệu (danh sách zip thật)",
+    secret: false,
+    helpText:
+      "Để trống = gọi thẳng https://www.fema.gov. Akamai chặn fema.gov theo dải IP datacenter, nên VPS " +
+      "nhận 403 cho MỌI request trong khi cùng URL đó trả 200 từ mạng dân dụng — không phải vấn đề khoá, " +
+      "FEMA không dùng khoá. Điền URL Cloudflare Worker proxy vào đây để đi vòng. Giữ nguyên đường dẫn: " +
+      "proxy nối thẳng /api/open/... vào fema.gov.",
+  },
+  {
+    name: "FEMA_PROXY_SECRET",
+    label: "FEMA — Proxy secret",
+    group: "Thu thập dữ liệu (danh sách zip thật)",
+    secret: true,
+    helpText:
+      "Gửi kèm header X-Proxy-Secret để proxy không thành open proxy cho cả internet. Chỉ cần khi đã " +
+      "điền Base URL ở trên.",
+  },
+  {
     name: "CLOUDFLARE_API_TOKEN",
     label: "Cloudflare API Token",
     group: "Domain (Cloudflare)",
