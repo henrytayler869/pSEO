@@ -23,6 +23,7 @@
 import { snapshotStatusFor } from "../lib/collector/run";
 import { ALL_VALIDATION_RULES, REQUIRED_METRICS_BY_ADAPTER, EXPECTED_METRICS_BY_ADAPTER } from "../lib/validation/config";
 import { ALL_ADAPTER_KEYS } from "../lib/collector/registry";
+import { normalizeNoaaRows } from "../lib/collector/adapters/noaa-climate-normals";
 import { describeTransportFailure } from "../lib/net/curl-fetch";
 import {
   checkImpossibleValues,
@@ -127,6 +128,61 @@ function point(zip: string, metric: string, value: number, state = "TX"): Locati
  * never get a value at all". Same discipline though — every case asserts both
  * that it names the right cause AND that it does not name a wrong one.
  */
+/**
+ * NOAA sentinel handling. Its own array because the assertion is a computed
+ * summary, not a flag list — and because both of its bugs shipped, one after
+ * the other, in opposite directions.
+ */
+const fmt = (r: { usableRows: unknown[]; rejectedMissing: number; traceRows: number }) =>
+  `usable=${r.usableRows.length} missing=${r.rejectedMissing} trace=${r.traceRows}`;
+const noaaRow = (value: number, date = "2010-01-01T00:00:00") => ({ date, datatype: "MLY-CLDD-NORMAL", value });
+const NOAA_CASES: { name: string; expect: string; run: () => string }[] = [
+  {
+    // REGRESSION for the first bug: -9999 summed as a measurement produced
+    // annual precipitation of -34.7 inches across 466 data points.
+    name: "REGRESSION noaa: -9999 (thiếu) bị loại",
+    expect: "usable=0 missing=1 trace=0",
+    run: () => fmt(normalizeNoaaRows([noaaRow(-9999)])),
+  },
+  {
+    // REGRESSION for the second bug, which the fix for the first one CAUSED.
+    // Trace is a measurement of a very small amount, not absent data.
+    // Rejecting it left 10 months, the twelve-month rule then threw away the
+    // county's whole metric, and degree-days fell to 60% coverage while
+    // precipitation stayed at 91%.
+    name: "REGRESSION noaa: -7777 (vết) thành 0, KHÔNG bị loại",
+    expect: "usable=1 missing=0 trace=1",
+    run: () => fmt(normalizeNoaaRows([noaaRow(-7777)])),
+  },
+  {
+    name: "noaa: giá trị vết được ghi đúng bằng 0",
+    expect: "0",
+    run: () => String(normalizeNoaaRows([noaaRow(-7777)]).usableRows[0].value),
+  },
+  {
+    // The exact Cleveland shape: twelve months, two of them trace. Must stay
+    // twelve, or the county loses cooling degree days entirely.
+    name: "REGRESSION noaa: 12 tháng trong đó 2 tháng vết -> vẫn đủ 12 tháng",
+    expect: "usable=12 missing=0 trace=2",
+    run: () => {
+      const months = Array.from({ length: 12 }, (_, i) => `2010-${String(i + 1).padStart(2, "0")}-01T00:00:00`);
+      return fmt(normalizeNoaaRows(months.map((m, i) => noaaRow(i === 1 || i === 11 ? -7777 : 10, m))));
+    },
+  },
+  {
+    name: "noaa: 0 thật vẫn là 0 và không bị đếm là vết",
+    expect: "usable=1 missing=0 trace=0",
+    run: () => fmt(normalizeNoaaRows([noaaRow(0)])),
+  },
+  {
+    // An unrecognised or rescaled sentinel must still drop the month rather
+    // than be summed — the domain check, not a list of magic numbers.
+    name: "noaa: số âm lạ (-999.9) vẫn bị loại theo miền giá trị",
+    expect: "usable=0 missing=1 trace=0",
+    run: () => fmt(normalizeNoaaRows([noaaRow(-999.9)])),
+  },
+];
+
 const TRANSPORT_CASES: { name: string; expect: string; run: () => string }[] = [
   // A whole .gov zone lost its DNS delegation while that same host had been
   // returning genuine 429s for days. Two causes, one symptom upstairs. These
@@ -416,7 +472,7 @@ function main() {
   }
   const CONFIG_CASE_COUNT = ALL_ADAPTER_KEYS.length * 2;
 
-  for (const c of TRANSPORT_CASES) {
+  for (const c of [...NOAA_CASES, ...TRANSPORT_CASES]) {
     let got: string;
     try {
       got = c.run();
@@ -456,10 +512,10 @@ function main() {
 
   console.log();
   if (failures.length > 0) {
-    console.log(`${passed}/${CASES.length + TRANSPORT_CASES.length + SNAPSHOT_CASES.length + CONFIG_CASE_COUNT} test đúng. Hỏng:\n`);
+    console.log(`${passed}/${CASES.length + NOAA_CASES.length + TRANSPORT_CASES.length + SNAPSHOT_CASES.length + CONFIG_CASE_COUNT} test đúng. Hỏng:\n`);
     for (const f of failures) console.log(`  ${f}\n`);
   } else {
-    console.log(`${passed}/${CASES.length + TRANSPORT_CASES.length + SNAPSHOT_CASES.length + CONFIG_CASE_COUNT} test đúng.`);
+    console.log(`${passed}/${CASES.length + NOAA_CASES.length + TRANSPORT_CASES.length + SNAPSHOT_CASES.length + CONFIG_CASE_COUNT} test đúng.`);
   }
   if (neverFired.length > 0) {
     console.log(`\n⚠️  Luật chưa có ca nào làm nó kêu: ${neverFired.join(", ")}`);

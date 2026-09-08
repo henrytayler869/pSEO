@@ -26,7 +26,88 @@ interface NoaaResultRow {
   date: string;
   datatype: string;
   value: number;
+  /** Optional: used only to recognise a row already seen across page
+   * boundaries. Absent rows still work — they just cannot be deduped. */
+  station?: string;
 }
+
+/**
+ * CDO's hard ceiling on rows per response. Asking for more does not raise it.
+ *
+ * This number is why Los Angeles County had no climate data at all. The
+ * adapter asked for 1000 rows, got exactly 1000, and treated them as the whole
+ * answer — while `metadata.resultset.count` said 1236. The missing 236 were
+ * two months, so no datatype reached twelve and every one of the county's 21
+ * zip codes was dropped.
+ *
+ * Measured 2026-09-08 against the live API: LA returns count=1236 with 10/12
+ * months in the first page, matching the production failure message exactly.
+ * A normal county (Cuyahoga, 39035) returns count=72 and 12/12 — which is why
+ * this stayed hidden. Truncation only touches counties with dense station
+ * networks, i.e. the largest metros, i.e. the markets worth the most.
+ */
+/** NOAA's documented "trace" sentinel: a real measurement, too small to record. */
+const NOAA_TRACE = -7777;
+
+/**
+* CORRECTION to the domain filter above: it was too blunt, and the way it
+ * failed is instructive.
+ *
+ * Rejecting every negative value killed -9999 (missing), which was right,
+ * and -7777 (TRACE) along with it, which was not. Trace is not absent
+ * data — it is a measurement, of an amount too small to record. Cleveland
+ * in February has a trace of cooling degree days because the true value is
+ * between zero and one, and February is emphatically not a month NOAA
+ * forgot to measure.
+ *
+ * The cost was invisible and large. Dropping those rows left ten months
+ * instead of twelve, the twelve-month rule then discarded the county's
+ * ENTIRE metric, and the shape of the loss matched the coverage gap
+ * exactly: degree-days at 60-61% against precipitation at 90.7%, because
+ * winter cooling and summer heating are precisely where trace months live.
+ * 92 locations had rainfall and no degree-days, 47 of them in New York.
+ *
+ * `attributes` cannot help here — it carries R/S completeness flags that
+ * read identically on a sentinel and on a real value (measured against the
+ * live API 2026-09-08). The value itself is the only signal.
+ *
+ * So: trace becomes 0, which is the documented reading and is conservative
+ * — it can understate an annual total by less than one unit per month.
+ * Every other negative stays rejected, and stays rejected by DOMAIN rather
+ * than by matching a list, so an unrecognised or rescaled sentinel drops
+ * the month rather than being summed as a measurement.
+ */
+export function normalizeNoaaRows(rows: NoaaResultRow[]): {
+  usableRows: NoaaResultRow[];
+  rejectedMissing: number;
+  traceRows: number;
+} {
+  const usableRows: NoaaResultRow[] = [];
+  let rejectedMissing = 0;
+  let traceRows = 0;
+  for (const row of rows) {
+    if (row.value === NOAA_TRACE) {
+      traceRows++;
+      usableRows.push({ ...row, value: 0 });
+      continue;
+    }
+    if (row.value < 0) {
+      rejectedMissing++;
+      continue;
+    }
+    usableRows.push(row);
+  }
+  return { usableRows, rejectedMissing, traceRows };
+}
+
+const NOAA_MAX_ROWS_PER_PAGE = 1000;
+
+/**
+ * Refuses to page forever. 20 pages is 20,000 rows — far beyond any real
+ * county — so hitting it means something is wrong with the loop, not with the
+ * county, and stopping loudly beats issuing requests until the quota is gone.
+ */
+const NOAA_MAX_PAGES = 20;
 
 /**
  * NOAA Climate Data Online (CDO) API v2 — 1991-2020 monthly climate
@@ -146,18 +227,37 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
     return pending;
   }
 
-  private async fetchCounty(countyFips: string): Promise<CollectedDataPoint[]> {
+  /**
+   * Fetches ONE page and reports how many rows exist in total.
+   *
+   * Split out so the caller can page. The total comes from
+   * `metadata.resultset.count`, which the previous version never read — the
+   * one field that distinguishes "here is your data" from "here is the first
+   * thousand rows of your data". Both look identical without it.
+   */
+  private async fetchPage(
+    countyFips: string,
+    offset: number | null
+  ): Promise<{ rows: NoaaResultRow[]; totalCount: number | null }> {
     const params = new URLSearchParams({
       datasetid: "NORMAL_MLY",
       locationid: `FIPS:${countyFips}`,
       startdate: NORMAL_PERIOD_START,
       enddate: NORMAL_PERIOD_END,
       units: "standard",
-      limit: "1000",
+      limit: String(NOAA_MAX_ROWS_PER_PAGE),
     });
     for (const datatypeId of Object.values(DATATYPES)) {
       params.append("datatypeid", datatypeId);
     }
+    // CDO's offset is ONE-BASED, measured rather than taken from the docs:
+    // offset=0 and offset=1 both return the first row, offset=10 still
+    // overlaps the first page by one row, and offset=11 is the first clean
+    // continuation of a 10-row page. Assuming the usual zero-based convention
+    // would repeat one row per page — and since a month's value is the MEAN
+    // across stations, a duplicated row silently reweights that mean rather
+    // than failing.
+    if (offset !== null) params.set("offset", String(offset));
 
     const { status, body } = await this.spaced(() =>
       fetchWithCurlFallback(`${NOAA_BASE_URL}?${params.toString()}`, { token: this.apiToken })
@@ -206,7 +306,65 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
       if (typeof row.date !== "string" || typeof row.datatype !== "string" || typeof row.value !== "number") {
         throw new SchemaDriftError(`Dòng kết quả NOAA của hạt ${countyFips} thiếu hoặc sai kiểu date/datatype/value.`);
       }
-      rows.push({ date: row.date, datatype: row.datatype, value: row.value });
+      rows.push({
+        date: row.date,
+        datatype: row.datatype,
+        value: row.value,
+        station: typeof row.station === "string" ? row.station : undefined,
+      });
+    }
+
+    const resultset = (envelope.metadata as Record<string, unknown> | undefined)?.resultset as
+      | Record<string, unknown>
+      | undefined;
+    const totalCount = typeof resultset?.count === "number" ? resultset.count : null;
+
+    return { rows, totalCount };
+  }
+
+  private async fetchCounty(countyFips: string): Promise<CollectedDataPoint[]> {
+    const rows: NoaaResultRow[] = [];
+    const seen = new Set<string>();
+    let duplicates = 0;
+
+    const first = await this.fetchPage(countyFips, null);
+    const totalCount = first.totalCount;
+    for (const row of first.rows) {
+      const key = `${row.station ?? "?"}|${row.date}|${row.datatype}`;
+      if (seen.has(key)) { duplicates++; continue; }
+      seen.add(key);
+      rows.push(row);
+    }
+
+    // `count` absent means CDO did not tell us how much there is. Paging blind
+    // would be guessing; the honest move is to use what arrived and say the
+    // completeness of it is unknown. If it was short, the twelve-month check
+    // below rejects the county anyway — which is the safe direction.
+    if (totalCount !== null && totalCount > rows.length) {
+      for (let page = 1; page < NOAA_MAX_PAGES && rows.length < totalCount; page++) {
+        // One-based, hence +1. See the note in fetchPage.
+        const next = await this.fetchPage(countyFips, rows.length + duplicates + 1);
+        let added = 0;
+        for (const row of next.rows) {
+          const key = `${row.station ?? "?"}|${row.date}|${row.datatype}`;
+          if (seen.has(key)) { duplicates++; continue; }
+          seen.add(key);
+          rows.push(row);
+          added++;
+        }
+        // No progress means the offset is not advancing the window. Stopping
+        // beats looping until the daily quota is spent on identical requests.
+        if (added === 0) break;
+      }
+      if (rows.length < totalCount) {
+        console.warn(
+          `[noaa] hạt ${countyFips}: chỉ lấy được ${rows.length}/${totalCount} dòng sau ${NOAA_MAX_PAGES} trang — ` +
+            `dữ liệu KHÔNG đầy đủ, luật 12-tháng bên dưới sẽ quyết định.`
+        );
+      }
+    }
+    if (duplicates > 0) {
+      console.warn(`[noaa] hạt ${countyFips}: bỏ ${duplicates} dòng trùng khi ghép trang (offset lệch một?).`);
     }
 
     // NOAA encodes "no data" as a large negative sentinel (-9999 missing,
@@ -223,8 +381,7 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
     // Note this is a SEPARATE bug from the incomplete-month one below, and the
     // month check does not catch it: twelve months can all be present with some
     // of them sentinels, and the count still reads 12.
-    const usableRows = rows.filter((r) => r.value >= 0);
-    const rejectedSentinels = rows.length - usableRows.length;
+    const { usableRows, rejectedMissing, traceRows } = normalizeNoaaRows(rows);
 
     // An annual total requires all TWELVE months. Anything less is not one.
     //
@@ -291,7 +448,12 @@ export class NoaaClimateNormalsAdapter implements CollectorAdapter {
 
     if (points.length === 0) {
       const detail = incomplete.length > 0 ? ` Thiếu tháng: ${incomplete.join("; ")}.` : "";
-      const sentinels = rejectedSentinels > 0 ? ` Đã loại ${rejectedSentinels}/${rows.length} dòng có giá trị âm (sentinel báo thiếu dữ liệu).` : "";
+      const sentinels =
+        rejectedMissing > 0 || traceRows > 0
+          ? ` Đã loại ${rejectedMissing}/${rows.length} dòng thiếu dữ liệu` +
+            (traceRows > 0 ? `, và đọc ${traceRows} dòng "vết" (-7777) thành 0 vì đó là số đo thật` : "") +
+            "."
+          : "";
       throw new LocationFetchError(
         `NOAA trả về dữ liệu cho hạt ${countyFips} nhưng không datatype nào đủ 12 tháng.${detail}${sentinels}`
       );
