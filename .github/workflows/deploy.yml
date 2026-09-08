@@ -100,6 +100,15 @@ jobs:
         # AND stay quiet, and that an empty snapshot is refused.
         run: npx tsx scripts/test-validation-rules.ts
 
+      - name: Test — từ khoá + so sánh snapshot
+        # Pure, no data needed. Two modules that had no tests at all: the
+        # keyword functions decide which phrasing a market is scored on, and
+        # the comparison functions decide whether a run reads as a change
+        # worth acting on. Both fail silently — a wrong keyword reorders the
+        # build queue, and a wrong delta either cries wolf or says nothing
+        # while a source drifts.
+        run: npx tsx scripts/test-keywords-and-compare.ts
+
       # NOT run here: test-ai-validator.ts and scan-generated-copy.ts. Both
       # assert against REAL collected data and real generated copy, which a
       # blank CI database does not have. Running them against an empty
