@@ -14,7 +14,7 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
   const detail = await getWebsiteDetail(websiteId);
   if (!detail) notFound();
 
-  const { website, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
+  const { website, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
 
   return (
     <div className="flex flex-col gap-6">
@@ -72,8 +72,23 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Bài viết (WordPress)" value={postCount !== null ? postCount.toLocaleString() : "—"} error={postCountError} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard
+          label="URL trong sitemap"
+          value={sitemapCount ? sitemapCount.total.toLocaleString() : "—"}
+          error={sitemapError}
+          note={
+            sitemapCount
+              ? sitemapCount.breakdown.map((b) => `${b.label}: ${b.count}`).join(" · ")
+              : undefined
+          }
+        />
+        <StatCard
+          label="Bài blog (WordPress)"
+          value={postCount !== null ? postCount.toLocaleString() : "—"}
+          error={postCountError}
+          note="Chỉ đếm bài WordPress. Không phải số trang của site — trang thị trường do Next.js dựng, không nằm trong WordPress."
+        />
         <StatCard
           label="Clicks / Impressions (28 ngày)"
           value={search ? `${search.clicks.toLocaleString()} / ${search.impressions.toLocaleString()}` : "—"}
@@ -166,13 +181,27 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
   );
 }
 
-function StatCard({ label, value, error }: { label: string; value: string; error: string | null }) {
+function StatCard({
+  label,
+  value,
+  error,
+  note,
+}: {
+  label: string;
+  value: string;
+  error: string | null;
+  /** What the number actually counts. Shown always, not on hover: a figure whose
+   * scope is only discoverable by hovering is a figure that gets quoted without
+   * its scope. */
+  note?: string;
+}) {
   return (
     <Card>
       <CardContent className="pt-6">
         <div className="text-sm text-muted-foreground">{label}</div>
         <div className="text-2xl font-semibold">{error ? "—" : value}</div>
         {error && <div className="mt-1 text-xs text-red-700">{error}</div>}
+        {!error && note && <div className="mt-1 text-xs text-muted-foreground">{note}</div>}
       </CardContent>
     </Card>
   );

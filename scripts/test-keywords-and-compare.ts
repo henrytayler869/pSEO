@@ -15,6 +15,7 @@ import { computeMetricDeltas, formatPercentChange } from "../lib/collector/compa
 import { assertValidGscProperty } from "../lib/google/search-console";
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "../lib/google/analytics-data";
 import { explainGoogleApiError } from "../lib/google/service-account";
+import { parseSitemapXml, categoriseSitemapUrls } from "../lib/sitemap/count";
 
 interface Case {
   name: string;
@@ -28,6 +29,8 @@ const delta = (metric: string, current: ReturnType<typeof pt>[], previous: Retur
   if (!d) return "KHÔNG CÓ";
   return `n=${d.sampleSize} trước=${d.previousAvg} sau=${d.currentAvg} đổi=${d.percentChange} đáng_kể=${d.significantChangeCount}`;
 };
+
+const SITE = "https://atmovingservices.com";
 
 const CASES: Case[] = [
   // --- applyStateSuffix ---
@@ -336,6 +339,62 @@ const CASES: Case[] = [
     name: "Google lỗi: body không phải JSON -> vẫn trả thông điệp dùng được",
     expect: "ok",
     run: () => (explainGoogleApiError(500, "<html>Bad Gateway</html>").includes("500") ? "ok" : "thiếu mã lỗi"),
+  },
+
+  // --- sitemap ---
+  {
+    // REGRESSION cho mẫu số. Tử số là "mọi URL GSC báo có impression"; mẫu số
+    // TRƯỚC ĐÂY là số bài WordPress — trên site headless thì đó chỉ là blog.
+    // Thương của hai thứ đó không phải tỷ lệ của cái gì cả, và nó hiện ra như
+    // một phần trăm bình thường.
+    name: "REGRESSION sitemap: đếm theo ĐỘ SÂU, trang nội dung khớp số site tự báo",
+    expect: "total=186 content=158",
+    run: () => {
+      const urls = [
+        `${SITE}/`,
+        `${SITE}/moving-services`,
+        `${SITE}/data`,
+        `${SITE}/blog`,
+        ...Array.from({ length: 24 }, (_, i) => `${SITE}/moving-services/s${i}`),
+        ...Array.from({ length: 158 }, (_, i) => `${SITE}/moving-services/ca/city-${i}`),
+      ];
+      const c = categoriseSitemapUrls(urls, SITE);
+      return `total=${urls.length} content=${c.content}`;
+    },
+  },
+  {
+    name: "sitemap: hub bang KHÔNG bị tính là trang nội dung",
+    expect: "0",
+    run: () => String(categoriseSitemapUrls([`${SITE}/moving-services/tx`], SITE).content),
+  },
+  {
+    name: "sitemap: URL có query không làm lệch phân loại",
+    expect: "1",
+    run: () => String(categoriseSitemapUrls([`${SITE}/moving-services/tx/houston?x=1`], SITE).content),
+  },
+  {
+    // Đọc <loc> mà không nhìn thẻ bao sẽ đếm 12 file sitemap thành 12 trang.
+    name: "REGRESSION sitemap: <sitemapindex> nhận ra là INDEX, không phải danh sách trang",
+    expect: "index:2",
+    run: () => {
+      const xml = `<?xml version="1.0"?><sitemapindex xmlns="x"><sitemap><loc>${SITE}/s1.xml</loc></sitemap><sitemap><loc>${SITE}/s2.xml</loc></sitemap></sitemapindex>`;
+      const r = parseSitemapXml(xml);
+      return `${r.isIndex ? "index" : "urlset"}:${r.locs.length}`;
+    },
+  },
+  {
+    name: "sitemap: <urlset> nhận ra là danh sách trang",
+    expect: "urlset:2",
+    run: () => {
+      const xml = `<urlset xmlns="x"><url><loc>${SITE}/a</loc></url><url><loc>${SITE}/b</loc></url></urlset>`;
+      const r = parseSitemapXml(xml);
+      return `${r.isIndex ? "index" : "urlset"}:${r.locs.length}`;
+    },
+  },
+  {
+    name: "sitemap: <loc> có xuống dòng và khoảng trắng vẫn đọc được",
+    expect: "1",
+    run: () => String(parseSitemapXml(`<urlset><url><loc>\n  ${SITE}/a\n </loc></url></urlset>`).locs.length),
   },
 
   // --- formatPercentChange ---

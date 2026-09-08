@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { fetchPublishedPostCount, deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
+import { fetchSitemapCounts, type SitemapCount } from "@/lib/sitemap/count";
 import { fetchSiteSearchTotals, fetchTopPages } from "@/lib/google/search-console";
 import { fetchSiteTrafficTotals, fetchTrafficBySource } from "@/lib/google/analytics-data";
 
@@ -7,8 +8,18 @@ const OVERVIEW_WINDOW_DAYS = 28;
 
 export interface WebsiteOverviewRow {
   website: Awaited<ReturnType<typeof prisma.website.findMany>>[number];
-  postCount: number | null;
-  indexRateEstimate: number | null; // pagesWithImpressions / postCount — null if either input is missing
+  /** URLs the site submits for indexing, read from its sitemap. */
+  sitemapCount: SitemapCount | null;
+  /**
+   * pagesWithImpressions / sitemap total.
+   *
+   * Both halves now describe the same universe. They did not before: the
+   * numerator counts every URL GSC reports for the property, while the
+   * denominator was the WordPress POST count — the blog, and on a headless
+   * site nothing else. The quotient of those two was not a rate of anything,
+   * and it would have rendered as an ordinary percentage.
+   */
+  indexRateEstimate: number | null;
   totalUsers: number | null;
   error: string | null; // set (and other fields null) when any live fetch failed for this site
 }
@@ -23,23 +34,23 @@ export async function getWebsiteOverviewRows(): Promise<WebsiteOverviewRow[]> {
   return Promise.all(
     websites.map(async (website): Promise<WebsiteOverviewRow> => {
       try {
-        const wpApiBaseUrl = website.wpApiBaseUrl ?? deriveWpApiBaseUrl(website.url);
-        const [postCount, searchTotals, trafficTotals] = await Promise.all([
-          fetchPublishedPostCount(wpApiBaseUrl),
+        const [sitemapCount, searchTotals, trafficTotals] = await Promise.all([
+          fetchSitemapCounts(website.url),
           fetchSiteSearchTotals(website.gscPropertyUrl, OVERVIEW_WINDOW_DAYS),
           fetchSiteTrafficTotals(website.ga4PropertyId, OVERVIEW_WINDOW_DAYS),
         ]);
         return {
           website,
-          postCount,
-          indexRateEstimate: postCount > 0 ? searchTotals.pagesWithImpressions / postCount : null,
+          sitemapCount,
+          indexRateEstimate:
+            sitemapCount.total > 0 ? searchTotals.pagesWithImpressions / sitemapCount.total : null,
           totalUsers: trafficTotals.activeUsers,
           error: null,
         };
       } catch (err) {
         return {
           website,
-          postCount: null,
+          sitemapCount: null,
           indexRateEstimate: null,
           totalUsers: null,
           error: err instanceof Error ? err.message : "Lỗi không rõ khi lấy dữ liệu.",
@@ -51,6 +62,12 @@ export async function getWebsiteOverviewRows(): Promise<WebsiteOverviewRow[]> {
 
 export interface WebsiteDetail {
   website: NonNullable<Awaited<ReturnType<typeof prisma.website.findUnique>>>;
+  /** From the sitemap — everything published. */
+  sitemapCount: SitemapCount | null;
+  sitemapError: string | null;
+  /** From WordPress — blog posts only. Kept because it is still a real number
+   * about a real thing; it just is not the site's page count, and labelling it
+   * as such is what went wrong. */
   postCount: number | null;
   postCountError: string | null;
   search: Awaited<ReturnType<typeof fetchSiteSearchTotals>> | null;
@@ -70,7 +87,11 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
   if (!website) return null;
 
   const wpApiBaseUrl = website.wpApiBaseUrl ?? deriveWpApiBaseUrl(website.url);
-  const [postCountResult, gscResult, ga4Result] = await Promise.all([
+  const [sitemapResult, postCountResult, gscResult, ga4Result] = await Promise.all([
+    fetchSitemapCounts(website.url).then(
+      (v) => ({ ok: true as const, value: v }),
+      (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
+    ),
     fetchPublishedPostCount(wpApiBaseUrl).then(
       (v) => ({ ok: true as const, value: v }),
       (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
@@ -87,6 +108,8 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
 
   return {
     website,
+    sitemapCount: sitemapResult.ok ? sitemapResult.value : null,
+    sitemapError: sitemapResult.ok ? null : sitemapResult.error,
     postCount: postCountResult.ok ? postCountResult.value : null,
     postCountError: postCountResult.ok ? null : postCountResult.error,
     search: gscResult.ok ? gscResult.value.search : null,

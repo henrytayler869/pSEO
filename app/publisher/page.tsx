@@ -22,9 +22,11 @@ export default async function PublisherPage() {
         <CardHeader>
           <CardTitle>Website đã kết nối ({rows.length})</CardTitle>
           <CardDescription>
-            Tỷ lệ index là ước tính (số trang có impression trên GSC / tổng số bài viết) — không phải kết quả thật từ
-            Index Coverage của Google (API công khai không cho truy vấn hàng loạt). Xem chi tiết để kiểm tra index
-            thật cho từng URL.
+            Tỷ lệ index là ước tính: số trang có impression trên GSC chia cho số URL trong sitemap — tức tập ta thực
+            sự nộp cho Google, nên cả hai vế cùng nói về một tập hợp. Trước đây mẫu số là số bài WordPress, vốn chỉ là
+            blog, nên tỷ lệ có thể vượt 100% mà vẫn hiện ra như một phần trăm bình thường. Đây vẫn không phải kết quả
+            thật từ Index Coverage của Google (API công khai không cho truy vấn hàng loạt) — xem chi tiết để kiểm tra
+            index thật cho từng URL.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
@@ -36,7 +38,7 @@ export default async function PublisherPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Website</TableHead>
-                  <TableHead>Bài viết</TableHead>
+                  <TableHead>URL trong sitemap</TableHead>
                   <TableHead>Tỷ lệ index (ước tính)</TableHead>
                   <TableHead>Total traffic (28 ngày)</TableHead>
                   <TableHead></TableHead>
@@ -57,7 +59,16 @@ export default async function PublisherPage() {
                       </TableCell>
                     ) : (
                       <>
-                        <TableCell>{row.postCount}</TableCell>
+                        <TableCell>
+                          {row.sitemapCount ? (
+                            <span title={row.sitemapCount.breakdown.map((b) => `${b.label}: ${b.count}`).join(" · ")}>
+                              {row.sitemapCount.total.toLocaleString()}
+                              <span className="text-muted-foreground"> ({row.sitemapCount.content} nội dung)</span>
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </TableCell>
                         <TableCell>
                           {row.indexRateEstimate !== null ? `${(row.indexRateEstimate * 100).toFixed(0)}%` : "—"}
                         </TableCell>
