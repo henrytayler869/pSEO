@@ -15,6 +15,7 @@
 //     --gsc sc-domain:atmovingservices.com \
 //     --ga4-property 553102895 \
 //     --ga4-measurement G-1TL8MDDEJH \
+//     [--wp-api-base http://127.0.0.1:8090/wp-json/wp/v2] \
 //     [--service-account-file /path/to/key.json] \
 //     [--revalidate-secret-file /path/to/secret.txt]
 //
@@ -46,6 +47,7 @@ async function main() {
   const gsc = arg("--gsc");
   const ga4Property = arg("--ga4-property");
   const ga4Measurement = arg("--ga4-measurement");
+  const wpApiBase = arg("--wp-api-base");
   const serviceAccountFile = arg("--service-account-file");
   const revalidateSecretFile = arg("--revalidate-secret-file");
 
@@ -76,6 +78,39 @@ async function main() {
     ? readSecretFile(revalidateSecretFile, "--revalidate-secret-file")
     : undefined;
 
+  /**
+   * The derived WordPress URL is a GUESS, and this checks it.
+   *
+   * deriveWpApiBaseUrl builds `${url}/wp-json/wp/v2` from the public origin,
+   * which is right for an ordinary WordPress install and wrong for every
+   * headless one — where WordPress listens on loopback and the public origin
+   * serves a Next.js app that has no /wp-json at all.
+   *
+   * It was wrong the first time this script ran in production, on a site whose
+   * headless setup I had personally warned about hours earlier. The failure is
+   * shaped to escape notice: the registration succeeds, every other field is
+   * correct, and the broken value only surfaces later on a different screen as
+   * "HTTP 404" in a column nobody was looking at.
+   *
+   * So the guess is tested before it is written. A warning, not an error: the
+   * WordPress host can be down for reasons that have nothing to do with this
+   * value, and refusing to register a site over a transient probe would be
+   * worse than registering it with a note.
+   */
+  const effectiveWpApiBase = wpApiBase || deriveWpApiBaseUrl(url);
+  const wpProbe = await probeWpApi(effectiveWpApiBase);
+  if (!wpProbe.ok) {
+    console.warn(`\nCẢNH BÁO: ${effectiveWpApiBase} không trả về 200 (${wpProbe.detail}).`);
+    if (!wpApiBase) {
+      console.warn(
+        "  Giá trị này do script TỰ SUY RA từ URL công khai. Với site headless, WordPress thường chỉ nghe trên loopback\n" +
+          "  của máy chủ và URL công khai không có /wp-json — khi đó phải truyền --wp-api-base, ví dụ\n" +
+          "  --wp-api-base http://127.0.0.1:8090/wp-json/wp/v2"
+      );
+    }
+    console.warn("  Website vẫn được đăng ký; cột \"Bài viết\" trong Publisher sẽ báo lỗi cho tới khi sửa giá trị này.\n");
+  }
+
   // Keyed on gscPropertyUrl because that is the column carrying the unique
   // constraint. Upsert rather than create: re-running this after fixing a typo
   // should converge on the right row, not fail or duplicate.
@@ -87,7 +122,7 @@ async function main() {
       gscPropertyUrl: gsc,
       ga4PropertyId: ga4Property,
       ga4MeasurementId: ga4Measurement || null,
-      wpApiBaseUrl: deriveWpApiBaseUrl(url),
+      wpApiBaseUrl: effectiveWpApiBase,
       ...(revalidateSecret ? { revalidateSecret } : {}),
     },
     update: {
@@ -95,6 +130,7 @@ async function main() {
       url,
       ga4PropertyId: ga4Property,
       ga4MeasurementId: ga4Measurement || null,
+      wpApiBaseUrl: effectiveWpApiBase,
       // Only overwritten when a new one was supplied. Passing nothing must not
       // silently erase a secret that is already working.
       ...(revalidateSecret ? { revalidateSecret } : {}),
@@ -107,8 +143,20 @@ async function main() {
   console.log(`  ga4 property     ${website.ga4PropertyId}`);
   console.log(`  ga4 measurement  ${website.ga4MeasurementId ?? "(chưa đặt)"}`);
   console.log(`  revalidate secret ${website.revalidateSecret ? "đã đặt" : "(chưa đặt — site sẽ tự lấy khi cache hết hạn)"}`);
-  console.log(`  wp api base      ${website.wpApiBaseUrl ?? "(mặc định)"}`);
+  console.log(`  wp api base      ${website.wpApiBaseUrl ?? "(mặc định)"}${wpApiBase ? "" : "  <- tự suy ra"}${wpProbe.ok ? "  [200 OK]" : "  [KHÔNG trả 200]"}`);
   console.log("\nKiểm lại từ bên ngoài: https://<host>/api/version — analyticsSource phải là \"hq\".");
+}
+
+/** One GET, short timeout. Only asks whether something answers 200 there. */
+async function probeWpApi(base: string): Promise<{ ok: boolean; detail: string }> {
+  try {
+    const response = await fetch(`${base.replace(/\/+$/, "")}/posts?per_page=1&status=publish`, {
+      signal: AbortSignal.timeout(10000),
+    });
+    return { ok: response.status === 200, detail: `HTTP ${response.status}` };
+  } catch (err) {
+    return { ok: false, detail: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 main()
