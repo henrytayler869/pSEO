@@ -2,6 +2,120 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
+/**
+ * Both transports failed to REACH the host — no HTTP conversation happened.
+ *
+ * Distinct from an HTTP error because the fix and the culprit are different.
+ * A 429 means the source answered and asked us to slow down; this means
+ * nothing answered at all, and no amount of waiting on OUR side is
+ * necessarily the remedy.
+ *
+ * It exists because the old code threw Node's raw fetch error, whose message
+ * is the literal string "fetch failed" — the real cause (ENOTFOUND) sits in
+ * `.cause`, which nothing logged. So a DNS zone vanishing and a connection
+ * being refused and a TLS failure all reached the operator as three words
+ * that name none of them.
+ *
+ * That is not theoretical. On 2026-09-08 the entire nrel.gov zone lost its
+ * delegation in the .gov TLD — `dig SOA nrel.gov` answered NOERROR with the
+ * `gov.` SOA in AUTHORITY, i.e. the parent saying "no such delegation" — while
+ * fema.gov, census.gov, noaa.gov and eia.gov all resolved normally from the
+ * same machine at the same second. The preceding days had seen genuine HTTP
+ * 429s from that same host, so the two failures were one keystroke apart in
+ * the logs and a hair apart in meaning: "we hit the quota" invites waiting,
+ * "the domain no longer exists in DNS" does not.
+ */
+export class HostUnreachableError extends Error {
+  constructor(
+    message: string,
+    public readonly host: string,
+    /** What actually went wrong, for code that must branch rather than read. */
+    public readonly kind: "dns" | "connection" | "timeout" | "tls" | "unknown",
+    public readonly cause?: unknown
+  ) {
+    super(message);
+    this.name = "HostUnreachableError";
+  }
+}
+
+/** curl's own exit codes. Preferred over Node's error when both are present:
+ * curl is the second, independent observation, and its codes are specific
+ * where Node's message is not. */
+const CURL_EXIT: Record<number, { kind: HostUnreachableError["kind"]; vi: string }> = {
+  6: { kind: "dns", vi: "không phân giải được tên miền" },
+  7: { kind: "connection", vi: "phân giải được tên miền nhưng không kết nối được" },
+  28: { kind: "timeout", vi: "hết thời gian chờ" },
+  35: { kind: "tls", vi: "bắt tay TLS thất bại" },
+};
+
+/** Node surfaces the real reason in a `.cause` chain, never in `.message`. */
+function rootCauseCode(err: unknown): string | null {
+  let current: unknown = err;
+  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string") return code;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return null;
+}
+
+const NODE_CODE: Record<string, { kind: HostUnreachableError["kind"]; vi: string }> = {
+  ENOTFOUND: { kind: "dns", vi: "tên miền không tồn tại trên DNS" },
+  EAI_AGAIN: { kind: "dns", vi: "tra cứu DNS thất bại tạm thời" },
+  ECONNREFUSED: { kind: "connection", vi: "kết nối bị từ chối" },
+  ECONNRESET: { kind: "connection", vi: "kết nối bị ngắt giữa chừng" },
+  ETIMEDOUT: { kind: "timeout", vi: "hết thời gian chờ" },
+  UND_ERR_CONNECT_TIMEOUT: { kind: "timeout", vi: "hết thời gian chờ khi kết nối" },
+};
+
+/**
+ * Names the failure both transports just hit, in the operator's language.
+ *
+ * Deliberately reports which evidence it used. When curl and Node disagree —
+ * or when neither yields a recognised code — saying so is more useful than a
+ * confident guess, because the next person's move depends on whether this is
+ * "the domain is gone" or "I could not tell".
+ */
+export function describeTransportFailure(host: string, nativeErr: unknown, curlErr: unknown): HostUnreachableError {
+  const curlStatus = (curlErr as { status?: unknown } | null)?.status;
+  const curlHit = typeof curlStatus === "number" ? CURL_EXIT[curlStatus] : undefined;
+  if (curlHit) {
+    return new HostUnreachableError(
+      `Không tới được ${host}: ${curlHit.vi} (curl exit ${curlStatus}). ` +
+        `KHÔNG phải giới hạn tần suất và KHÔNG phải lệch schema — máy chủ chưa hề trả lời.` +
+        (curlHit.kind === "dns"
+          ? ` Kiểm tra bằng: dig SOA ${host} — nếu phần AUTHORITY trả về SOA của TLD thì zone đã mất uỷ quyền, không phải lỗi phía ta.`
+          : ""),
+      host,
+      curlHit.kind,
+      nativeErr
+    );
+  }
+
+  const code = rootCauseCode(nativeErr);
+  const nodeHit = code ? NODE_CODE[code] : undefined;
+  if (nodeHit) {
+    return new HostUnreachableError(
+      `Không tới được ${host}: ${nodeHit.vi} (${code}). ` +
+        `KHÔNG phải giới hạn tần suất và KHÔNG phải lệch schema — máy chủ chưa hề trả lời.`,
+      host,
+      nodeHit.kind,
+      nativeErr
+    );
+  }
+
+  const native = nativeErr instanceof Error ? nativeErr.message : String(nativeErr);
+  return new HostUnreachableError(
+    `Không tới được ${host}: cả fetch lẫn curl đều hỏng và KHÔNG nhận ra nguyên nhân. ` +
+      `fetch nói "${native}"${code ? ` (code ${code})` : ""}` +
+      `${typeof curlStatus === "number" ? `, curl exit ${curlStatus}` : ""}. ` +
+      `Chưa phân loại được — đừng suy ra là giới hạn tần suất.`,
+    host,
+    "unknown",
+    nativeErr
+  );
+}
+
 export interface CurlFetchResult {
   status: number;
   headers: Record<string, string>;
@@ -81,8 +195,17 @@ export async function fetchWithCurlFallback(
         console.warn(`[net] fetch() hỏng với ${host}, đã dùng curl thay thế — ${reason}`);
       }
       return result;
-    } catch {
-      throw nativeFetchError; // curl fallback also failed — surface the original, more informative error
+    } catch (curlError) {
+      // Both paths are down, so this is about reaching the host at all.
+      //
+      // This used to rethrow nativeFetchError, on the reasoning that the
+      // original error was "more informative". It was not: Node's is the
+      // string "fetch failed". Every distinct way a host can be unreachable
+      // arrived at the operator wearing the same three words, and the one
+      // time it mattered — a whole .gov zone losing its DNS delegation — the
+      // symptom was indistinguishable at a glance from the rate limiting
+      // that host had genuinely been doing for days.
+      throw describeTransportFailure(safeHost(url), nativeFetchError, curlError);
     }
   }
 }

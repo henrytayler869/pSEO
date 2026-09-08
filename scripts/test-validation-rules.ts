@@ -21,6 +21,7 @@
 // Usage: tsx scripts/test-validation-rules.ts
 
 import { snapshotStatusFor } from "../lib/collector/run";
+import { describeTransportFailure } from "../lib/net/curl-fetch";
 import {
   checkImpossibleValues,
   checkCompleteness,
@@ -70,6 +71,25 @@ const SNAPSHOT_CASES: { name: string; input: Parameters<typeof snapshotStatusFor
     expect: "SUSPECT",
   },
   {
+    // Halting mid-run means points may already be banked. They still cannot be
+    // the source's new truth: the run stopped early, so the snapshot is
+    // partial by construction.
+    name: "REGRESSION snapshot: không tới được nguồn -> SUSPECT dù đã thu được điểm",
+    input: {
+      driftMessage: null,
+      unreachableMessage: "Không tới được developer.nrel.gov: không phân giải được tên miền",
+      pointCount: 822,
+      locationsAttempted: 288,
+      locationsFailed: 1,
+    },
+    expect: "SUSPECT",
+  },
+  {
+    name: "snapshot: nguồn tới được bình thường -> luật DNS im",
+    input: { driftMessage: null, unreachableMessage: null, pointCount: 822, locationsAttempted: 288, locationsFailed: 2 },
+    expect: "OK",
+  },
+  {
     name: "snapshot: vài địa điểm hỏng lẻ tẻ -> vẫn OK",
     input: { driftMessage: null, pointCount: 1180, locationsAttempted: 300, locationsFailed: 5 },
     expect: "OK",
@@ -79,6 +99,56 @@ const SNAPSHOT_CASES: { name: string; input: Parameters<typeof snapshotStatusFor
 function point(zip: string, metric: string, value: number, state = "TX"): LocationPoint {
   return { locationId: `loc-${zip}`, zip, state, metric, value };
 }
+
+
+/**
+ * The transport classifier gets its own array because it answers a different
+ * question than a validation rule: not "is this value wrong" but "why did we
+ * never get a value at all". Same discipline though — every case asserts both
+ * that it names the right cause AND that it does not name a wrong one.
+ */
+const TRANSPORT_CASES: { name: string; expect: string; run: () => string }[] = [
+  // A whole .gov zone lost its DNS delegation while that same host had been
+  // returning genuine 429s for days. Two causes, one symptom upstairs. These
+  // pin that the message names the cause it actually has evidence for.
+  {
+    name: "REGRESSION vận chuyển: curl exit 6 -> nói DNS, KHÔNG nói giới hạn tần suất",
+    expect: "dns",
+    run: () => {
+      const e = describeTransportFailure("developer.nrel.gov", new TypeError("fetch failed"), { status: 6 });
+      const namesDns = e.message.includes("không phân giải được tên miền");
+      const denies = e.message.includes("KHÔNG phải giới hạn tần suất");
+      const dropsFetchFailed = !e.message.includes("fetch failed");
+      return namesDns && denies && dropsFetchFailed ? e.kind : `sai: ${e.message}`;
+    },
+  },
+  {
+    name: "vận chuyển: curl exit 7 -> kết nối, không phải DNS",
+    expect: "connection",
+    run: () => describeTransportFailure("h", new Error("x"), { status: 7 }).kind,
+  },
+  {
+    name: "vận chuyển: không có curl status -> đọc .cause của Node",
+    expect: "dns",
+    run: () => {
+      const inner = Object.assign(new Error("getaddrinfo ENOTFOUND h"), { code: "ENOTFOUND" });
+      return describeTransportFailure("h", Object.assign(new TypeError("fetch failed"), { cause: inner }), null).kind;
+    },
+  },
+  {
+    // The honest case. When neither transport yields a recognised code the
+    // message must SAY it could not classify, rather than pick the most
+    // familiar cause and sound certain.
+    name: "REGRESSION vận chuyển: không nhận ra -> thú nhận, không đoán bừa",
+    expect: "unknown",
+    run: () => {
+      const e = describeTransportFailure("h", new Error("weird"), { status: 99 });
+      return e.message.includes("KHÔNG nhận ra nguyên nhân") && e.message.includes("đừng suy ra là giới hạn tần suất")
+        ? e.kind
+        : `sai: ${e.message}`;
+    },
+  },
+];
 
 interface Case {
   name: string;
@@ -264,6 +334,19 @@ function main() {
     }
   }
 
+  for (const c of TRANSPORT_CASES) {
+    let got: string;
+    try {
+      got = c.run();
+    } catch (err) {
+      got = `ném lỗi: ${err instanceof Error ? err.message : String(err)}`;
+    }
+    const ok = got === c.expect;
+    if (ok) passed++;
+    else failures.push(`${c.name} — mong "${c.expect}", nhận "${got}"`);
+    console.log(`${ok ? "✓" : "✗"} ${c.name}`);
+  }
+
   for (const c of SNAPSHOT_CASES) {
     const got = snapshotStatusFor(c.input);
     if (got === c.expect) {
@@ -281,10 +364,10 @@ function main() {
 
   console.log();
   if (failures.length > 0) {
-    console.log(`${passed}/${CASES.length + SNAPSHOT_CASES.length} test đúng. Hỏng:\n`);
+    console.log(`${passed}/${CASES.length + TRANSPORT_CASES.length + SNAPSHOT_CASES.length} test đúng. Hỏng:\n`);
     for (const f of failures) console.log(`  ${f}\n`);
   } else {
-    console.log(`${passed}/${CASES.length + SNAPSHOT_CASES.length} test đúng.`);
+    console.log(`${passed}/${CASES.length + TRANSPORT_CASES.length + SNAPSHOT_CASES.length} test đúng.`);
   }
   if (neverFired.length > 0) {
     console.log(`\n⚠️  Luật chưa có ca nào làm nó kêu: ${neverFired.join(", ")}`);

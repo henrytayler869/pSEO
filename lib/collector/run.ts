@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { SchemaDriftError, LocationFetchError } from "./errors";
+import { HostUnreachableError } from "@/lib/net/curl-fetch";
 import { mapWithConcurrency, sleep } from "./concurrency";
 import type { CollectorAdapter, LocationRef } from "./types";
 
@@ -10,6 +11,10 @@ export interface CollectionFailure {
 }
 
 export interface CollectionRunResult {
+  /** Set when the host could not be reached at all. Separate from
+   * driftMessage so the two never share a status note — they are different
+   * failures with different people to call. */
+  unreachableMessage?: string | null;
   snapshotId: string;
   status: "OK" | "SUSPECT";
   version: number;
@@ -82,11 +87,16 @@ const MASS_FAILURE_THRESHOLD = 0.5;
  */
 export function snapshotStatusFor(input: {
   driftMessage: string | null;
+  /** Host unreachable — optional so existing callers/tests keep compiling,
+   * but when present it decides the status on its own: not one byte was
+   * received, so nothing collected this run can be the source's new truth. */
+  unreachableMessage?: string | null;
   pointCount: number;
   locationsAttempted: number;
   locationsFailed: number;
 }): "OK" | "SUSPECT" {
   if (input.driftMessage !== null) return "SUSPECT";
+  if (input.unreachableMessage) return "SUSPECT";
   // Collected nothing at all. Whatever happened, this cannot be the new truth
   // for a source that previously had data.
   if (input.locationsAttempted > 0 && input.pointCount === 0) return "SUSPECT";
@@ -118,6 +128,16 @@ export async function runCollection(params: {
 
   const failures: CollectionFailure[] = [];
   let driftMessage: string | null = null;
+  /**
+   * Halts the run the way schema drift does, and for the same reason: the
+   * failure is a property of the SOURCE, not of one location. If the host does
+   * not resolve, it will not resolve for the other 287 zips either — pushing
+   * on buys nothing and costs 287 × (1 + maxRetries) doomed attempts.
+   *
+   * Set only after a location has exhausted its retries, so a momentary
+   * resolver hiccup still recovers instead of cancelling a good run.
+   */
+  let unreachableMessage: string | null = null;
   const collectedPoints: { locationId: string; metric: string; value: number; unit: string; resolvedAtResolution: string; isInferred: boolean; confidence: number }[] = [];
 
   await mapWithConcurrency(
@@ -138,22 +158,32 @@ export async function runCollection(params: {
           driftMessage = err.message;
           return;
         }
+        if (err instanceof HostUnreachableError) {
+          unreachableMessage = err.message;
+          console.error(`[collector:${adapterKey}] DỪNG — ${err.message}`);
+          return;
+        }
         const message = err instanceof LocationFetchError || err instanceof Error ? err.message : String(err);
         failures.push({ locationId: location.locationId, zip: location.zip, message });
         console.error(`[collector:${adapterKey}] failed for zip ${location.zip} (${location.locationId}): ${message}`);
       }
     },
-    () => driftMessage !== null
+    () => driftMessage !== null || unreachableMessage !== null
   );
 
   const status = snapshotStatusFor({
     driftMessage,
+    unreachableMessage,
     pointCount: collectedPoints.length,
     locationsAttempted: locations.length,
     locationsFailed: failures.length,
   });
   const statusNoteParts: string[] = [];
   if (driftMessage) statusNoteParts.push(`Schema drift: ${driftMessage}`);
+  // Its own label, never folded into the failure count. "288 địa điểm hỏng"
+  // describes 288 separate problems and invites 288 separate theories; the
+  // truth was one dead domain.
+  if (unreachableMessage) statusNoteParts.push(`KHÔNG TỚI ĐƯỢC NGUỒN: ${unreachableMessage}`);
   if (failures.length > 0) {
     const shown = failures.slice(0, 20).map((f) => `${f.zip} (${f.message})`);
     const suffix = failures.length > 20 ? ` +${failures.length - 20} more` : "";
@@ -195,5 +225,6 @@ export async function runCollection(params: {
     locationsFailed: failures.length,
     failures,
     driftMessage,
+    unreachableMessage,
   };
 }
