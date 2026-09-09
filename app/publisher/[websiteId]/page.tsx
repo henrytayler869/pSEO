@@ -14,7 +14,7 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
   const detail = await getWebsiteDetail(websiteId);
   if (!detail) notFound();
 
-  const { website, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
+  const { website, domain, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
 
   return (
     <div className="flex flex-col gap-6">
@@ -30,6 +30,16 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
         description={
           <>
             {website.url} · GSC: {website.gscPropertyUrl} · GA4: {website.ga4PropertyId}
+            {" · Domain: "}
+            {domain ? (
+              <Link href="/domains" className="underline underline-offset-2">
+                {domain.name} ({domain.cloudflareError ? "lỗi Cloudflare" : (domain.cloudflareStatus ?? "chưa rõ")})
+              </Link>
+            ) : (
+              <span className="text-amber-700">
+                chưa đăng ký ở mục Domain — không kiểm được DNS/Cloudflare từ đây
+              </span>
+            )}
           </>
         }
       />

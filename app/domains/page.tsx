@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Link2 } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -71,6 +72,7 @@ export default async function DomainsPage() {
                 <TableRow>
                   <TableHead>Domain</TableHead>
                   <TableHead>Dùng cho niche</TableHead>
+                  <TableHead>Publisher</TableHead>
                   <TableHead>Trạng thái</TableHead>
                   <TableHead>Nameserver Cloudflare</TableHead>
                   <TableHead>Kiểm tra gần nhất</TableHead>
@@ -83,6 +85,27 @@ export default async function DomainsPage() {
                     <TableCell className="font-medium">{d.name}</TableCell>
                     <TableCell>
                       {d.relevantVertical ? <Badge variant="outline">{d.relevantVertical}</Badge> : <span className="text-xs text-muted-foreground">—</span>}
+                    </TableCell>
+                    <TableCell>
+                      {d.publisherWebsite ? (
+                        <Link
+                          href={`/publisher/${d.publisherWebsite.id}`}
+                          className="text-xs font-medium text-green-700 underline-offset-2 hover:underline"
+                        >
+                          {d.publisherWebsite.name}
+                        </Link>
+                      ) : (
+                        // Nói ra việc CẦN LÀM, không chỉ nói "chưa có". Website
+                        // trong Publisher cần GSC property và GA4 property ID —
+                        // hai thứ không suy ra được từ tên miền, nên ở đây
+                        // không thể tự tạo hộ, chỉ có thể chỉ đường.
+                        <span className="text-xs text-muted-foreground">
+                          chưa nối —{" "}
+                          <Link href="/publisher" className="underline underline-offset-2">
+                            kết nối ở Publisher
+                          </Link>
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <StatusBadge status={d.cloudflareStatus} error={d.cloudflareError} />

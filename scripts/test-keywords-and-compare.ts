@@ -17,6 +17,7 @@ import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "../lib/go
 import { explainGoogleApiError } from "../lib/google/service-account";
 import { parseSitemapXml, categoriseSitemapUrls } from "../lib/sitemap/count";
 import { parseZoneListResponse } from "../lib/cloudflare/zones";
+import { normalizeHost, findWebsiteForDomain } from "../lib/publisher/link-domain";
 
 interface Case {
   name: string;
@@ -462,6 +463,51 @@ const CASES: Case[] = [
       try { parseZoneListResponse(502, "<html>Bad Gateway</html>", "x.com"); return "KHÔNG NÉM"; }
       catch (e) { return e instanceof Error && e.message.includes("không phải JSON") ? "không phải JSON" : `sai: ${e}`; }
     },
+  },
+
+  // --- nối Domain <-> Publisher ---
+  // Quan hệ được SUY RA từ host chứ không lưu thành khoá ngoại: sự thật đó đã
+  // nằm trong cả hai hàng, và hai bản sao của một sự thật thì sẽ lệch nhau.
+  {
+    name: "nối: khớp domain với website cùng host",
+    expect: "AT Moving Services",
+    run: () =>
+      findWebsiteForDomain("atmovingservices.com", [
+        { id: "1", name: "AT Moving Services", url: "https://atmovingservices.com" },
+      ])?.name ?? "null",
+  },
+  {
+    // Domain đăng ký ở dạng apex, còn URL website có thể mang www. Coi hai thứ
+    // đó là hai site khác nhau sẽ làm mọi domain trông như chưa nối.
+    name: "nối: www và apex là CÙNG một site",
+    expect: "AT",
+    run: () =>
+      findWebsiteForDomain("atmovingservices.com", [
+        { id: "1", name: "AT", url: "https://www.atmovingservices.com/" },
+      ])?.name ?? "null",
+  },
+  {
+    // Subdomain là site KHÁC — nó có property Search Console riêng và số liệu
+    // riêng. Khớp theo hậu tố sẽ gán cho domain một website mô tả số liệu
+    // không phải của nó.
+    name: "REGRESSION nối: subdomain KHÔNG được coi là cùng site",
+    expect: "null",
+    run: () =>
+      String(
+        findWebsiteForDomain("atmovingservices.com", [
+          { id: "1", name: "Blog", url: "https://blog.atmovingservices.com" },
+        ])?.name ?? "null"
+      ),
+  },
+  {
+    name: "nối: không có website nào khớp -> null",
+    expect: "null",
+    run: () => String(findWebsiteForDomain("khac.com", [{ id: "1", name: "X", url: "https://atmovingservices.com" }])?.name ?? "null"),
+  },
+  {
+    name: "nối: chuẩn hoá host bỏ cổng, đường dẫn và chữ hoa",
+    expect: "example.com",
+    run: () => normalizeHost("HTTPS://WWW.Example.com:8443/mot/duong/dan?x=1"),
   },
 
   // --- formatPercentChange ---

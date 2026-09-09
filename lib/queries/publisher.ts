@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { fetchPublishedPostCount, deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
 import { fetchSitemapCounts, type SitemapCount } from "@/lib/sitemap/count";
+import { normalizeHost } from "@/lib/publisher/link-domain";
 import { fetchSiteSearchTotals, fetchTopPages } from "@/lib/google/search-console";
 import { fetchSiteTrafficTotals, fetchTrafficBySource } from "@/lib/google/analytics-data";
 
@@ -62,6 +63,15 @@ export async function getWebsiteOverviewRows(): Promise<WebsiteOverviewRow[]> {
 
 export interface WebsiteDetail {
   website: NonNullable<Awaited<ReturnType<typeof prisma.website.findUnique>>>;
+  /**
+   * The registered domain behind this website, if it is registered here.
+   *
+   * Shown because the two failures look identical from Publisher: a site whose
+   * numbers are zero because nobody has visited, and a site whose numbers are
+   * zero because DNS never pointed anywhere. The second is answered on the
+   * Domain screen, and until now nothing on this page said to go look.
+   */
+  domain: { id: string; name: string; cloudflareStatus: string | null; cloudflareError: string | null } | null;
   /** From the sitemap — everything published. */
   sitemapCount: SitemapCount | null;
   sitemapError: string | null;
@@ -86,6 +96,12 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
   const website = await prisma.website.findUnique({ where: { id: websiteId } });
   if (!website) return null;
 
+  const host = normalizeHost(website.url);
+  const domains = await prisma.domain.findMany({
+    select: { id: true, name: true, cloudflareStatus: true, cloudflareError: true },
+  });
+  const domain = domains.find((d) => normalizeHost(d.name) === host) ?? null;
+
   const wpApiBaseUrl = website.wpApiBaseUrl ?? deriveWpApiBaseUrl(website.url);
   const [sitemapResult, postCountResult, gscResult, ga4Result] = await Promise.all([
     fetchSitemapCounts(website.url).then(
@@ -108,6 +124,7 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
 
   return {
     website,
+    domain,
     sitemapCount: sitemapResult.ok ? sitemapResult.value : null,
     sitemapError: sitemapResult.ok ? null : sitemapResult.error,
     postCount: postCountResult.ok ? postCountResult.value : null,
