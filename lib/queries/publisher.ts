@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { fetchPublishedPostCount, deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
+import { fetchPublishedPostCount, deriveWpApiBaseUrl, deriveWpAdminUrl, type WpAdminLink } from "@/lib/wordpress/rest-api";
 import { fetchSitemapCounts, type SitemapCount } from "@/lib/sitemap/count";
 import { normalizeHost } from "@/lib/publisher/link-domain";
 import { fetchSiteSearchTotals, fetchTopPages } from "@/lib/google/search-console";
@@ -11,6 +11,9 @@ export interface WebsiteOverviewRow {
   website: Awaited<ReturnType<typeof prisma.website.findMany>>[number];
   /** URLs the site submits for indexing, read from its sitemap. */
   sitemapCount: SitemapCount | null;
+  /** Where WordPress's admin actually lives — derived from the REST base, not
+   * from the public origin, which on a headless site has no /wp-admin. */
+  wpAdmin: WpAdminLink;
   /**
    * pagesWithImpressions / sitemap total.
    *
@@ -35,13 +38,15 @@ export async function getWebsiteOverviewRows(): Promise<WebsiteOverviewRow[]> {
   return Promise.all(
     websites.map(async (website): Promise<WebsiteOverviewRow> => {
       try {
-        const [sitemapCount, searchTotals, trafficTotals] = await Promise.all([
+        const wpAdmin = deriveWpAdminUrl(website.wpApiBaseUrl, website.url);
+      const [sitemapCount, searchTotals, trafficTotals] = await Promise.all([
           fetchSitemapCounts(website.url),
           fetchSiteSearchTotals(website.gscPropertyUrl, OVERVIEW_WINDOW_DAYS),
           fetchSiteTrafficTotals(website.ga4PropertyId, OVERVIEW_WINDOW_DAYS),
         ]);
         return {
           website,
+          wpAdmin,
           sitemapCount,
           indexRateEstimate:
             sitemapCount.total > 0 ? searchTotals.pagesWithImpressions / sitemapCount.total : null,
@@ -51,6 +56,7 @@ export async function getWebsiteOverviewRows(): Promise<WebsiteOverviewRow[]> {
       } catch (err) {
         return {
           website,
+          wpAdmin: deriveWpAdminUrl(website.wpApiBaseUrl, website.url),
           sitemapCount: null,
           indexRateEstimate: null,
           totalUsers: null,
@@ -72,6 +78,7 @@ export interface WebsiteDetail {
    * Domain screen, and until now nothing on this page said to go look.
    */
   domain: { id: string; name: string; cloudflareStatus: string | null; cloudflareError: string | null } | null;
+  wpAdmin: WpAdminLink;
   /** From the sitemap — everything published. */
   sitemapCount: SitemapCount | null;
   sitemapError: string | null;
@@ -125,6 +132,7 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
   return {
     website,
     domain,
+    wpAdmin: deriveWpAdminUrl(website.wpApiBaseUrl, website.url),
     sitemapCount: sitemapResult.ok ? sitemapResult.value : null,
     sitemapError: sitemapResult.ok ? null : sitemapResult.error,
     postCount: postCountResult.ok ? postCountResult.value : null,

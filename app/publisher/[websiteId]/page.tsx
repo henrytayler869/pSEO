@@ -8,13 +8,14 @@ import { PageHeader } from "@/components/page-header";
 import { getWebsiteDetail } from "@/lib/queries/publisher";
 import { MeasurementIdForm } from "@/components/measurement-id-form";
 import { RevalidateSecretForm } from "@/components/revalidate-secret-form";
+import { WpAdminLinkCell } from "@/components/wp-admin-link";
 
 export default async function WebsiteDetailPage({ params }: { params: Promise<{ websiteId: string }> }) {
   const { websiteId } = await params;
   const detail = await getWebsiteDetail(websiteId);
   if (!detail) notFound();
 
-  const { website, domain, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
+  const { website, domain, wpAdmin, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
 
   return (
     <div className="flex flex-col gap-6">
@@ -43,6 +44,19 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
           </>
         }
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>WordPress Admin</CardTitle>
+          <CardDescription>
+            Địa chỉ suy ra từ REST API base của site, KHÔNG từ URL công khai — với site headless thì URL công khai phục
+            vụ Next.js và không hề có /wp-admin.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <WpAdminLinkCell link={wpAdmin} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

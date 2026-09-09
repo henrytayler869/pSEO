@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { ConnectWebsiteForm } from "@/components/connect-website-form";
+import { WpAdminLinkCell } from "@/components/wp-admin-link";
 import { RemoveWebsiteButton } from "@/components/remove-website-button";
 import { getWebsiteOverviewRows } from "@/lib/queries/publisher";
 
@@ -38,6 +39,7 @@ export default async function PublisherPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Website</TableHead>
+                  <TableHead>WP Admin</TableHead>
                   <TableHead>URL trong sitemap</TableHead>
                   <TableHead>Tỷ lệ index (ước tính)</TableHead>
                   <TableHead>Total traffic (28 ngày)</TableHead>
@@ -52,6 +54,14 @@ export default async function PublisherPage() {
                         {row.website.name}
                       </Link>
                       <div className="text-xs text-muted-foreground">{row.website.url}</div>
+                    </TableCell>
+                    {/*
+                      WP Admin hiện KỂ CẢ khi hàng lỗi. Link đó suy ra từ cấu
+                      hình, không phụ thuộc vào GSC/GA4/sitemap — chính là lúc
+                      những thứ kia hỏng thì người ta mới cần vào wp-admin nhất.
+                    */}
+                    <TableCell>
+                      <WpAdminLinkCell link={row.wpAdmin} />
                     </TableCell>
                     {row.error ? (
                       <TableCell colSpan={3} className="text-xs text-red-700">

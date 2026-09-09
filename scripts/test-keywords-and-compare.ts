@@ -18,6 +18,7 @@ import { explainGoogleApiError } from "../lib/google/service-account";
 import { parseSitemapXml, categoriseSitemapUrls } from "../lib/sitemap/count";
 import { parseZoneListResponse } from "../lib/cloudflare/zones";
 import { normalizeHost, findWebsiteForDomain } from "../lib/publisher/link-domain";
+import { deriveWpAdminUrl } from "../lib/wordpress/rest-api";
 
 interface Case {
   name: string;
@@ -508,6 +509,50 @@ const CASES: Case[] = [
     name: "nối: chuẩn hoá host bỏ cổng, đường dẫn và chữ hoa",
     expect: "example.com",
     run: () => normalizeHost("HTTPS://WWW.Example.com:8443/mot/duong/dan?x=1"),
+  },
+
+  // --- wp-admin ---
+  {
+    // REGRESSION: suy từ URL CÔNG KHAI sẽ ra https://<site>/wp-admin, mà site
+    // headless phục vụ Next.js ở đó và không hề có /wp-admin. Một link trông
+    // đúng mà đi tới hư không tệ hơn không có link: nó được bấm, nó hỏng, và
+    // cái hỏng đó trông như WordPress chết chứ không như địa chỉ sai.
+    name: "REGRESSION wp-admin: suy từ REST base chứ không từ URL công khai",
+    expect: "http://127.0.0.1:8090/wp-admin",
+    run: () => deriveWpAdminUrl("http://127.0.0.1:8090/wp-json/wp/v2", "https://atmovingservices.com").url,
+  },
+  {
+    name: "wp-admin: host loopback -> đánh dấu chỉ-mở-từ-máy-chủ, kèm lệnh tunnel",
+    expect: "serverOnly + tunnel 8090",
+    run: () => {
+      const r = deriveWpAdminUrl("http://127.0.0.1:8090/wp-json/wp/v2", "https://x.com");
+      return r.serverOnly && r.tunnelHint?.includes("8090:127.0.0.1:8090") ? "serverOnly + tunnel 8090" : `sai: ${JSON.stringify(r)}`;
+    },
+  },
+  {
+    name: "wp-admin: host công khai -> mở thẳng, không cần tunnel",
+    expect: "https://cms.example.com/wp-admin|false",
+    run: () => {
+      const r = deriveWpAdminUrl("https://cms.example.com/wp-json/wp/v2", "https://example.com");
+      return `${r.url}|${r.serverOnly}`;
+    },
+  },
+  {
+    // Cắt theo /wp-json chứ không cắt một số đoạn cố định: vài cài đặt proxy
+    // REST API ở độ sâu namespace khác, và cắt cứng sẽ ra origin sai cho họ.
+    name: "wp-admin: cắt theo /wp-json bất kể độ sâu namespace",
+    expect: "https://cms.example.com/wp-admin",
+    run: () => deriveWpAdminUrl("https://cms.example.com/wp-json/custom/v3/abc", "https://example.com").url,
+  },
+  {
+    name: "wp-admin: chưa cấu hình REST base -> suy từ URL site",
+    expect: "https://example.com/wp-admin",
+    run: () => deriveWpAdminUrl(null, "https://example.com/").url,
+  },
+  {
+    name: "wp-admin: IP mạng nội bộ 192.168.x cũng là chỉ-mở-từ-máy-chủ",
+    expect: "true",
+    run: () => String(deriveWpAdminUrl("http://192.168.1.50:8080/wp-json/wp/v2", "https://x.com").serverOnly),
   },
 
   // --- formatPercentChange ---
