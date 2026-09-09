@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
+import { getTrafficVerticalSummaries } from "@/lib/queries/traffic-research";
 import { getCredential } from "@/lib/settings/credentials";
 import { createCloudflareZone, getCloudflareZone, CloudflareApiError } from "@/lib/cloudflare/zones";
 
@@ -36,6 +37,32 @@ export async function addDomainAction(_prev: ActionResult, formData: FormData): 
 
   if (!name) {
     return { ok: false, message: "Vui lòng nhập tên domain." };
+  }
+
+  /**
+   * The dropdown constrains the choice; this enforces it.
+   *
+   * A <select> is a suggestion, not a boundary — the form posts whatever it is
+   * told to, and a value that never appeared in the list would be stored
+   * silently and match no niche anywhere. Validating server-side is what makes
+   * the dropdown mean something rather than decorate the page.
+   *
+   * The message names the niches that DO exist. "Không hợp lệ" leaves someone
+   * comparing their spelling against a list they cannot see.
+   */
+  if (relevantVertical) {
+    const researched = await getTrafficVerticalSummaries();
+    const known = researched.map((n) => n.vertical);
+    if (!known.includes(relevantVertical)) {
+      return {
+        ok: false,
+        message:
+          `Niche "${relevantVertical}" chưa được nghiên cứu nên không gắn được. ` +
+          (known.length > 0
+            ? `Đang có: ${known.join(", ")}.`
+            : "Hiện chưa niche nào có thị trường được chấm điểm traffic."),
+      };
+    }
   }
 
   const creds = await getCloudflareCredentials();

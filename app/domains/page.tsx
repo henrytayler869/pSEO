@@ -7,6 +7,7 @@ import { AddDomainForm } from "@/components/add-domain-form";
 import { RefreshDomainButton } from "@/components/refresh-domain-button";
 import { RemoveDomainButton } from "@/components/remove-domain-button";
 import { getDomains } from "@/lib/queries/domains";
+import { getTrafficVerticalSummaries } from "@/lib/queries/traffic-research";
 
 function StatusBadge({ status, error }: { status: string | null; error: string | null }) {
   if (error) {
@@ -34,7 +35,15 @@ function StatusBadge({ status, error }: { status: string | null; error: string |
 }
 
 export default async function DomainsPage() {
-  const domains = await getDomains();
+  // Cùng một nguồn với /api/v1/niches và với phần xác thực trong action —
+  // ba chỗ hỏi "niche nào đã nghiên cứu" phải cùng nhận một câu trả lời, nếu
+  // không thì dropdown sẽ mời một lựa chọn mà action từ chối.
+  const [domains, nicheSummaries] = await Promise.all([getDomains(), getTrafficVerticalSummaries()]);
+  const niches = nicheSummaries.map((n) => ({
+    vertical: n.vertical,
+    scoredMarketCount: n.scoredMarketCount,
+    rank: n.rank,
+  }));
 
   return (
     <div className="flex flex-col gap-6">
@@ -53,7 +62,7 @@ export default async function DomainsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <AddDomainForm />
+          <AddDomainForm niches={niches} />
           {domains.length === 0 ? (
             <p className="text-sm text-muted-foreground">Chưa có domain nào.</p>
           ) : (
