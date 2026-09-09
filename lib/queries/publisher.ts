@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { fetchPublishedPostCount, deriveWpApiBaseUrl, deriveWpAdminUrl, type WpAdminLink } from "@/lib/wordpress/rest-api";
 import { fetchSitemapCounts, type SitemapCount } from "@/lib/sitemap/count";
 import { normalizeHost } from "@/lib/publisher/link-domain";
-import { fetchSiteSearchTotals, fetchTopPages } from "@/lib/google/search-console";
+import { fetchSiteSearchTotals, fetchTopPages, listSitemaps, type SubmittedSitemap } from "@/lib/google/search-console";
 import { fetchSiteTrafficTotals, fetchTrafficBySource } from "@/lib/google/analytics-data";
 
 const OVERVIEW_WINDOW_DAYS = 28;
@@ -79,6 +79,10 @@ export interface WebsiteDetail {
    */
   domain: { id: string; name: string; cloudflareStatus: string | null; cloudflareError: string | null } | null;
   wpAdmin: WpAdminLink;
+  /** What Search Console holds, which is not the same as what the site
+   * publishes: an empty list means nobody ever submitted the sitemap. */
+  sitemaps: SubmittedSitemap[] | null;
+  sitemapsError: string | null;
   /** From the sitemap — everything published. */
   sitemapCount: SitemapCount | null;
   sitemapError: string | null;
@@ -110,7 +114,11 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
   const domain = domains.find((d) => normalizeHost(d.name) === host) ?? null;
 
   const wpApiBaseUrl = website.wpApiBaseUrl ?? deriveWpApiBaseUrl(website.url);
-  const [sitemapResult, postCountResult, gscResult, ga4Result] = await Promise.all([
+  const [sitemapsResult, sitemapResult, postCountResult, gscResult, ga4Result] = await Promise.all([
+    listSitemaps(website.gscPropertyUrl).then(
+      (v) => ({ ok: true as const, value: v }),
+      (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
+    ),
     fetchSitemapCounts(website.url).then(
       (v) => ({ ok: true as const, value: v }),
       (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
@@ -133,6 +141,8 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
     website,
     domain,
     wpAdmin: deriveWpAdminUrl(website.wpApiBaseUrl, website.url),
+    sitemaps: sitemapsResult.ok ? sitemapsResult.value : null,
+    sitemapsError: sitemapsResult.ok ? null : sitemapsResult.error,
     sitemapCount: sitemapResult.ok ? sitemapResult.value : null,
     sitemapError: sitemapResult.ok ? null : sitemapResult.error,
     postCount: postCountResult.ok ? postCountResult.value : null,

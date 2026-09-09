@@ -9,13 +9,14 @@ import { getWebsiteDetail } from "@/lib/queries/publisher";
 import { MeasurementIdForm } from "@/components/measurement-id-form";
 import { RevalidateSecretForm } from "@/components/revalidate-secret-form";
 import { WpAdminLinkCell } from "@/components/wp-admin-link";
+import { SitemapSubmit } from "@/components/sitemap-submit";
 
 export default async function WebsiteDetailPage({ params }: { params: Promise<{ websiteId: string }> }) {
   const { websiteId } = await params;
   const detail = await getWebsiteDetail(websiteId);
   if (!detail) notFound();
 
-  const { website, domain, wpAdmin, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
+  const { website, domain, wpAdmin, sitemaps, sitemapsError, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
 
   return (
     <div className="flex flex-col gap-6">
@@ -44,6 +45,20 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
           </>
         }
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sitemap trên Search Console</CardTitle>
+          <CardDescription>
+            Đây là thứ Search Console ĐANG GIỮ, khác với sitemap site đang phục vụ. Nộp là việc làm một lần cho mỗi
+            property; nộp lại chỉ cập nhật chứ không tạo bản trùng. Google trả 200 ngay khi nhận, nhưng phải vài giờ
+            tới vài ngày mới đọc xong — số URL và số lỗi bên dưới chỉ có nghĩa sau lúc đó.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SitemapSubmit websiteId={website.id} siteUrl={website.url} sitemaps={sitemaps} error={sitemapsError} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

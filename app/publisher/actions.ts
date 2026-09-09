@@ -3,9 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
-import { assertValidGscProperty } from "@/lib/google/search-console";
+import { assertValidGscProperty, listSitemaps, submitSitemap } from "@/lib/google/search-console";
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "@/lib/google/analytics-data";
 import { notifySiteConfigChanged } from "@/lib/publisher/notify-site";
+import { normalizeHost } from "@/lib/publisher/link-domain";
 
 export interface ActionResult {
   ok: boolean;
@@ -28,6 +29,31 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
   // Checked here, at the only moment a person is looking at the field they
   // typed. Left to query time it surfaces as an empty dashboard days later,
   // with a 403 that reads like a permissions problem.
+  /**
+   * A website cannot be connected before its domain is registered.
+   *
+   * The order is not bureaucracy, it is the order the work actually happens
+   * in: Publisher needs a verified Search Console property and a live GA4
+   * stream, and neither exists until the domain resolves. Allowing a website
+   * row first produces a screen full of errors that describe a site nobody
+   * has finished setting up, and those errors look exactly like a broken
+   * integration.
+   *
+   * Matched on host rather than on an id, same as the Domain <-> Publisher
+   * link everywhere else — one rule, one definition of "the same site".
+   */
+  const host = normalizeHost(url);
+  const domains = await prisma.domain.findMany({ select: { name: true } });
+  if (!domains.some((d) => normalizeHost(d.name) === host)) {
+    return {
+      ok: false,
+      message:
+        `Chưa đăng ký domain "${host}" ở mục Domain, nên chưa nối Publisher được. ` +
+        `Thêm nó ở mục Domain trước — bước đó tạo hoặc nhập zone Cloudflare, và Publisher cần DNS đã trỏ mới lấy được số liệu.` +
+        (domains.length > 0 ? ` Đang có: ${domains.map((d) => d.name).join(", ")}.` : ""),
+    };
+  }
+
   try {
     assertValidGscProperty(gscPropertyUrl);
     assertValidGa4PropertyId(ga4PropertyId);
@@ -159,5 +185,45 @@ export async function updateRevalidateSecretAction(_prev: ActionResult, formData
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Lưu thất bại." };
+  }
+}
+
+/**
+ * Submits the site's sitemap to Search Console.
+ *
+ * The sitemap URL is DERIVED from the site origin rather than typed, because
+ * there is exactly one right answer and asking for it invites a wrong one —
+ * a typo here submits a 404 to Google, which then reports the sitemap as
+ * failing and nothing about that failure points back at the typo.
+ *
+ * Google answers a successful submit with an empty 200, which says "accepted
+ * for processing" and nothing about whether the file parses. So this re-reads
+ * the list afterwards and returns what Search Console actually holds — the
+ * only report worth showing.
+ */
+export async function submitSitemapAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const websiteId = String(formData.get("websiteId") ?? "").trim();
+  if (!websiteId) return { ok: false, message: "Thiếu websiteId." };
+
+  try {
+    const website = await prisma.website.findUniqueOrThrow({ where: { id: websiteId } });
+    const sitemapUrl = `${website.url.replace(/\/+$/, "")}/sitemap.xml`;
+
+    await submitSitemap(website.gscPropertyUrl, sitemapUrl);
+    const after = await listSitemaps(website.gscPropertyUrl);
+    revalidatePath(`/publisher/${websiteId}`);
+
+    const mine = after.find((s) => s.path === sitemapUrl);
+    return {
+      ok: true,
+      message: mine
+        ? `Đã nộp ${sitemapUrl}. Search Console ghi nhận: ${mine.isPending ? "đang xử lý" : "đã xử lý"}` +
+          `${mine.submittedUrls !== null ? `, ${mine.submittedUrls} URL` : ""}` +
+          `${mine.errors > 0 ? `, ${mine.errors} lỗi` : ""}${mine.warnings > 0 ? `, ${mine.warnings} cảnh báo` : ""}.` +
+          " Google mất vài giờ tới vài ngày mới đọc xong — con số này chưa phải kết quả cuối."
+        : `Đã gửi ${sitemapUrl} nhưng Search Console CHƯA liệt kê nó. Nhiều khả năng đang xử lý; nếu sau vài phút vẫn không thấy thì kiểm lại URL sitemap.`,
+    };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Nộp sitemap thất bại." };
   }
 }

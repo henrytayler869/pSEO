@@ -186,3 +186,72 @@ function dateRange(days: number): { startDate: string; endDate: string } {
   const start = new Date(end.getTime() - days * 86400000);
   return { startDate: start.toISOString().slice(0, 10), endDate: end.toISOString().slice(0, 10) };
 }
+
+const GSC_FULL_SCOPE = "https://www.googleapis.com/auth/webmasters";
+
+export interface SubmittedSitemap {
+  path: string;
+  lastSubmitted: string | null;
+  isPending: boolean;
+  warnings: number;
+  errors: number;
+  submittedUrls: number | null;
+}
+
+/**
+ * Sitemaps Search Console currently knows about for a property.
+ *
+ * Needs the FULL webmasters scope, not the readonly one — Google treats the
+ * sitemap list as part of the write surface. Worth knowing before wondering
+ * why a readonly token returns 403 on a plain GET.
+ */
+export async function listSitemaps(propertyUrl: string): Promise<SubmittedSitemap[]> {
+  assertValidGscProperty(propertyUrl);
+  const token = await getGoogleAccessToken([GSC_FULL_SCOPE]);
+  const response = await fetch(
+    `${SEARCH_ANALYTICS_BASE}/sites/${encodeURIComponent(propertyUrl)}/sitemaps`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!response.ok) {
+    throw new Error(`GSC sitemaps.list thất bại cho ${propertyUrl}: ${explainGoogleApiError(response.status, await response.text())}`);
+  }
+  const body = (await response.json()) as { sitemap?: unknown };
+  // No sitemaps submitted returns {} with no `sitemap` key at all — an empty
+  // answer, not a malformed one. Reading that as drift would report a problem
+  // for the normal state of a property nobody has submitted to yet.
+  if (!Array.isArray(body.sitemap)) return [];
+  return (body.sitemap as Record<string, unknown>[]).map((s) => ({
+    path: typeof s.path === "string" ? s.path : "(không rõ)",
+    lastSubmitted: typeof s.lastSubmitted === "string" ? s.lastSubmitted : null,
+    isPending: s.isPending === true,
+    warnings: Number(s.warnings ?? 0),
+    errors: Number(s.errors ?? 0),
+    submittedUrls: Array.isArray(s.contents)
+      ? (s.contents as Record<string, unknown>[]).reduce((sum, c) => sum + Number(c.submitted ?? 0), 0)
+      : null,
+  }));
+}
+
+/**
+ * Submits a sitemap to Search Console.
+ *
+ * Idempotent from Google's side: submitting a sitemap that is already there
+ * updates it rather than duplicating, so a second click is harmless.
+ *
+ * Returns nothing useful on success — Google answers 200 with an empty body —
+ * so callers should re-read listSitemaps rather than trust the call's silence.
+ * A 200 here means "accepted for processing", not "crawled and valid"; the
+ * errors and warnings counts only appear later, which is why the UI shows the
+ * list rather than a success message.
+ */
+export async function submitSitemap(propertyUrl: string, sitemapUrl: string): Promise<void> {
+  assertValidGscProperty(propertyUrl);
+  const token = await getGoogleAccessToken([GSC_FULL_SCOPE]);
+  const response = await fetch(
+    `${SEARCH_ANALYTICS_BASE}/sites/${encodeURIComponent(propertyUrl)}/sitemaps/${encodeURIComponent(sitemapUrl)}`,
+    { method: "PUT", headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!response.ok) {
+    throw new Error(`GSC sitemaps.submit thất bại cho ${sitemapUrl}: ${explainGoogleApiError(response.status, await response.text())}`);
+  }
+}
