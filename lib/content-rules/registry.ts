@@ -60,9 +60,17 @@ export interface ContentRules {
    * data rather than declared.
    *
    * A site aggregating across ZIPs must key COUNTY metrics by county or it
-   * multiplies them: measured once at 4.67x for IRS inflow across 256 ZIPs in
-   * 97 counties, a number that looked entirely plausible. A change here is a
-   * BREAKING CHANGE for every site that sums.
+   * multiplies them. Measured across 256 ZIPs in 97 counties:
+   *
+   *   irs_migration_net_households    13.07x   <- worst, and in use on a pillar
+   *   irs_migration_outflow            5.07x
+   *   irs_migration_inflow_households  4.67x
+   *   census_* (9 metrics)             1.00x
+   *
+   * The worst case is the one to quote. 4.67x was the first number measured
+   * and it is the one that got repeated; net migration is a difference, so
+   * per-ZIP summing amplifies it differently and lands almost three times
+   * further out. A change here is a BREAKING CHANGE for every site that sums.
    */
   metricResolutions: { metric: string; resolutions: string[]; ambiguous: boolean }[];
 
@@ -85,7 +93,7 @@ export interface ContentRules {
   declaredRules: { id: string; rule: string; enforcedBy: string }[];
 }
 
-const RULES_VERSION = "2";
+const RULES_VERSION = "3";
 
 /**
  * The trust pages. Measured absence on atmovingservices.com 2026-09-09: all
@@ -159,6 +167,18 @@ const VECTOR_FACTS: FactSet = {
       scope: "ZIP",
       scopeName: null,
     },
+    {
+      // A fact whose value is a whole number, present specifically so a vector
+      // can pin what happens when text rounds TOWARD it. Without an integer
+      // fact in the set the question cannot be asked.
+      key: "census_homeownership_rate_pct",
+      label: "homeownership rate",
+      value: 23,
+      display: "23%",
+      unit: "%",
+      scope: "ZIP",
+      scopeName: null,
+    },
   ],
 };
 
@@ -221,7 +241,15 @@ export async function buildContentRules(): Promise<ContentRules> {
         ),
         vector(
           "23% of residents lived elsewhere a year ago.",
-          "Làm tròn lại một tỷ lệ đã được in ở mức 22.6%.",
+          "Trùng khớp fact tỷ lệ sở hữu nhà (23%) — chấp nhận vì nó bằng ĐÚNG một fact, không phải vì nó gần 22.6%.",
+        ),
+        vector(
+          "23.4% of residents lived elsewhere a year ago.",
+          "Văn bản làm tròn về phía một fact nguyên (23). Câu hỏi do site đặt ra: một allowance kiểu Math.round ở PHÍA VĂN BẢN có hợp lệ không. Verdict đo được ở đây là câu trả lời.",
+        ),
+        vector(
+          "7.75% of residents lived elsewhere a year ago.",
+          "HAI phép làm tròn gặp nhau ở giữa: 7.75 không nằm trong danh sách cho phép của fact nào, nhưng Math.round(7.75)=8 và 8 cũng là Math.round của một fact khác. Không phép làm tròn nào một mình cho nó qua — chỉ hai cái cộng lại. Site đo được 3/119 đoạn đang sống nhờ đúng lỗ này.",
         ),
       ],
     },
@@ -259,8 +287,23 @@ export async function buildContentRules(): Promise<ContentRules> {
       },
       {
         id: "aggregate-must-declare-scope",
-        rule: "Một con số gộp qua nhiều địa bàn phải tự khai cách gộp ngay cạnh nó, và phải key theo đúng resolution của metric. Cộng một metric cấp COUNTY theo từng ZIP sẽ nhân lên số lần bằng số ZIP mỗi county.",
+        rule: "Một con số gộp qua nhiều địa bàn phải in kèm, ngay cạnh nó: phép tính đã dùng, SỐ LƯỢNG geography góp vào, danh từ chỉ phạm vi, và nguồn — và phải vào cả measurementTechnique trong JSON-LD. Phải key theo đúng resolution của metric: cộng một metric cấp COUNTY theo từng ZIP nhân lên tới 13.07x (đo được, irs_migration_net_households). Phần 'số lượng geography' không phải trang trí — nó là thứ cho người đọc kiểm được phép cộng.",
         enforcedBy: "phía site — HQ không sinh số gộp",
+      },
+      {
+        id: "cluster-no-zip-anchor",
+        rule: "Trên trang cụm, một đoạn chỉ trích số cấp county bị TỪ CHỐI. Số county giống nhau ở mọi ZIP trong cụm nên đoạn đó nói y hệt trên mọi trang của cụm — thin content mặc áo khác. Đoạn phải chạm ít nhất một figure cấp ZIP. KHÁC scope_overclaim: ở đây phạm vi được nói ĐÚNG, cái thiếu là bất cứ điều gì riêng của ZIP.",
+        enforcedBy: "phía site — lib/content/validate.ts",
+      },
+      {
+        id: "no-price-claims",
+        rule: "Không nêu giá, ước giá, khoảng giá hay bảng giá dịch vụ. HQ có CPC, không có giá — mọi con số tiền trong bài về chi phí dịch vụ đều là bịa. KHÁC no-supply-side-bridge: cái kia chặn bắc cầu từ một số sang khẳng định phía cung; cái này chặn nêu giá trực tiếp, kể cả khi không bắc cầu từ đâu.",
+        enforcedBy: "phía site — 4 luật price-*",
+      },
+      {
+        id: "stay-in-trade",
+        rule: "Đoạn viết cho một ngành không được nói như ngành khác, không hứa bảo hành, không mô tả dịch vụ định kỳ nếu ngành đó không phải vậy. Bắt prompt drift giữa các vertical dùng chung template.",
+        enforcedBy: "phía site — niche-other-trade, niche-warranty, niche-routine-service",
       },
     ],
   };

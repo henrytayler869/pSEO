@@ -58,9 +58,36 @@ function allowedValuesFor(fact: Fact): number[] {
   // The prompt's own string, e.g. "$8.1 million" or "22.6%". Parsing it back
   // is what makes "8.1" acceptable without opening a window around 8.1.
   const printed = fact.display.match(/-?\d[\d,]*(?:\.\d+)?/);
-  if (printed) {
-    const v = Math.abs(Number(printed[0].replace(/,/g, "")));
-    if (Number.isFinite(v)) values.push(v);
+  if (!printed) return values;
+
+  const shown = Math.abs(Number(printed[0].replace(/,/g, "")));
+  if (!Number.isFinite(shown)) return values;
+  values.push(shown);
+
+  /**
+   * Also allow the displayed figure written with FEWER DECIMAL PLACES.
+   *
+   * CORRECTION to a rule that was too strict in one specific direction, and
+   * whose error message then blamed the wrong party.
+   *
+   * The prompt prints mobility as "7.63%" — two decimals, chosen so the
+   * printed figure stays within tolerance of the measurement. A model writing
+   * "7.6% of residents" has not invented anything: it wrote the figure it was
+   * handed, at the precision prose normally uses. The strict rule rejected it
+   * and the message said "model tự bịa hoặc tự tính ra" — sending a reader to
+   * hunt a fabrication that never happened. 16 of 148 cached passages were in
+   * exactly this state.
+   *
+   * Reducing decimals is NOT the same as re-rounding to a coarser magnitude,
+   * and that distinction is what keeps this from reopening the hole it
+   * replaced. "$808,500" is displayed with zero decimals, so no reduction
+   * exists and "$809,000" stays rejected. "7.7%" reduced is "7.7" or "8" —
+   * never "7.75", so the double-rounding case the published site found stays
+   * rejected too.
+   */
+  const decimals = (printed[0].split(".")[1] ?? "").length;
+  for (let d = decimals - 1; d >= 0; d--) {
+    values.push(Number(shown.toFixed(d)));
   }
   return values;
 }
