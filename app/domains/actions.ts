@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { getTrafficVerticalSummaries } from "@/lib/queries/traffic-research";
 import { getCredential } from "@/lib/settings/credentials";
-import { createCloudflareZone, getCloudflareZone, CloudflareApiError } from "@/lib/cloudflare/zones";
+import { createCloudflareZone, getCloudflareZone, findCloudflareZoneByName, CloudflareApiError } from "@/lib/cloudflare/zones";
 
 export interface ActionResult {
   ok: boolean;
@@ -105,24 +105,35 @@ async function addDomain(_prev: ActionResult, formData: FormData): Promise<Actio
     return { ok: false, message: creds.error };
   }
 
+  /**
+   * "Thêm domain" and "create a Cloudflare zone" are not the same request.
+   *
+   * A domain bought and pointed at Cloudflare months ago is ALREADY a zone.
+   * Asking Cloudflare to create it again is refused — correctly — and the
+   * refusal used to be reported as a failure, leaving a row with an error on
+   * it and no zone id, for a domain that was working perfectly.
+   *
+   * So: look for an existing zone FIRST. Creating is what happens when there
+   * is nothing to adopt, not the default that everything else is an exception
+   * to.
+   *
+   * The two outcomes are reported as DIFFERENT things. "Đã tạo" and "đã nhập"
+   * lead to different next steps — a created zone needs its nameservers
+   * pointed at Cloudflare, an adopted one already has them — and a message
+   * that says "added" for both would send someone to change DNS that is
+   * already correct.
+   */
+  let zone: Awaited<ReturnType<typeof createCloudflareZone>>;
+  let imported: boolean;
   try {
-    const zone = await createCloudflareZone(name, creds.apiToken, creds.accountId);
-    await prisma.domain.create({
-      data: {
-        name,
-        relevantVertical,
-        cloudflareZoneId: zone.id,
-        cloudflareStatus: zone.status,
-        nameServers: zone.nameServers,
-        cloudflareError: null,
-        lastCheckedAt: new Date(),
-      },
-    });
-    revalidatePath("/domains");
-    return {
-      ok: true,
-      message: `Đã thêm "${name}" vào Cloudflare (trạng thái: ${zone.status}). Trỏ nameserver tại registrar sang: ${zone.nameServers.join(", ")}.`,
-    };
+    const existing = await findCloudflareZoneByName(name, creds.apiToken);
+    if (existing) {
+      zone = existing;
+      imported = true;
+    } else {
+      zone = await createCloudflareZone(name, creds.apiToken, creds.accountId);
+      imported = false;
+    }
   } catch (err) {
     const message = err instanceof CloudflareApiError || err instanceof Error ? err.message : "Thêm domain vào Cloudflare thất bại.";
     await prisma.domain.create({
@@ -131,6 +142,26 @@ async function addDomain(_prev: ActionResult, formData: FormData): Promise<Actio
     revalidatePath("/domains");
     return { ok: false, message: `Đã lưu "${name}" nhưng thêm vào Cloudflare thất bại: ${message}` };
   }
+
+  await prisma.domain.create({
+    data: {
+      name,
+      relevantVertical,
+      cloudflareZoneId: zone.id,
+      cloudflareStatus: zone.status,
+      nameServers: zone.nameServers,
+      cloudflareError: null,
+      lastCheckedAt: new Date(),
+    },
+  });
+  revalidatePath("/domains");
+
+  return {
+    ok: true,
+    message: imported
+      ? `Đã NHẬP zone có sẵn của "${name}" (trạng thái: ${zone.status}). Zone này đã tồn tại trên Cloudflare từ trước — không tạo mới, không đụng gì tới DNS đang chạy. Nameserver hiện tại: ${zone.nameServers.join(", ")}.`
+      : `Đã TẠO zone mới cho "${name}" (trạng thái: ${zone.status}). Cần trỏ nameserver tại registrar sang: ${zone.nameServers.join(", ")}.`,
+  };
 }
 
 /** Re-checks a Domain's Cloudflare status: if it never got a zone (previous
@@ -146,9 +177,15 @@ export async function refreshDomainAction(_prev: ActionResult, formData: FormDat
   if ("error" in creds) return { ok: false, message: creds.error };
 
   try {
+    // Same order as adding: adopt before creating. A row that failed to add
+    // earlier has no zone id, and re-checking it used to jump straight to
+    // "create" — which is the one thing that cannot work for a domain whose
+    // zone already exists, i.e. exactly the rows most likely to be sitting
+    // here with an error on them.
     const zone = domain.cloudflareZoneId
       ? await getCloudflareZone(domain.cloudflareZoneId, creds.apiToken)
-      : await createCloudflareZone(domain.name, creds.apiToken, creds.accountId);
+      : ((await findCloudflareZoneByName(domain.name, creds.apiToken)) ??
+        (await createCloudflareZone(domain.name, creds.apiToken, creds.accountId)));
 
     await prisma.domain.update({
       where: { id },

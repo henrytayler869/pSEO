@@ -97,7 +97,8 @@ export function AddDomainForm({ niches }: { niches: NicheOption[] }) {
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Sẽ tạo một zone thật trên Cloudflare cho domain này (cần CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID ở Cài đặt).
+        Nếu domain đã là zone trên Cloudflare thì hệ thống NHẬP zone đó vào, không tạo mới và không đụng tới DNS đang
+        chạy. Chỉ khi chưa có zone nào nó mới tạo. Cần CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID ở trang Cài đặt.
       </p>
       <div className="flex items-center gap-2">
         <Button type="submit" size="sm" variant="secondary" disabled={pending}>

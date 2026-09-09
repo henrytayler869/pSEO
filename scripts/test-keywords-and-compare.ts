@@ -16,6 +16,7 @@ import { assertValidGscProperty } from "../lib/google/search-console";
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "../lib/google/analytics-data";
 import { explainGoogleApiError } from "../lib/google/service-account";
 import { parseSitemapXml, categoriseSitemapUrls } from "../lib/sitemap/count";
+import { parseZoneListResponse } from "../lib/cloudflare/zones";
 
 interface Case {
   name: string;
@@ -395,6 +396,72 @@ const CASES: Case[] = [
     name: "sitemap: <loc> có xuống dòng và khoảng trắng vẫn đọc được",
     expect: "1",
     run: () => String(parseSitemapXml(`<urlset><url><loc>\n  ${SITE}/a\n </loc></url></urlset>`).locs.length),
+  },
+
+  // --- Cloudflare: tra zone có sẵn ---
+  // "Thêm domain" và "tạo zone" không phải một yêu cầu. Một domain đã trỏ về
+  // Cloudflare từ trước ĐÃ là zone; xin tạo lại sẽ bị từ chối, và lời từ chối
+  // đó từng bị báo như một thất bại cho một domain đang chạy hoàn hảo.
+  {
+    name: "cloudflare: tìm thấy zone có sẵn -> trả zone",
+    expect: "zone123:active",
+    run: () => {
+      const body = JSON.stringify({
+        success: true,
+        result: [{ id: "zone123", name: "atmovingservices.com", status: "active", name_servers: ["a.ns", "b.ns"] }],
+      });
+      const z = parseZoneListResponse(200, body, "atmovingservices.com");
+      return z ? `${z.id}:${z.status}` : "null";
+    },
+  },
+  {
+    // REGRESSION: mảng RỖNG là một câu trả lời thật ("tài khoản không có zone
+    // nào tên đó"), khác hẳn lỗi. Gộp hai thứ lại sẽ báo "Cloudflare từ chối"
+    // cho một domain chỉ đơn giản là chưa được thêm.
+    name: "REGRESSION cloudflare: mảng rỗng -> null, KHÔNG phải lỗi",
+    expect: "null",
+    run: () => String(parseZoneListResponse(200, JSON.stringify({ success: true, result: [] }), "x.com")),
+  },
+  {
+    // ?name= là bộ lọc. Nếu nó nới ra, hoặc một proxy bỏ qua nó, thì khớp theo
+    // tiền tố sẽ nhận nhầm zone của domain KHÁC — hậu quả là một hàng trỏ vào
+    // DNS của người khác.
+    name: "REGRESSION cloudflare: khớp CHÍNH XÁC tên, không nhận zone gần giống",
+    expect: "null",
+    run: () => {
+      const body = JSON.stringify({
+        success: true,
+        result: [{ id: "z", name: "notatmovingservices.com", status: "active", name_servers: [] }],
+      });
+      return String(parseZoneListResponse(200, body, "atmovingservices.com"));
+    },
+  },
+  {
+    name: "cloudflare: success=false -> ném lỗi kèm lời Cloudflare",
+    expect: "có lời cloudflare",
+    run: () => {
+      const body = JSON.stringify({ success: false, result: null, errors: [{ message: "Invalid API token" }] });
+      try { parseZoneListResponse(403, body, "x.com"); return "KHÔNG NÉM"; }
+      catch (e) { return e instanceof Error && e.message.includes("Invalid API token") ? "có lời cloudflare" : `sai: ${e}`; }
+    },
+  },
+  {
+    // Phản hồi list trả MẢNG, còn create/get trả object. Dùng nhầm bộ phân
+    // tích sẽ kêu "schema drift" cho một kết quả rỗng hoàn toàn bình thường.
+    name: "cloudflare: result là object (không phải mảng) -> báo schema drift",
+    expect: "drift",
+    run: () => {
+      try { parseZoneListResponse(200, JSON.stringify({ success: true, result: {} }), "x.com"); return "KHÔNG NÉM"; }
+      catch (e) { return e instanceof Error && e.message.includes("schema drift") ? "drift" : `sai: ${e}`; }
+    },
+  },
+  {
+    name: "cloudflare: body không phải JSON -> nêu rõ, không nuốt",
+    expect: "không phải JSON",
+    run: () => {
+      try { parseZoneListResponse(502, "<html>Bad Gateway</html>", "x.com"); return "KHÔNG NÉM"; }
+      catch (e) { return e instanceof Error && e.message.includes("không phải JSON") ? "không phải JSON" : `sai: ${e}`; }
+    },
   },
 
   // --- formatPercentChange ---
