@@ -19,10 +19,24 @@ export function AddDomainForm({ niches }: { niches: NicheOption[] }) {
   const [state, formAction, pending] = useActionState(addDomainAction, initialState);
   const [open, setOpen] = useState(false);
 
+  /**
+   * Held in state so a rejected submit keeps what was typed.
+   *
+   * An uncontrolled input is emptied when the server action re-renders the
+   * form, and the failure here is worse than the retyping: the placeholder is
+   * a domain name, so an empty field looks exactly like a filled one. Someone
+   * whose submit was rejected sees their domain still sitting there in grey,
+   * clicks Thêm again, and submits nothing — twice.
+   */
+  const [name, setName] = useState("");
+
   const [handledState, setHandledState] = useState(state);
   if (state !== handledState) {
     setHandledState(state);
-    if (state.ok) setOpen(false);
+    if (state.ok) {
+      setOpen(false);
+      setName(""); // chỉ xoá khi THÀNH CÔNG — thất bại phải giữ lại thứ đã gõ
+    }
   }
 
   if (!open) {
@@ -40,7 +54,13 @@ export function AddDomainForm({ niches }: { niches: NicheOption[] }) {
           <span className="text-xs font-medium text-muted-foreground">Tên domain</span>
           <input
             name="name"
-            placeholder="atmovingservices.com"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            // Deliberately not a real domain anyone here would type. A
+            // placeholder showing the exact value someone wants to enter reads
+            // as already filled in — grey text in an empty box is the oldest
+            // way to make a form lie about its own state.
+            placeholder="vd: example.com"
             className="rounded-md border px-2.5 py-1.5 text-sm"
             autoComplete="off"
           />
