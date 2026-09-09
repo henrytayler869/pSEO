@@ -26,6 +26,16 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
         </Link>
       </div>
 
+      <div className="flex gap-1 border-b">
+        <span className="border-b-2 border-foreground px-3 py-2 text-sm font-medium">Tổng quan</span>
+        <Link
+          href={`/publisher/${website.id}/onpage`}
+          className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          OnPage
+        </Link>
+      </div>
+
       <PageHeader
         icon={Globe}
         title={website.name}

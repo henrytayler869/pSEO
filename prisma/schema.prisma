@@ -571,6 +571,12 @@ model Website {
   // Optional — without it the site still updates, just on the slow path.
   revalidateSecret String?
 
+  // The DataForSEO OnPage crawl this website last started. Kept so its results
+  // can be re-read for free; starting a new crawl is what costs money.
+  onPageTaskId   String?
+  onPageTaskAt   DateTime?
+  onPageMaxPages Int?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
