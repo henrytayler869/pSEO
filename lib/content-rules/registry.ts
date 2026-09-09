@@ -66,10 +66,63 @@ export interface ContentRules {
    */
   metricResolutions: { metric: string; resolutions: string[]; ambiguous: boolean }[];
 
+  /**
+   * Pages every published site must serve, whatever its niche.
+   *
+   * A different KIND of contract from the ones above, and the difference is
+   * what makes it cheap: the rules above must run inside each publisher's
+   * build, because only the build sees the text before it ships. This one Head
+   * Quarter can check from outside by fetching the URLs — so a new publisher
+   * inherits the requirement without implementing anything, and cannot forget
+   * a check it never had to write.
+   *
+   * Each entry lists ALTERNATE paths and passes if any of them answers. A site
+   * serving /privacy-policy is not missing a privacy policy, and reporting it
+   * as missing would train someone to ignore this list.
+   */
+  requiredPages: { id: string; label: string; paths: string[]; why: string }[];
+
   declaredRules: { id: string; rule: string; enforcedBy: string }[];
 }
 
-const RULES_VERSION = "1";
+const RULES_VERSION = "2";
+
+/**
+ * The trust pages. Measured absence on atmovingservices.com 2026-09-09: all
+ * eight candidate paths returned 404, and the sitemap named none of them.
+ *
+ * Not a style preference. The privacy policy in particular became mandatory
+ * the moment GA4 started running on these sites — Google's own Analytics terms
+ * require disclosing the collection, and several jurisdictions require it
+ * independently. The rest are what separates a site someone stands behind from
+ * one that only exists to rank.
+ */
+const REQUIRED_PAGES: { id: string; label: string; paths: string[]; why: string }[] = [
+  {
+    id: "privacy",
+    label: "Chính sách quyền riêng tư",
+    paths: ["/privacy", "/privacy-policy"],
+    why: "Bắt buộc từ lúc site chạy GA4: điều khoản của Google Analytics yêu cầu công bố việc thu thập, và nhiều nơi yêu cầu độc lập với Google. Đây là mục duy nhất trong danh sách này có ràng buộc pháp lý.",
+  },
+  {
+    id: "terms",
+    label: "Điều khoản sử dụng",
+    paths: ["/terms", "/terms-of-service", "/terms-and-conditions"],
+    why: "Xác định site chịu trách nhiệm tới đâu với số liệu nó công bố. Với site trình bày dữ liệu liên bang và diễn giải do máy sinh, đó không phải hình thức.",
+  },
+  {
+    id: "about",
+    label: "Giới thiệu",
+    paths: ["/about", "/about-us"],
+    why: "Ai đứng sau site. Một site không có trang này, không có tác giả, không có địa chỉ là hình dạng kinh điển của affiliate mỏng — và đó là thứ đánh giá chất lượng tìm kiếm nhìn vào.",
+  },
+  {
+    id: "contact",
+    label: "Liên hệ",
+    paths: ["/contact", "/contact-us"],
+    why: "Đường để một người thật báo một con số sai. Không có nó thì lỗi dữ liệu chỉ được phát hiện từ bên trong.",
+  },
+];
 
 /**
  * Facts used to generate the rounding vectors.
@@ -185,6 +238,8 @@ export async function buildContentRules(): Promise<ContentRules> {
         ambiguous: set.size > 1,
       }))
       .sort((a, b) => a.metric.localeCompare(b.metric)),
+
+    requiredPages: REQUIRED_PAGES,
 
     declaredRules: [
       {

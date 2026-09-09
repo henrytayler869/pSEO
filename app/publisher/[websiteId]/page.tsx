@@ -1,3 +1,4 @@
+import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Globe } from "lucide-react";
@@ -16,7 +17,7 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
   const detail = await getWebsiteDetail(websiteId);
   if (!detail) notFound();
 
-  const { website, domain, wpAdmin, sitemaps, sitemapsError, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
+  const { website, domain, wpAdmin, requiredPages, requiredPagesError, sitemaps, sitemapsError, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
 
   return (
     <div className="flex flex-col gap-6">
@@ -55,6 +56,42 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
           </>
         }
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            Trang bắt buộc
+            {requiredPages && ` (${requiredPages.filter((p) => p.status === "ok").length}/${requiredPages.length})`}
+          </CardTitle>
+          <CardDescription>
+            Danh sách này là hợp đồng chung cho mọi publisher, lấy từ /api/v1/content-rules — publisher mới thừa hưởng
+            mà không phải tự cài phép kiểm nào. HQ kiểm từ bên ngoài bằng cách gọi thẳng URL, nên không có gì để quên.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {requiredPagesError ? (
+            <p className="text-sm text-red-700">{requiredPagesError}</p>
+          ) : (
+            <ul className="flex flex-col gap-3">
+              {(requiredPages ?? []).map((p) => (
+                <li key={p.id} className="flex flex-col gap-0.5">
+                  <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <Badge variant={p.status === "ok" ? "outline" : "destructive"}>
+                      {p.status === "ok" ? "có" : p.status === "missing" ? "THIẾU" : "chưa rõ"}
+                    </Badge>
+                    <span className="font-medium">{p.label}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {p.foundAt ?? p.tried.join(" | ")}
+                    </span>
+                  </div>
+                  {p.status !== "ok" && <p className="text-xs text-muted-foreground">{p.why}</p>}
+                  {p.status !== "ok" && <p className="font-mono text-xs text-muted-foreground">{p.detail}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

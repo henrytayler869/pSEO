@@ -2,6 +2,8 @@ import { prisma } from "@/lib/db/prisma";
 import { fetchPublishedPostCount, deriveWpApiBaseUrl, deriveWpAdminUrl, type WpAdminLink } from "@/lib/wordpress/rest-api";
 import { fetchSitemapCounts, type SitemapCount } from "@/lib/sitemap/count";
 import { normalizeHost } from "@/lib/publisher/link-domain";
+import { checkRequiredPages, type RequiredPageStatus } from "@/lib/publisher/required-pages";
+import { buildContentRules } from "@/lib/content-rules/registry";
 import { fetchSiteSearchTotals, fetchTopPages, listSitemaps, type SubmittedSitemap } from "@/lib/google/search-console";
 import { fetchSiteTrafficTotals, fetchTrafficBySource } from "@/lib/google/analytics-data";
 
@@ -79,6 +81,9 @@ export interface WebsiteDetail {
    */
   domain: { id: string; name: string; cloudflareStatus: string | null; cloudflareError: string | null } | null;
   wpAdmin: WpAdminLink;
+  /** Trust pages every publisher must serve, checked live. */
+  requiredPages: RequiredPageStatus[] | null;
+  requiredPagesError: string | null;
   /** What Search Console holds, which is not the same as what the site
    * publishes: an empty list means nobody ever submitted the sitemap. */
   sitemaps: SubmittedSitemap[] | null;
@@ -114,7 +119,13 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
   const domain = domains.find((d) => normalizeHost(d.name) === host) ?? null;
 
   const wpApiBaseUrl = website.wpApiBaseUrl ?? deriveWpApiBaseUrl(website.url);
-  const [sitemapsResult, sitemapResult, postCountResult, gscResult, ga4Result] = await Promise.all([
+  const [requiredPagesResult, sitemapsResult, sitemapResult, postCountResult, gscResult, ga4Result] = await Promise.all([
+    buildContentRules()
+      .then((rules) => checkRequiredPages(website.url, rules.requiredPages))
+      .then(
+        (v) => ({ ok: true as const, value: v }),
+        (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
+      ),
     listSitemaps(website.gscPropertyUrl).then(
       (v) => ({ ok: true as const, value: v }),
       (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
@@ -141,6 +152,8 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
     website,
     domain,
     wpAdmin: deriveWpAdminUrl(website.wpApiBaseUrl, website.url),
+    requiredPages: requiredPagesResult.ok ? requiredPagesResult.value : null,
+    requiredPagesError: requiredPagesResult.ok ? null : requiredPagesResult.error,
     sitemaps: sitemapsResult.ok ? sitemapsResult.value : null,
     sitemapsError: sitemapsResult.ok ? null : sitemapsResult.error,
     sitemapCount: sitemapResult.ok ? sitemapResult.value : null,
