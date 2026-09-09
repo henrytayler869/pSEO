@@ -102,6 +102,35 @@ export async function GET(
       // silently keeps a superseded paragraph. This is the field to compare
       // when the question is "is what I stored still what would be served".
       textFingerprint: fingerprintText(outcome.text),
+      /**
+       * The facts this passage was written against, with the exact string each
+       * was printed as in the prompt.
+       *
+       * Added because `display` was the anchor of the whole numeric contract
+       * and lived only inside this process. A consuming site validating the
+       * text had to RECONSTRUCT the formatting rules from the model's output —
+       * where the compression threshold sits, how many decimals a percentage
+       * carries — and a reconstruction is a second copy of a rule that drifts
+       * the moment the formatter changes, on a site nobody is watching for it.
+       *
+       * Measured consequence of not having it: a site rejected 24 correct
+       * passages because its page rendered "8.5%" while the prompt printed
+       * "8.46%". The paragraph quoted what it was given; the page and the
+       * prompt were simply not anchored to each other.
+       *
+       * Bound to the passage, not offered as a separate lookup — the point is
+       * that these are the numbers THIS text received, not whatever the
+       * formatter would print today.
+       */
+      facts: outcome.facts.map((f) => ({
+        key: f.key,
+        label: f.label,
+        value: f.value,
+        display: f.display,
+        unit: f.unit,
+        scope: f.scope,
+        scopeName: f.scopeName,
+      })),
     });
   } catch (err) {
     if (err instanceof SpendCapExceededError) {

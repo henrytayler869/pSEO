@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { buildFactSet, type FactSet } from "./facts";
+import { buildFactSet, type FactSet, type Fact } from "./facts";
 import { validateGeneratedText, type ValidationResult } from "./validate";
 import { generateWithClaude } from "./anthropic";
 import crypto from "node:crypto";
@@ -146,6 +146,23 @@ export interface GenerateOutcome {
   cached: boolean;
   validation: ValidationResult;
   factsFingerprint: string;
+  /**
+   * The facts the text was written against, INCLUDING how each was printed
+   * into the prompt.
+   *
+   * Carried out to consumers because `display` is the anchor the whole numeric
+   * contract hangs on, and it existed nowhere outside this process. A published
+   * site validating the text had to reconstruct the formatting rules from the
+   * model's output — the $1M compression threshold, the two-decimal
+   * percentages — and a reconstruction is a second copy of a rule. That copy
+   * drifts the moment formatForPrompt changes, silently, on a site nobody is
+   * watching for it.
+   *
+   * Bound to the passage rather than offered separately: a consumer checking a
+   * stored paragraph checks it against the numbers that paragraph was actually
+   * given, not against whatever the formatter would print today.
+   */
+  facts: Fact[];
   attempts: number;
   costUsd: number;
 }
@@ -196,6 +213,7 @@ export async function getCachedInterpretation(vertical: string, zip: string): Pr
     cached: true,
     validation: recheck,
     factsFingerprint: factSet.fingerprint,
+    facts: factSet.facts,
     attempts: 0,
     costUsd: 0,
   };
@@ -212,7 +230,7 @@ export async function getOrGenerateInterpretation(vertical: string, zip: string)
   if (cached) {
     const recheck = validateGeneratedText(cached.text, factSet);
     if (recheck.passed) {
-      return { text: cached.text, cached: true, validation: recheck, factsFingerprint: factSet.fingerprint, attempts: 0, costUsd: 0 };
+      return { text: cached.text, cached: true, validation: recheck, factsFingerprint: factSet.fingerprint, facts: factSet.facts, attempts: 0, costUsd: 0 };
     }
     // Stored text that no longer clears the rules: mark it so it stops being
     // a cache hit, and fall through to regenerate under the current rules.
@@ -255,7 +273,7 @@ export async function getOrGenerateInterpretation(vertical: string, zip: string)
     });
 
     if (validation.passed) {
-      return { text: result.text, cached: false, validation, factsFingerprint: factSet.fingerprint, attempts: attempt, costUsd: totalCost };
+      return { text: result.text, cached: false, validation, factsFingerprint: factSet.fingerprint, facts: factSet.facts, attempts: attempt, costUsd: totalCost };
     }
   }
 
@@ -266,6 +284,7 @@ export async function getOrGenerateInterpretation(vertical: string, zip: string)
     cached: false,
     validation: lastValidation,
     factsFingerprint: factSet.fingerprint,
+    facts: factSet.facts,
     attempts: MAX_ATTEMPTS,
     costUsd: totalCost,
   };
