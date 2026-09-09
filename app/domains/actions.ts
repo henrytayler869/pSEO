@@ -31,7 +31,32 @@ async function getCloudflareCredentials(): Promise<{ apiToken: string; accountId
  * Domain row is still saved with the error attached (never silently
  * dropped) so it stays visible in the list and can be retried via
  * refreshDomainAction once the underlying issue is fixed. */
-export async function addDomainAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+/**
+ * Wrapper that guarantees this action RETURNS rather than throws.
+ *
+ * useActionState keeps the previous state when a server action throws, so an
+ * uncaught error renders as nothing at all: the button finishes, no message
+ * appears, and the form looks like it was ignored. That is the least
+ * debuggable outcome available, and it is what a validation query added
+ * outside the try block produced — a lookup that had nothing to do with
+ * Cloudflare could silently swallow the entire submission.
+ *
+ * Everything the user can trigger now ends in a message. An unexpected failure
+ * says so, with the actual error text, instead of leaving someone clicking a
+ * button that appears to do nothing.
+ */
+export async function addDomainAction(prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  try {
+    return await addDomain(prev, formData);
+  } catch (err) {
+    return {
+      ok: false,
+      message: `Lỗi không lường trước khi thêm domain: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
+
+async function addDomain(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
   const name = String(formData.get("name") ?? "").trim().toLowerCase();
   const relevantVertical = String(formData.get("relevantVertical") ?? "").trim() || null;
 
@@ -51,8 +76,18 @@ export async function addDomainAction(_prev: ActionResult, formData: FormData): 
    * comparing their spelling against a list they cannot see.
    */
   if (relevantVertical) {
-    const researched = await getTrafficVerticalSummaries();
-    const known = researched.map((n) => n.vertical);
+    // Its own try/catch as well as the wrapper above: if the niche list cannot
+    // be read, that must not block adding a domain. The list is a convenience
+    // for picking a value, not a gate the whole feature depends on.
+    let known: string[];
+    try {
+      known = (await getTrafficVerticalSummaries()).map((n) => n.vertical);
+    } catch (err) {
+      return {
+        ok: false,
+        message: `Không đọc được danh sách niche để kiểm tra: ${err instanceof Error ? err.message : String(err)}. Bỏ trống ô niche rồi thêm lại, gắn niche sau.`,
+      };
+    }
     if (!known.includes(relevantVertical)) {
       return {
         ok: false,
