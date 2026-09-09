@@ -83,6 +83,9 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
                     <span className="font-mono text-xs text-muted-foreground">
                       {p.foundAt ?? p.tried.join(" | ")}
                     </span>
+                    {p.status === "ok" && p.linkedFrom === false && (
+                      <Badge variant="destructive">không ai link tới</Badge>
+                    )}
                   </div>
                   {p.status !== "ok" && <p className="text-xs text-muted-foreground">{p.why}</p>}
                   {p.status !== "ok" && <p className="font-mono text-xs text-muted-foreground">{p.detail}</p>}
