@@ -92,6 +92,13 @@ async function main() {
   );
   for (const m of nonZip) console.log(`   ${m.metric.padEnd(48)} ${m.resolutions.join(",")}`);
 
+  // Luật chưa có bằng chứng nào chạy được là luật chưa ai thấy nổ. Đếm ra
+  // thay vì để danh sách trông đầy đủ — một luật khai báo mà không nơi nào
+  // chứng minh nó chạy thì đọc y hệt một luật đang bảo vệ điều gì đó.
+  const unproven = rules.declaredRules.filter((d) => !d.provenBy);
+  console.log(`\nLuật khai báo: ${rules.declaredRules.length}, trong đó ${unproven.length} CHƯA có bằng chứng chạy được:`);
+  for (const d of unproven) console.log(`   ${d.id}`);
+
   console.log(`\nTerm dành riêng: ${rules.reservedTerms.length}`);
   for (const t of rules.reservedTerms) console.log(`   "${t.term}" -> ${t.ownedBy}`);
 

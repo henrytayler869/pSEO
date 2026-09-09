@@ -90,10 +90,30 @@ export interface ContentRules {
    */
   requiredPages: { id: string; label: string; paths: string[]; why: string }[];
 
-  declaredRules: { id: string; rule: string; enforcedBy: string }[];
+  /**
+   * Rules every site must have, and where to find PROOF that each one works.
+   *
+   * `provenBy` points at a site that already enforces the rule and publishes
+   * conformance vectors for it. Head Quarter deliberately does NOT copy those
+   * vectors into this endpoint, and the reason is the same one that makes the
+   * rounding vectors above worth trusting: their verdicts come from running
+   * the validator that owns them.
+   *
+   * Some rules cannot be enforced here at all. cluster-no-zip-anchor depends
+   * on whether a page is a cluster page, which is a fact about the site's
+   * routing that this system has no concept of. Republishing verdicts HQ
+   * cannot reproduce would turn this endpoint back into a description of
+   * behaviour — the exact thing it was built to stop being, just wearing JSON.
+   *
+   * So: HQ publishes WHICH RULES EXIST. The enforcer publishes THE EVIDENCE
+   * THAT ITS RULE RUNS. A new publisher reads this list to learn what it must
+   * have, then fetches vectors from a repo whose validator can actually
+   * execute them.
+   */
+  declaredRules: { id: string; rule: string; enforcedBy: string; provenBy?: string }[];
 }
 
-const RULES_VERSION = "4";
+const RULES_VERSION = "5";
 
 /**
  * The trust pages. Measured absence on atmovingservices.com 2026-09-09: all
@@ -278,6 +298,7 @@ export async function buildContentRules(): Promise<ContentRules> {
         id: "scope-disclosure",
         rule: "Số liệu đo ở cấp hạt hoặc bang, khi gán cho một zip, phải nói rõ phạm vi đó trong chính câu chứa nó. Nếu nguồn không có tên địa danh thì dùng 'the county containing ZIP xxxxx', không được bịa tên.",
         enforcedBy: "lib/ai/validate.ts — scope_overclaim, invented_place_name",
+        provenBy: "HQ tự chạy: scripts/test-ai-validator.ts. Thêm 4 vector độc lập ở atmovingservices: contracts/vectors.json (2 accept / 2 reject).",
       },
       {
         id: "worded-proportion",
@@ -298,16 +319,19 @@ export async function buildContentRules(): Promise<ContentRules> {
         id: "cluster-no-zip-anchor",
         rule: "Trên trang cụm, một đoạn chỉ trích số cấp county bị TỪ CHỐI. Số county giống nhau ở mọi ZIP trong cụm nên đoạn đó nói y hệt trên mọi trang của cụm — thin content mặc áo khác. Đoạn phải chạm ít nhất một figure cấp ZIP. KHÁC scope_overclaim: ở đây phạm vi được nói ĐÚNG, cái thiếu là bất cứ điều gì riêng của ZIP.",
         enforcedBy: "phía site — lib/content/validate.ts",
+        provenBy: "atmovingservices: contracts/vectors.json (3 vector, 2 accept / 1 reject). HQ KHÔNG tự chạy được — luật này phụ thuộc cờ `clustered`, một dữ kiện về routing của site mà HQ không có khái niệm.",
       },
       {
         id: "no-price-claims",
         rule: "Không nêu giá, ước giá, khoảng giá hay bảng giá dịch vụ. HQ có CPC, không có giá — mọi con số tiền trong bài về chi phí dịch vụ đều là bịa. KHÁC no-supply-side-bridge: cái kia chặn bắc cầu từ một số sang khẳng định phía cung; cái này chặn nêu giá trực tiếp, kể cả khi không bắc cầu từ đâu.",
         enforcedBy: "phía site — 4 luật price-*",
+        provenBy: "atmovingservices: contracts/vectors.json (5 vector, 1 accept / 4 reject).",
       },
       {
         id: "stay-in-trade",
         rule: "Đoạn viết cho một ngành không được nói như ngành khác, không hứa bảo hành, không mô tả dịch vụ định kỳ nếu ngành đó không phải vậy. Bắt prompt drift giữa các vertical dùng chung template.",
         enforcedBy: "phía site — niche-other-trade, niche-warranty, niche-routine-service",
+        provenBy: "atmovingservices: contracts/vectors.json (6 vector, 1 accept / 5 reject).",
       },
     ],
   };
