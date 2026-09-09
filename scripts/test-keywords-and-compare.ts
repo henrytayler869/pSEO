@@ -10,7 +10,7 @@
 //
 // Usage: tsx scripts/test-keywords-and-compare.ts
 
-import { applyStateSuffix, renderTemplate, pickBestCandidate } from "../lib/keywords/patterns";
+import { applyStateSuffix, renderTemplate, pickBestCandidate, reservedBy } from "../lib/keywords/patterns";
 import { computeMetricDeltas, formatPercentChange } from "../lib/collector/compare";
 import { assertValidGscProperty } from "../lib/google/search-console";
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "../lib/google/analytics-data";
@@ -129,6 +129,52 @@ const CASES: Case[] = [
     name: "chọn từ khoá: danh sách rỗng -> null, không phải ném lỗi",
     expect: "null",
     run: () => String(pickBestCandidate([])),
+  },
+
+  // --- term dành riêng cho pillar của site ---
+  {
+    // Site chỉ kiểm trùng trong kho market của nó; nghiên cứu từ khoá ở đây
+    // chỉ kiểm với market khác. Phần giao nhau giữa hai bên trước đây không
+    // thuộc về ai.
+    name: "REGRESSION dành riêng: term của pillar KHÔNG được chọn cho market",
+    expect: "b",
+    run: () =>
+      pickBestCandidate([
+        { keyword: "local moving services", searchVolume: 9000, cpc: 5, keywordDifficulty: 10 },
+        { keyword: "b", searchVolume: 100, cpc: 1, keywordDifficulty: 90 },
+      ])!.keyword,
+  },
+  {
+    name: "dành riêng: mọi ứng viên đều bị giữ chỗ -> null, không chọn bừa",
+    expect: "null",
+    run: () =>
+      String(
+        pickBestCandidate([
+          { keyword: "local moving services", searchVolume: 9000, cpc: 5, keywordDifficulty: 10 },
+          { keyword: "Moving Services Cross Country", searchVolume: 800, cpc: 3, keywordDifficulty: 20 },
+        ])?.keyword ?? "null"
+      ),
+  },
+  {
+    // Khớp CỤM CHÍNH XÁC, không khớp chuỗi con: "local moving services in
+    // tulsa" thật sự là của một market, và một luật khớp chuỗi con sẽ nuốt nó
+    // mà không ai thấy luật đó nổ.
+    name: "REGRESSION dành riêng: cụm DÀI HƠN vẫn dùng được, không bị nuốt",
+    expect: "local moving services in tulsa",
+    run: () =>
+      pickBestCandidate([
+        { keyword: "local moving services in tulsa", searchVolume: 500, cpc: 2, keywordDifficulty: 20 },
+      ])!.keyword,
+  },
+  {
+    name: "dành riêng: nhận diện bất kể hoa thường và khoảng trắng thừa",
+    expect: "trang pillar /local-moving",
+    run: () => String(reservedBy("  LOCAL   Moving Services ")),
+  },
+  {
+    name: "dành riêng: term bình thường không bị giữ chỗ",
+    expect: "null",
+    run: () => String(reservedBy("moving services austin")),
   },
 
   // --- computeMetricDeltas ---

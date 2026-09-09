@@ -16,15 +16,62 @@ export interface ValidationResult {
  * not admitting an invented figure. */
 const ALWAYS_ALLOWED = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 24, 100]);
 
-/** How far a written number may sit from a measured one and still count as
- * the same figure. Covers honest rounding ("$549,400" -> "about $549,000")
- * without letting a different number through.
+/**
+ * How far the PROMPT may round a measured value when printing it.
  *
- * Exported because facts.ts must choose its display precision against this
- * exact number. When the two drifted apart, the prompt printed "7.9%" for a
- * measured 7.9405% — 0.51% away — and this check rejected the model for
- * quoting the figure it was handed. Same constant, one definition. */
+ * No longer a tolerance the validator accepts — see matchesFact. It now has
+ * exactly one job: facts.ts picks display precision against this number, so a
+ * figure handed to the model is never more than this far from the measurement
+ * behind it. The validator's job is the separate question of whether the model
+ * wrote back what it was given.
+ *
+ * Kept as one exported constant because the two used to drift apart: the
+ * prompt printed "7.9%" for a measured 7.9405% — 0.51% away — and the check
+ * rejected the model for quoting the figure it had just been handed.
+ */
 export const ROUNDING_TOLERANCE = 0.005; // 0.5%
+
+/**
+ * The numbers a fact may legitimately appear as.
+ *
+ * Exactly two: the measured value, and the value as the prompt PRINTED it.
+ * Nothing between them, and nothing near them.
+ *
+ * This replaced a relative 0.5% window, and the reason is a divergence that
+ * was already armed. The published site runs its own validator that accepts
+ * only displayed roundings — for a fact of $808,500 it allows "808,500" and
+ * "$8.1M" and refuses everything else. A 0.5% window here accepts "about
+ * $812,000", which is a number nobody measured and nobody printed. That
+ * passage would pass HERE, generate, cache, cost money — and then be dropped
+ * by the site, leaving a page silently missing its interpretation with no
+ * error anywhere connecting the two.
+ *
+ * The stricter rule is also the more honest one on its own terms: a figure
+ * that has been rounded a second time, by the model rather than by the
+ * pipeline, is a figure whose provenance ends at the model.
+ *
+ * Costs nothing today — the current 127 pages all validate — and prevents
+ * paying to generate text the site will discard.
+ */
+function allowedValuesFor(fact: Fact): number[] {
+  const values = [Math.abs(fact.value)];
+  // The prompt's own string, e.g. "$8.1 million" or "22.6%". Parsing it back
+  // is what makes "8.1" acceptable without opening a window around 8.1.
+  const printed = fact.display.match(/-?\d[\d,]*(?:\.\d+)?/);
+  if (printed) {
+    const v = Math.abs(Number(printed[0].replace(/,/g, "")));
+    if (Number.isFinite(v)) values.push(v);
+  }
+  return values;
+}
+
+/** Float equality, not a tolerance. 0.1 + 0.2 must equal 0.3 here; 812000 must
+ * not equal 808500. The epsilon is relative so it works at every magnitude. */
+function sameNumber(a: number, b: number): boolean {
+  if (a === b) return true;
+  const scale = Math.max(Math.abs(a), Math.abs(b), 1);
+  return Math.abs(a - b) <= scale * 1e-9;
+}
 
 function extractNumbers(text: string): { raw: string; value: number }[] {
   const out: { raw: string; value: number }[] = [];
@@ -51,13 +98,15 @@ function matchesFact(value: number, facts: Fact[]): Fact | null {
   // instead. Worth knowing rather than assuming the validator covers it.
   const target = Math.abs(value);
   for (const f of facts) {
-    const fv = Math.abs(f.value);
-    if (fv === target) return f;
-    if (fv !== 0 && Math.abs(target - fv) / fv <= ROUNDING_TOLERANCE) return f;
-    // A count written in thousands ("11.5k households") or a figure written
-    // in millions ("$6.34 billion") is the same fact, differently scaled.
-    for (const scale of [1_000, 1_000_000, 1_000_000_000]) {
-      if (fv !== 0 && Math.abs(target * scale - fv) / fv <= ROUNDING_TOLERANCE) return f;
+    for (const allowed of allowedValuesFor(f)) {
+      if (sameNumber(target, allowed)) return f;
+      // A count written in thousands ("11.5k households") or a figure written
+      // in millions ("$6.34 billion") is the same fact, differently scaled —
+      // still an exact match, just against a scaled form of a value the
+      // pipeline produced, never against a value the model invented.
+      for (const scale of [1_000, 1_000_000, 1_000_000_000]) {
+        if (sameNumber(target * scale, allowed)) return f;
+      }
     }
   }
   return null;

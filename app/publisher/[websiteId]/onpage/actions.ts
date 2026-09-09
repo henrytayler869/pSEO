@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { getCredential } from "@/lib/settings/credentials";
 import { createOnPageTask, ON_PAGE_COST_PER_PAGE_USD } from "@/lib/dataforseo/on-page";
+import { notifySiteConfigChanged } from "@/lib/publisher/notify-site";
 
 export interface ActionResult {
   ok: boolean;
@@ -38,6 +39,21 @@ export async function startOnPageCrawlAction(_prev: ActionResult, formData: Form
       return { ok: false, message: "Chưa cấu hình DATAFORSEO_LOGIN / DATAFORSEO_PASSWORD ở trang Cài đặt." };
     }
 
+    /**
+     * Purge the edge BEFORE crawling.
+     *
+     * The site sits behind Cloudflare with s-maxage=86400, so a crawl started
+     * against a warm edge reports on HTML that can be a full day old. The
+     * findings would be real, and about a build that no longer exists —
+     * sending someone to hunt a bug in current code that was fixed yesterday.
+     *
+     * Reuses the site's own /api/revalidate, which purges the whole zone. Not
+     * fatal when it fails: a crawl of slightly stale HTML is still worth more
+     * than no crawl, and the outcome is reported so nobody reads the results
+     * as fresher than they are.
+     */
+    const purge = await notifySiteConfigChanged(website);
+
     const taskId = await createOnPageTask(login, password, website.url, maxPages);
     await prisma.website.update({
       where: { id: websiteId },
@@ -51,7 +67,10 @@ export async function startOnPageCrawlAction(_prev: ActionResult, formData: Form
       message:
         `Đã bắt đầu quét tối đa ${maxPages} trang (tối đa ${cost} cent — chỉ tính số trang thực sự quét được). ` +
         `Task ${taskId}. Quét chạy nền vài phút; tải lại trang để xem tiến độ.` +
-        (requested > MAX_ALLOWED ? ` Đã giới hạn từ ${requested} xuống ${MAX_ALLOWED}.` : ""),
+        (requested > MAX_ALLOWED ? ` Đã giới hạn từ ${requested} xuống ${MAX_ALLOWED}.` : "") +
+        (purge.ok
+          ? " Đã xoá cache Cloudflare trước khi quét, nên kết quả nói về bản build hiện tại."
+          : ` CẢNH BÁO: chưa xoá được cache Cloudflare (${purge.detail}) — HTML ở edge có thể cũ tới 24 giờ, và kết quả quét sẽ nói về bản build cũ đó chứ không phải bản hiện tại.`),
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Không bắt đầu được lần quét." };

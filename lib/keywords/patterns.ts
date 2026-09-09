@@ -245,7 +245,46 @@ export interface KeywordCandidateMetrics {
  * one to rank for is strictly better); remaining ties keep template order,
  * which makes the choice deterministic and re-runnable.
  */
+/**
+ * Terms a published site has already claimed for a page of its own.
+ *
+ * A market assigned one of these would compete with that page on the same
+ * query, and neither side would notice: the site checks collisions only
+ * within its own market inventory, and keyword research here checks only
+ * against other markets. The overlap between the two was nobody's job.
+ *
+ * Registered by exact normalised phrase, not by substring. A substring rule
+ * would silently swallow "local moving services in tulsa" — a phrase that is
+ * genuinely a market's, not the pillar's — and the market would lose its
+ * keyword to a rule nobody could see firing.
+ *
+ * 2026-09-09: the two pillar pages on atmovingservices.com. Verified clean at
+ * the time — 0 markets targeting either term, 0 overlapping pairs — so this
+ * costs nothing today and exists to keep it that way.
+ */
+const RESERVED_TERMS = new Map<string, string>([
+  ["moving services cross country", "trang pillar /long-distance-moving"],
+  ["local moving services", "trang pillar /local-moving"],
+]);
+
+function normaliseTerm(keyword: string): string {
+  return keyword.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Who has claimed this exact phrase, or null when nobody has. */
+export function reservedBy(keyword: string): string | null {
+  return RESERVED_TERMS.get(normaliseTerm(keyword)) ?? null;
+}
+
 export function pickBestCandidate(candidates: KeywordCandidateMetrics[]): KeywordCandidateMetrics | null {
+  // Reserved phrases are dropped BEFORE the comparison, not flagged after it.
+  // A term that must not be used is not a candidate, and letting it into the
+  // comparison would sometimes make it the winner and then require someone
+  // downstream to notice and undo that.
+  const usable = candidates.filter((c) => reservedBy(c.keyword) === null);
+  if (usable.length === 0) return null;
+  candidates = usable;
+
   if (candidates.length === 0) return null;
   return candidates.reduce((best, c) => {
     if (c.searchVolume !== best.searchVolume) return c.searchVolume > best.searchVolume ? c : best;

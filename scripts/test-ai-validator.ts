@@ -47,14 +47,27 @@ const CASES: Case[] = [
     shouldPass: true,
   },
   {
-    name: "measured percentage, stated as a percentage",
-    text: (f) => `${zipFact(f, "census_mobility_rate_pct").toFixed(1)}% of residents lived elsewhere a year ago.`,
+    // Trích ĐÚNG chuỗi prompt in ra, không tự định dạng lại. Đó chính là hợp
+    // đồng mới: model được phép dùng giá trị đo hoặc giá trị prompt đã in,
+    // không có gì ở giữa.
+    name: "measured percentage, quoted exactly as the prompt printed it",
+    text: (f) => `${displayOf(f, "census_mobility_rate_pct")} of residents lived elsewhere a year ago.`,
     shouldPass: true,
   },
   {
-    name: "honest rounding of a real figure",
+    // REGRESSION cho một khác biệt ĐÃ CÀI SẴN giữa hai validator. Site đã
+    // xuất bản chỉ chấp nhận các mức làm tròn ĐƯỢC HIỂN THỊ; dung sai 0.5%
+    // cũ ở đây chấp nhận thêm một vùng quanh đó. Một đoạn văn rơi vào vùng
+    // ấy sẽ qua được HQ, tốn tiền sinh, vào cache — rồi bị site bỏ, để lại
+    // một trang thiếu phần diễn giải mà không lỗi nào nối hai việc đó lại.
+    name: "REGRESSION: model tự làm tròn LẦN NỮA -> từ chối",
     text: (f) =>
       `Median home value sits near $${(Math.round(zipFact(f, "census_median_home_value_usd") / 1000) * 1000).toLocaleString()}.`,
+    shouldPass: false,
+  },
+  {
+    name: "giá trị đo nguyên vẹn vẫn được chấp nhận",
+    text: (f) => `Median home value sits at $${zipFact(f, "census_median_home_value_usd").toLocaleString()}.`,
     shouldPass: true,
   },
   {
@@ -135,6 +148,14 @@ const CASES: Case[] = [
   { name: "not a proportion: 'one thing to check in three minutes'", text: () => `There is one thing to check in three minutes.`, shouldPass: true },
   { name: "not a proportion: 'one of the best'", text: () => `This is one of the best neighbourhoods for movers.`, shouldPass: true },
 ];
+
+/** Chuỗi mà prompt THẬT SỰ in ra cho fact này — mốc duy nhất mà validator
+ * chấp nhận, ngoài giá trị đo gốc. */
+function displayOf(f: FactSet, key: string): string {
+  const fact = f.facts.find((x) => x.key === key);
+  if (!fact) throw new Error(`Dữ liệu thật thiếu chỉ số "${key}" — test cần nó, hãy chạy thu thập trước.`);
+  return fact.display;
+}
 
 function zipFact(f: FactSet, key: string): number {
   const fact = f.facts.find((x) => x.key === key);
