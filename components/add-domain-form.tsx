@@ -41,9 +41,24 @@ export function AddDomainForm({ niches }: { niches: NicheOption[] }) {
 
   if (!open) {
     return (
-      <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
-        Thêm domain
-      </Button>
+      <div className="flex flex-col gap-2">
+        <Button size="sm" variant="secondary" onClick={() => setOpen(true)}>
+          Thêm domain
+        </Button>
+        {/*
+          Thông báo thành công phải SỐNG SÓT sau khi form đóng.
+          Trước đây nó nằm trong form, nên lúc thêm xong form đóng lại và mang
+          theo luôn dòng chữ duy nhất nói zone được NHẬP hay được TẠO. Đó đúng
+          là dòng quyết định việc tiếp theo: zone tạo mới cần trỏ nameserver,
+          zone nhận về thì không. Một thông báo chỉ tồn tại trong khoảnh khắc
+          nó bị xoá là một thông báo chưa từng được đọc.
+        */}
+        {state.ok && state.message && (
+          <p className="rounded-md border border-green-200 bg-green-50 px-3 py-2 text-xs text-green-800">
+            {state.message}
+          </p>
+        )}
+      </div>
     );
   }
 

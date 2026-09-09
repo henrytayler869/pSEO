@@ -50,7 +50,7 @@ export default async function DomainsPage() {
       <PageHeader
         icon={Link2}
         title="Domain"
-        description="Đăng ký domain thật đã mua vào hệ thống — mỗi domain thêm vào đây sẽ tạo một zone thật trên Cloudflare ngay lập tức, không phải bản ghi giữ chỗ. Đây là bước trước Publisher: Publisher cần WordPress + GSC/GA4 đã verify, những thứ chỉ tồn tại sau khi domain đã có ở đây và DNS đã trỏ."
+        description="Đăng ký domain thật đã mua vào hệ thống — domain đã là zone trên Cloudflare thì được NHẬP vào (không tạo mới, không đụng DNS đang chạy); chưa có zone thì tạo mới ngay lập tức. Không phải bản ghi giữ chỗ. Đây là bước trước Publisher: Publisher cần WordPress + GSC/GA4 đã verify, những thứ chỉ tồn tại sau khi domain đã có ở đây và DNS đã trỏ."
       />
 
       <Card>
