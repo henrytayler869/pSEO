@@ -1,3 +1,4 @@
+import { formatForPrompt } from "@/lib/ai/facts";
 import { prisma } from "@/lib/db/prisma";
 import { requireApiKey } from "@/lib/api/auth";
 import { latestPerKeyword } from "@/lib/keywords/latest";
@@ -110,7 +111,25 @@ export async function GET(request: Request, ctx: RouteContext<"/api/v1/niches/[v
     countyKeyword,
     nationalBaseline: baseline,
     semanticKeywords,
-    governmentData,
+    /**
+     * Every figure, plus the exact string the AI prompt prints for it.
+     *
+     * `display` is added here as well as on the interpretation response
+     * because the two answer different needs: there it anchors a paragraph
+     * that already exists, here it lets a page RENDER at the same precision
+     * the model was given.
+     *
+     * Without it a site has to re-derive the formatting rule — where the
+     * compression threshold sits, how many decimals a value carries — and a
+     * re-derivation is a second copy that drifts when formatForPrompt moves.
+     * One site spent four attempts curve-fitting it from observed output and
+     * got 15/18 before finding a case that broke every candidate. There is no
+     * reason for anyone to guess at a string this process can simply hand over.
+     */
+    governmentData: governmentData.map((d) => ({
+      ...d,
+      display: formatForPrompt(d.value, d.unit),
+    })),
     score: latestScore?.score ?? null,
     scoreVersion: latestScore?.version ?? null,
     lastUpdated: latestScore?.calculatedAt ?? null,

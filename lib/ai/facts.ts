@@ -76,7 +76,17 @@ function decimalsWithinTolerance(value: number): number {
 
 /** Renders a figure the way a writer would say it, so the model quotes it
  * back verbatim instead of inventing its own rounding. */
-function formatForPrompt(value: number, unit: string): string {
+/**
+ * The single formatter for every figure the model is shown — and now, via the
+ * API, the string a consuming site should render so its page and the prompt
+ * agree.
+ *
+ * Exported after a published site tried four times to reconstruct this from
+ * observed output: 3 significant digits fit 15 of 18 samples and broke on
+ * "$618.2 million". A fifth guess would have been curve-fitting, not
+ * measurement. Handing over the function ends that category of work.
+ */
+export function formatForPrompt(value: number, unit: string): string {
   if (unit === "%") return `${value.toFixed(decimalsWithinTolerance(value))}%`;
   if (unit.startsWith("USD")) {
     // Scaled figures round against the SCALED number, which is what the
