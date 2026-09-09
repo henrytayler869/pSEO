@@ -86,6 +86,46 @@ function decimalsWithinTolerance(value: number): number {
  * "$618.2 million". A fifth guess would have been curve-fitting, not
  * measurement. Handing over the function ends that category of work.
  */
+/**
+ * Display-ready unit words, for units that are NOT already carried by a symbol
+ * in the formatted number.
+ *
+ * Added after measuring what the prompt actually says. "- annual
+ * precipitation: 8.79" hands the model a bare number: it can write "8.79
+ * inches", "8.79 cm" or "8.79 mm" and the validator accepts all three, because
+ * the validator checks the NUMBER and has never checked the unit. A unit error
+ * of 2.54x reads as fluent prose and passes every gate this project has.
+ *
+ * That gap was invisible for moving-services, where the labels happen to carry
+ * the unit in words ("people who moved in from another state: 1,845"). It is
+ * wide open for hvac-repair and roofing-replacement, whose climate figures are
+ * bare — and those verticals have not been generated yet, so this is a trap
+ * set rather than a fire burning.
+ *
+ * An empty string is a DECISION, not a gap: "1980" must not become "1980
+ * year", and a count whose label already says "in the last 10 years" must not
+ * repeat it. Each empty carries its reason.
+ */
+const UNIT_WORDS: Record<string, string> = {
+  "people/yr": "people",
+  "households/yr": "households",
+  "in/yr": "inches",
+  "degree-days/yr": "degree days",
+  "cents/kWh": "cents per kWh",
+  "kWh/yr": "kWh",
+  "kWh/m2/day": "kWh/m²/day",
+  // Empty on purpose: the number IS a year, and "1980 year" is worse than
+  // "1980" in every context.
+  year: "",
+  // Empty on purpose: every label using this already says "in the last 10
+  // years", and repeating it reads as a second, different figure.
+  "count/10yr": "",
+  // Already symbolised inside the formatted string.
+  "%": "",
+  USD: "",
+  "USD/yr": "",
+};
+
 export function formatForPrompt(value: number, unit: string): string {
   if (unit === "%") return `${value.toFixed(decimalsWithinTolerance(value))}%`;
   if (unit.startsWith("USD")) {
@@ -104,8 +144,20 @@ export function formatForPrompt(value: number, unit: string): string {
     return `$${Math.round(value).toLocaleString("en-US")}`;
   }
   if (unit === "year") return String(Math.round(value));
-  if (Number.isInteger(value)) return value.toLocaleString("en-US");
-  return value.toFixed(decimalsWithinTolerance(value));
+
+  const number = Number.isInteger(value)
+    ? value.toLocaleString("en-US")
+    : value.toFixed(decimalsWithinTolerance(value));
+
+  // An UNKNOWN unit falls through with no word rather than being guessed at.
+  // A wrong unit is worse than a missing one: missing invites the reader to
+  // check, wrong invites them to believe.
+  const word = UNIT_WORDS[unit];
+  if (word === undefined) {
+    console.warn(`[facts] đơn vị "${unit}" chưa có từ hiển thị — prompt sẽ in số trần, model phải đoán đơn vị.`);
+    return number;
+  }
+  return word ? `${number} ${word}` : number;
 }
 
 const METRIC_LABELS: Record<string, string> = {
