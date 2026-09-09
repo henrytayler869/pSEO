@@ -109,6 +109,13 @@ jobs:
         # while a source drifts.
         run: npx tsx scripts/test-keywords-and-compare.ts
 
+      - name: Test — luật nội dung công bố khớp hành vi thật
+        # Chạy được với DB rỗng: metricResolutions ra danh sách rỗng, còn phần
+        # vector — thứ đáng canh nhất — dùng fact tổng hợp cố định nên không
+        # phụ thuộc dữ liệu. Nếu validator đổi mà vector không đổi theo, đây là
+        # chỗ phát hiện: hợp đồng công bố cho các site đã lặng lẽ hết đúng.
+        run: npx tsx scripts/verify-content-rules.ts
+
       # NOT run here: test-ai-validator.ts and scan-generated-copy.ts. Both
       # assert against REAL collected data and real generated copy, which a
       # blank CI database does not have. Running them against an empty

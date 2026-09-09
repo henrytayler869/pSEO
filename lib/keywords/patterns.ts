@@ -271,6 +271,14 @@ function normaliseTerm(keyword: string): string {
   return keyword.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
+/** The reserved list, for publishing to sites that must enforce the same rule.
+ * Exported from the same Map the picker uses — a second hand-written copy in
+ * the rules endpoint would be exactly the drift this whole mechanism exists to
+ * prevent. */
+export function listReservedTerms(): { term: string; ownedBy: string }[] {
+  return [...RESERVED_TERMS.entries()].map(([term, ownedBy]) => ({ term, ownedBy }));
+}
+
 /** Who has claimed this exact phrase, or null when nobody has. */
 export function reservedBy(keyword: string): string | null {
   return RESERVED_TERMS.get(normaliseTerm(keyword)) ?? null;
