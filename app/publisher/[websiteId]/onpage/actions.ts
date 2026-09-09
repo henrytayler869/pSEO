@@ -68,9 +68,14 @@ export async function startOnPageCrawlAction(_prev: ActionResult, formData: Form
         `Đã bắt đầu quét tối đa ${maxPages} trang (tối đa ${cost} cent — chỉ tính số trang thực sự quét được). ` +
         `Task ${taskId}. Quét chạy nền vài phút; tải lại trang để xem tiến độ.` +
         (requested > MAX_ALLOWED ? ` Đã giới hạn từ ${requested} xuống ${MAX_ALLOWED}.` : "") +
-        (purge.ok
+        // Điều kiện là edgePurged, KHÔNG phải purge.ok. Site có thể nhận lệnh
+        // và revalidate thành công trong khi BỎ QUA phần purge Cloudflare vì
+        // thiếu credential — vẫn HTTP 200. Khẳng định một lần purge chưa xảy
+        // ra sẽ làm một lần quét trên HTML cũ một ngày trông như quét bản hiện
+        // tại: số liệu vừa sai vừa được tin.
+        (purge.edgePurged === true
           ? " Đã xoá cache Cloudflare trước khi quét, nên kết quả nói về bản build hiện tại."
-          : ` CẢNH BÁO: chưa xoá được cache Cloudflare (${purge.detail}) — HTML ở edge có thể cũ tới 24 giờ, và kết quả quét sẽ nói về bản build cũ đó chứ không phải bản hiện tại.`),
+          : ` CẢNH BÁO: cache Cloudflare CHƯA được xoá (${purge.detail}) — HTML ở edge có thể cũ tới 24 giờ, và kết quả quét sẽ nói về bản build cũ đó chứ không phải bản hiện tại.`),
     };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Không bắt đầu được lần quét." };
