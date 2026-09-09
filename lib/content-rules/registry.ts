@@ -93,7 +93,7 @@ export interface ContentRules {
   declaredRules: { id: string; rule: string; enforcedBy: string }[];
 }
 
-const RULES_VERSION = "3";
+const RULES_VERSION = "4";
 
 /**
  * The trust pages. Measured absence on atmovingservices.com 2026-09-09: all
@@ -246,6 +246,10 @@ export async function buildContentRules(): Promise<ContentRules> {
         vector(
           "23.4% of residents lived elsewhere a year ago.",
           "Văn bản làm tròn về phía một fact nguyên (23). Câu hỏi do site đặt ra: một allowance kiểu Math.round ở PHÍA VĂN BẢN có hợp lệ không. Verdict đo được ở đây là câu trả lời.",
+        ),
+        vector(
+          "7.6234% of residents lived elsewhere a year ago.",
+          "NHIỀU chữ số hơn mức prompt in ra. Model chỉ được đưa f.display, không được đưa giá trị thô — nên mọi chữ số vượt quá độ chính xác đã hiển thị là chữ số model tự bịa. Bịa mà TRÚNG còn tệ hơn bịa mà trật, vì nó lọt qua.",
         ),
         vector(
           "7.75% of residents lived elsewhere a year ago.",

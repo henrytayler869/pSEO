@@ -74,6 +74,30 @@ export async function createOnPageTask(
   target: string,
   maxPages: number
 ): Promise<string> {
+  /**
+   * Cloudflare serves TWO DIFFERENT DOCUMENTS for the same URL, chosen by the
+   * request's Accept header.
+   *
+   * Measured 2026-09-10 on atmovingservices.com/data, six requests:
+   *
+   *   Accept: * / *              28,309 bytes, no Cloudflare beacon
+   *   Accept: text/html          28,676 bytes, WITH the beacon injected at edge
+   *   User-Agent                 no effect at all, either value
+   *
+   * Both variants return cf-cache-status HIT — Cloudflare keys its cache on
+   * Accept and holds both.
+   *
+   * This matters for what a crawl REPORTS. A client sending Accept: * / *
+   * measures a document no browser ever receives: fewer bytes, one fewer
+   * third-party script, different resource counts. Every OnPage check about
+   * page weight or external resources would describe that phantom document.
+   *
+   * DataForSEO's crawler requests HTML, so it lands on the browser variant —
+   * which is the right one. Recorded here rather than assumed, because the
+   * first diagnosis of this was "Cloudflare switches on User-Agent", and
+   * anyone acting on that would log the User-Agent, watch it explain nothing,
+   * and lose a day before suspecting Accept.
+   */
   const host = new URL(target.includes("://") ? target : `https://${target}`).hostname;
   const task = await callDataForSeo("/on_page/task_post", authHeader(login, password), [
     {

@@ -54,7 +54,29 @@ export const ROUNDING_TOLERANCE = 0.005; // 0.5%
  * paying to generate text the site will discard.
  */
 function allowedValuesFor(fact: Fact): number[] {
-  const values = [Math.abs(fact.value)];
+  /**
+   * ONLY what the prompt printed, and reductions of it. NOT the raw measured
+   * value.
+   *
+   * Found by a question from the published site: does a model get to write
+   * MORE decimals than it was shown? Measuring the answer exposed an
+   * inconsistency here — the rule rejected "7.62%" for a fact displayed as
+   * "7.6%" (two invented digits) while accepting "7.6234%" (four invented
+   * digits), purely because the second happened to equal the raw value.
+   *
+   * The model never sees the raw value: the prompt is built from f.display
+   * (lib/ai/generate.ts). So any digit beyond the displayed precision is a
+   * digit the model made up. Being RIGHT about a made-up digit is worse than
+   * being wrong about it, because it passes.
+   *
+   * The asymmetry with fewer decimals is not aesthetic. Writing "7.6%" for a
+   * displayed "7.63%" DISCARDS information the model was given; writing
+   * "7.62%" for a displayed "7.6%" INVENTS information it was not.
+   *
+   * Measured before changing: dropping the raw value costs 0 of 148 cached
+   * passages and leaves every published vector's verdict unchanged.
+   */
+  const values: number[] = [];
   // The prompt's own string, e.g. "$8.1 million" or "22.6%". Parsing it back
   // is what makes "8.1" acceptable without opening a window around 8.1.
   const printed = fact.display.match(/-?\d[\d,]*(?:\.\d+)?/);
