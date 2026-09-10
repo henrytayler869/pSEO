@@ -116,6 +116,17 @@ jobs:
         # chỗ phát hiện: hợp đồng công bố cho các site đã lặng lẽ hết đúng.
         run: npx tsx scripts/verify-content-rules.ts
 
+      - name: Test — hai luật JSON-LD, và bộ vector của chúng còn từ chối được
+        # Không gọi mạng, không cần DB: vector dùng fact tổng hợp cố định, đúng
+        # lý do verify-content-rules.ts ở trên chạy được với DB rỗng.
+        #
+        # Đứng ở đây vì một bộ vector không ai chạy sẽ mục. Và phép kiểm này
+        # canh nhiều hơn "vector còn xanh": nó đòi mỗi luật có CẢ hai chiều,
+        # đòi MỌI NHÁNH của vị ngữ có ca chạm tới, và đòi một validator "accept
+        # mọi thứ" bị bắt. Nhánh thứ hai đã trả công ngay lần chạy đầu — một lỗ
+        # hổng lọt qua 11 vector đều xanh, chỉ độ phủ nhánh thấy.
+        run: npx tsx scripts/verify-technical-rules.ts
+
       # NOT run here: test-ai-validator.ts and scan-generated-copy.ts. Both
       # assert against REAL collected data and real generated copy, which a
       # blank CI database does not have. Running them against an empty
