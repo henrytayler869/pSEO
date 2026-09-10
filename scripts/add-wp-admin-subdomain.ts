@@ -281,8 +281,9 @@ ${"-".repeat(78)}
 ${wpConfigExtra(host, port, publicUrl)}
 
    rồi, THEO ĐÚNG THỨ TỰ NÀY:
-     # (i) phải RỖNG — đây là phép phân biệt duy nhất đúng
-     docker compose config 2>&1 | grep "variable is not set"
+     # (i) phải in ra 0 — đây là phép phân biệt duy nhất đúng
+     docker compose config >/dev/null 2>/tmp/compose-err.txt
+     grep -c "variable is not set" /tmp/compose-err.txt
 
      docker compose up -d wordpress
      docker compose logs --tail=50 wordpress | grep -i fatal   # phải rỗng
@@ -294,6 +295,12 @@ ${wpConfigExtra(host, port, publicUrl)}
 
    Thứ phân biệt được nằm ở stderr: file sai làm Compose kêu
    \"The _SERVER variable is not set\" hai lần; file đúng thì im.
+
+   Ghi stderr ra FILE chứ không dùng \`2>&1 >/dev/null | grep\`. Dạng đó đúng
+   trong bash nhưng sai trong zsh: zsh bật MULTIOS mặc định, nên stdout vẫn
+   chảy vào ống thay vì bị dup đi, và phép kiểm quay lại soi cả hai luồng.
+   Đo 2026-09-10 trên cùng một file: bash in 0, zsh in 1, zsh sau
+   \`unsetopt MULTIOS\` in 0.
 
    Muốn chắc hơn nữa thì hỏi thẳng container — đây mới là chuỗi PHP thật sự
    nhận, và nó phải có MỘT dấu đô-la:
