@@ -125,6 +125,30 @@ async function main() {
     }
   }
 
+  // --- luật khai provenBy phải có vector mang tên nó ---
+  //
+  // Chỗ hở này KHÔNG phải giả thuyết: nó là chế độ hỏng mà cả hai phía đang
+  // đếm bằng `provenBy`. Ai đó thêm một luật JSON-LD vào declaredRules, quên
+  // thêm vector, và danh sách trông đầy đủ hơn thứ thật sự chạy được — đúng
+  // câu chú thích ở đầu registry.ts cảnh báo.
+  //
+  // Phép "verdict công bố khớp verdict đo lại" ở trên KHÔNG bắt được nó: nó
+  // duyệt các vector ĐANG CÓ, nên một luật không có vector nào thì nó không có
+  // gì để duyệt và im lặng.
+  //
+  // Ép nổ bằng đột biến trước khi tin (2026-09-10): đổi id một luật thành tên
+  // không có vector -> 13/14, dòng ✗ in ra đúng tên bịa.
+  const jsonLdRuleIds = new Set<string>(rules.jsonLd.vectors.map((v) => v.rule));
+  for (const d of rules.declaredRules.filter((r) => r.id.startsWith("jsonld-"))) {
+    if (jsonLdRuleIds.has(d.id)) {
+      passed++;
+      console.log(`✓ ${d.id}: có vector mang đúng tên nó trong jsonLd.vectors`);
+    } else {
+      failures.push(`${d.id} khai provenBy nhưng jsonLd.vectors không có vector nào mang tên nó`);
+      console.log(`✗ ${d.id}: khai có bằng chứng chạy, nhưng không vector nào mang tên nó`);
+    }
+  }
+
   // --- metric resolutions ---
   const ambiguous = rules.metricResolutions.filter((m) => m.ambiguous);
   if (rules.metricResolutions.length === 0) {
@@ -171,7 +195,17 @@ async function main() {
   // một phép vừa TRƯỢT.
   // +3: một phép staleness cho vector JSON-LD, và một phép hai-chiều cho mỗi
   // trong hai luật JSON-LD.
-  const total = rules.rounding.vectors.length + 1 + 3 + (rules.metricResolutions.length === 0 ? 0 : 1);
+  // Mẫu số đếm theo số phép THẬT SỰ chạy, không theo hằng số viết tay. Một
+  // hằng số ở đây là bản sao thứ hai của "có bao nhiêu phép", và nó trôi lệch
+  // ngay lần đầu ai đó thêm luật JSON-LD thứ ba: phép mới chạy, tử số tăng,
+  // mẫu số đứng yên, và kết quả in ra 13/12.
+  const jsonLdDeclared = rules.declaredRules.filter((r) => r.id.startsWith("jsonld-")).length;
+  const total =
+    rules.rounding.vectors.length +
+    1 + // vector làm tròn có cả hai chiều
+    1 + // verdict công bố khớp verdict đo lại
+    jsonLdDeclared * 2 + // mỗi luật: cả hai chiều, và có vector mang tên nó
+    (rules.metricResolutions.length === 0 ? 0 : 1);
   console.log(`\n${passed}/${total} kiểm tra đúng.`);
   if (failures.length > 0) {
     console.error(`\nTHẤT BẠI:\n  ${failures.join("\n  ")}`);

@@ -927,6 +927,82 @@ với thợ lợp, nhưng bên chuyển nhà không bảo hành nhà bạn).
 
 ---
 
+## 3.8 `/api/v1/content-rules` — hợp đồng nội dung, và cách CHỨNG MINH bạn tuân thủ
+
+Endpoint này chưa từng có trong tài liệu cho tới 2026-09-10, dù nó đã chạy
+nhiều ngày. Nghĩa là mọi publisher trước đó chỉ biết tới nó nếu có người nói
+miệng — và một trường trong API mà không tài liệu nào nhắc tới thì nó chỉ có
+mặt cho người đã biết nó có mặt.
+
+```bash
+curl -s -H "x-api-key: $KEY" https://hq.cornships.com/api/v1/content-rules
+```
+
+### Nó KHÔNG phải danh sách lời khuyên
+
+Điểm khác biệt với mọi checklist SEO bạn từng đọc: mỗi luật ở đây đi kèm
+**vector conformance**, và verdict của vector **được đo bằng cách chạy validator
+thật tại thời điểm gọi**, không phải một hằng số ai đó gõ vào.
+
+Nên bạn không đọc mô tả rồi tự diễn giải. Bạn chạy vector qua validator của
+mình và khẳng định verdict khớp. Site nào pass đã **chứng minh** validator của
+nó đồng ý với HQ.
+
+`scripts/verify-content-rules.ts` trong repo HQ là bản tham chiếu — chép vòng
+lặp đó. Phần quan trọng là **đáp án đến từ HQ qua đường mạng**, không phải từ
+một hằng số trong repo bạn. Một hằng số là bản sao thứ hai, và bản sao thứ hai
+trôi lệch.
+
+### Các mục trong response
+
+| Mục | Nội dung |
+|---|---|
+| `version` | Bump khi có trường mới hoặc luật mới. Hiện là `6`. |
+| `rounding.vectors` | Luật làm tròn: model được in con số nào, không được in con số nào |
+| `jsonLd.vectors` | **Mới ở version 6.** Hai luật cho structured data — xem dưới |
+| `reservedTerms` | Term thuộc về trang pillar, không được dùng làm anchor ở nơi khác |
+| `metricResolutions` | Mỗi chỉ số đo ở cấp nào (ZIP/COUNTY/STATE) — đọc trước khi cộng gộp |
+| `requiredPages` | Trang bắt buộc (`/privacy`, `/terms`, `/about`, `/contact`) kèm đường dẫn thay thế |
+| `declaredRules` | Luật nào tồn tại, ai thực thi, và **có bằng chứng chạy được hay chưa** |
+
+### `jsonLd` — vì sao nó tồn tại riêng
+
+Luật `displayed-only` chặn việc bịa chữ số trong **văn bản**, và trước version 6
+nó dừng ở ranh giới HTML. JSON-LD là bề mặt **duy nhất viết cho máy đọc** và
+trước đó **không ai kiểm**.
+
+Đo trên một publisher thật (2026-09-10, 56/192 URL): **96/449 PropertyValue**
+công bố chữ số không có ở đâu trên trang — `46.02954943221133` trong khi trang
+in `46.0%`.
+
+Hai luật:
+
+- **`jsonld-value-displayed-only`** — giá trị trong JSON-LD không được công bố
+  chữ số trang không in ra. Được thêm số 0 ở cuối, **không** được bớt chữ số.
+  Chỉ áp cho giá trị có phần thập phân: đổi thang (`2249409000` → `$2.25
+  billion`) là chính sách ĐƯỢC PHÉP, nên bắt số nguyên xuất hiện nguyên dạng sẽ
+  là đòi JSON-LD công bố dữ liệu **kém chính xác hơn** dữ liệu thật.
+- **`jsonld-aggregate-declares-scope`** — `measurementTechnique` phải có đúng một
+  trong hai hình dạng: `<nguồn> (<zip|county>-level)`, hoặc `<phép tính> of
+  <nguồn> across <N> <danh từ phạm vi>`.
+
+Mỗi vector có `rule`, `value`, `visibleText`, `why`, `expect`, `measuredReason`.
+`measuredReason` là câu vị ngữ tự giải thích lúc chạy — nếu nó không khớp với
+`why`, tin `measuredReason`, vì `why` do người viết còn nó thì không.
+
+### Đọc `declaredRules` cho đúng
+
+Trường `provenBy` là phần quan trọng nhất và dễ bỏ qua nhất. **Luật không có
+`provenBy` là luật chưa ai thấy nổ** — nó đọc y hệt một luật đang bảo vệ điều
+gì đó. Hiện 2/9 luật ở trạng thái đó, và cả hai đều là luật văn bản.
+
+`notAppliedTo` liệt kê đường dẫn luật **không** áp dụng, kèm lý do. Đừng tự suy
+ra ngoại lệ: ví dụ đang có là `stay-in-trade` cấm hứa bảo hành, trong khi trang
+`/terms` **bắt buộc** phải từ chối bảo hành — và chính `requiredPages` đòi bạn
+có trang đó. Scanner nào tự suy sẽ suy khác nhau.
+
+---
+
 ## 4. Nguồn dữ liệu chính phủ hiện có
 
 Mỗi nguồn được gắn nhãn niche (`relevantVerticals`) để biết dùng cho việc gì.
