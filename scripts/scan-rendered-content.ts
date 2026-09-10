@@ -117,6 +117,69 @@ export function isSupplySideBridge(sentence: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Luật hai: một con số dẫn xuất khai SAI số lượng geography góp vào nó
+// ---------------------------------------------------------------------------
+
+/**
+ * Đây là `aggregate-must-declare-scope` nhìn từ một phía chưa ai nhìn.
+ *
+ * Luật đó đòi một con số gộp qua nhiều địa bàn phải in kèm SỐ LƯỢNG geography
+ * góp vào. Trên site đo được, phần "gộp" không bị vi phạm chút nào — trang cụm
+ * cố ý KHÔNG cộng số county, mà tách riêng từng county ("Migration, county by
+ * county", "Harris County — 7 of these ZIP codes"), và ghi thẳng "No substitute
+ * or county average is shown in its place". Cộng một metric COUNTY theo từng ZIP
+ * nhân lên tới 13.07x, và site này không làm phép cộng đó.
+ *
+ * Nhưng trang cụm có một loại số dẫn xuất KHÁC: tỷ số max/min qua các ZIP,
+ * in ra là "a 1.77 × spread across one county". Tỷ số ấy đúng. Cái sai là mệnh
+ * đề phạm vi đi kèm — trang Houston tự khai ngay đoạn mở đầu rằng nó trải BA
+ * county, rồi năm dòng dưới nói con số trải "one county".
+ *
+ * Vì sao đây là luật chứ không phải lỗi chính tả: mệnh đề phạm vi là thứ DUY
+ * NHẤT cho người đọc kiểm được con số. "1.77× across one county" mời người đọc
+ * hiểu rằng chênh lệch ấy tồn tại bên trong một thị trường; "across three
+ * counties" nói một điều khác hẳn — rằng nó tồn tại giữa ba thị trường bị gộp
+ * vào một trang. Cùng một con số, hai kết luận trái ngược, và phần quyết định
+ * kết luận là phần bị in sai.
+ *
+ * HQ kiểm được từ xa mà không cần dữ liệu gì bên ngoài: **trang tự mâu thuẫn với
+ * chính nó**. Nó khai số county ở một chỗ và phủ nhận ở chỗ khác. Không phép đo
+ * nào ngoài trang tham gia vào kết luận này.
+ */
+const DECLARED_COUNTIES = /\bThey span (\d+) count(?:y|ies)\b/i;
+const DERIVED_SCOPE_CLAIM = /×\s*spread\s+across\s+(one|two|three|four|\d+)\s+count(?:y|ies)/gi;
+
+const WORD_TO_NUMBER: Record<string, number> = { one: 1, two: 2, three: 3, four: 4 };
+
+export interface ScopeMismatch {
+  declared: number;
+  claimed: number;
+  phrase: string;
+}
+
+/**
+ * Nhận VĂN BẢN của cả trang, không phải từng câu: hai vế của mâu thuẫn nằm ở
+ * hai đoạn cách nhau, nên một luật chạy trên từng câu không thể thấy nó. Đây là
+ * lý do luật này không nối vào `isSupplySideBridge()` mà đứng riêng.
+ */
+export function findScopeCountMismatches(pageText: string): ScopeMismatch[] {
+  const declaredMatch = DECLARED_COUNTIES.exec(pageText);
+  // Không tự khai thì không có gì để mâu thuẫn. Một trang ZIP đơn lẻ rơi vào
+  // đây, và im lặng là kết luận đúng cho nó — không phải "sạch", mà "luật này
+  // không có bề mặt trên trang đó".
+  if (!declaredMatch) return [];
+  const declared = Number(declaredMatch[1]);
+
+  const out: ScopeMismatch[] = [];
+  DERIVED_SCOPE_CLAIM.lastIndex = 0;
+  for (const m of pageText.matchAll(DERIVED_SCOPE_CLAIM)) {
+    const claimed = WORD_TO_NUMBER[m[1].toLowerCase()] ?? Number(m[1]);
+    if (claimed !== declared) out.push({ declared, claimed, phrase: m[0] });
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Vector — verdict ĐO bằng cách chạy hàm trên, không phải khai bằng tay
 // ---------------------------------------------------------------------------
 
@@ -180,12 +243,71 @@ export const SUPPLY_BRIDGE_VECTORS: { expect: "reject" | "accept"; text: string;
   },
 ];
 
+/**
+ * Vector cho luật hai. Nhận VĂN BẢN TRANG, nên mỗi ca là một đoạn rút gọn giữ
+ * đúng hai vế của mâu thuẫn — câu tự khai số county, và câu khai phạm vi của
+ * con số dẫn xuất.
+ *
+ * Ba ca đầu là NGUYÊN VĂN từ site. Hai ca cuối đánh dấu DỰNG, và nói rõ vì sao
+ * phải dựng: trên site hiện tại chúng không tồn tại, nhưng nếu không có chúng
+ * thì hai nhánh thu hẹp của luật không ca nào ép chạy tới.
+ */
+export const SCOPE_COUNT_VECTORS: { expect: "reject" | "accept"; label: string; text: string; why: string }[] = [
+  {
+    expect: "reject",
+    label: "tx/houston (nguyên văn)",
+    text:
+      "10 ZIP codes in Houston have federal housing data collected for them. They span 3 counties — Harris County, Fort Bend County and Montgomery County. " +
+      "Median home value runs from $217,400 in 77036 to $384,400 in 77433 — a 1.77 × spread across one county.",
+    why: "Trang tự khai 3 county ở đoạn mở đầu, rồi nói con số dẫn xuất trải 'one county'. 5 dòng như vậy trên trang này.",
+  },
+  {
+    expect: "reject",
+    label: "va/virginia-beach (nguyên văn)",
+    text:
+      "They span 2 counties — Norfolk city and Virginia Beach city, all within the Virginia Beach-Chesapeake-Norfolk, VA-NC metro area. " +
+      "Homeownership rate runs from 41.1% in 23464 to 55.9% in 23503 — a 1.36 × spread across one county.",
+    why: "Cùng lỗi với 2 county. Đo được trên 4 trang, 18 câu.",
+  },
+  {
+    expect: "accept",
+    label: "ny/brooklyn (nguyên văn)",
+    text:
+      "23 ZIP codes in Brooklyn have federal housing data collected for them. They span 1 county — Kings County. " +
+      "Median home value runs from $549,400 in 11212 to $1,674,700 in 11215 — a 3.05 × spread across one county.",
+    why: "Cụm một county nói 'one county' — ĐÚNG. Ca này là thứ chặn luật thoái hoá thành 'mọi câu spread đều sai'.",
+  },
+  {
+    expect: "accept",
+    label: "DỰNG — cụm đa county khai đúng",
+    text:
+      "They span 3 counties — Harris County, Fort Bend County and Montgomery County. " +
+      "Median home value runs from $217,400 to $384,400 — a 1.77 × spread across three counties.",
+    why:
+      "Hình dạng ĐÚNG mà site chưa có trang nào đạt được, nên phải dựng. Không có ca này thì không gì chứng minh luật chấp nhận một bản sửa — nó chỉ chứng minh luật biết từ chối.",
+  },
+  {
+    expect: "accept",
+    label: "DỰNG — không tự khai số county",
+    text: "Median home value runs from $217,400 to $384,400 — a 1.77 × spread across one county.",
+    why:
+      "Không có câu 'They span N counties' thì không có gì để mâu thuẫn, và luật phải im. Ép nhánh `if (!declaredMatch) return []` chạy tới. Trên site không có trang thật nào ở hình dạng này (đã kiểm trang state và trang ZIP: cả hai đều không in cụm spread), nên ca này dựng — và đó chính là lý do nó cần thiết.",
+  },
+];
+
 interface VectorResult {
   expect: string;
   got: string;
   ok: boolean;
   text: string;
   why: string;
+}
+
+export function runScopeVectors(): (VectorResult & { label: string })[] {
+  return SCOPE_COUNT_VECTORS.map((v) => {
+    const got = findScopeCountMismatches(v.text).length > 0 ? "reject" : "accept";
+    return { expect: v.expect, got, ok: got === v.expect, text: v.text, why: v.why, label: v.label };
+  });
 }
 
 export function runVectors(): VectorResult[] {
@@ -260,6 +382,51 @@ function assertScannerWorks(): boolean {
     `\nCả ${results.length} vector khớp (${rejects} reject / ${accepts} accept).\n` +
       `Đột biến: ${[...rescued].map(([n, c]) => `vô hiệu ${n} làm ${c} vector đổi kết quả`).join("; ")} — cả hai nhánh thu hẹp đều chạy thật.`
   );
+
+  return assertScopeRuleWorks();
+}
+
+/** Tự kiểm luật hai, cùng kỷ luật: hai chiều, verdict đo, và ép từng nhánh nổ. */
+function assertScopeRuleWorks(): boolean {
+  const results = runScopeVectors();
+  console.log(`\nTự kiểm luật cluster-scope-count-mismatch — ${SCOPE_COUNT_VECTORS.length} vector:`);
+  for (const r of results) {
+    console.log(`  ${r.ok ? "OK  " : "SAI "} mong ${r.expect}, được ${r.got}  [${r.label}]`);
+  }
+  const failed = results.filter((r) => !r.ok);
+  if (failed.length > 0) {
+    console.error(`\n${failed.length}/${results.length} vector SAI.`);
+    return false;
+  }
+
+  // Nhánh 1 — "không tự khai số county thì im". Ép bằng cách làm câu tự khai
+  // LUÔN khớp với một con số khác 1: ca không-tự-khai phải đổi sang reject.
+  const savedExec = DECLARED_COUNTIES.exec.bind(DECLARED_COUNTIES);
+  (DECLARED_COUNTIES as unknown as { exec: (s: string) => RegExpExecArray | null }).exec = () =>
+    ["They span 2 counties", "2"] as unknown as RegExpExecArray;
+  const mutatedA = runScopeVectors().filter((r, i) => r.got !== results[i].got).length;
+  (DECLARED_COUNTIES as unknown as { exec: (s: string) => RegExpExecArray | null }).exec = savedExec;
+
+  // Nhánh 2 — phép so sánh claimed vs declared. Ép bằng cách làm "one" đọc
+  // thành một số khác: ca khai ĐÚNG phải đổi sang reject.
+  const savedOne = WORD_TO_NUMBER.one;
+  WORD_TO_NUMBER.one = 99;
+  const mutatedB = runScopeVectors().filter((r, i) => r.got !== results[i].got).length;
+  WORD_TO_NUMBER.one = savedOne;
+
+  if (mutatedA === 0 || mutatedB === 0) {
+    console.error(
+      `\nNhánh không được ép chạy — im-khi-không-tự-khai: ${mutatedA} ca đổi; so-sánh-số-lượng: ${mutatedB} ca đổi.\n` +
+        `Nhánh nào 0 là nhánh có thể xoá mà cả bộ vector vẫn xanh.`
+    );
+    return false;
+  }
+
+  const rejects = results.filter((r) => r.expect === "reject").length;
+  console.log(
+    `\nCả ${results.length} vector khớp (${rejects} reject / ${results.length - rejects} accept).\n` +
+      `Đột biến: ép câu tự khai luôn khớp làm ${mutatedA} vector đổi; đọc lệch "one" làm ${mutatedB} vector đổi — cả hai nhánh đều chạy thật.`
+  );
   return true;
 }
 
@@ -324,7 +491,19 @@ function scan(pages: { url: string; html: string }[], patterns: Pattern[]): Hit[
   };
 
   for (const page of pages) {
-    for (const sentence of visibleSentences(page.html)) {
+    // Luật cấp TRANG, chạy trước: hai vế của mâu thuẫn nằm ở hai đoạn cách
+    // nhau, nên vòng lặp theo câu bên dưới không thể thấy nó.
+    const sentences = visibleSentences(page.html);
+    for (const m of findScopeCountMismatches(sentences.join(" "))) {
+      record(
+        "cluster-scope-count-mismatch",
+        "Một con số dẫn xuất khai SAI số lượng geography góp vào nó. Mệnh đề phạm vi là thứ duy nhất cho người đọc kiểm được con số, và trang tự mâu thuẫn với chính nó.",
+        page.url,
+        `trang tự khai ${m.declared} county, con số dẫn xuất nói "${m.phrase}"`
+      );
+    }
+
+    for (const sentence of sentences) {
       if (isSupplySideBridge(sentence)) {
         record("rendered-supply-side-bridge", "Treo một khẳng định về công việc hoặc bên cung lên một đại lượng đo. Không nguồn nào trong dataset đo phía cung.", page.url, sentence);
       }
