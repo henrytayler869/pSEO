@@ -27,7 +27,7 @@ import { validateGeneratedText } from "../lib/ai/validate";
  *
  * The site session found five of its thirteen rules in exactly that state
  * while reporting a green suite. Same trap, one table over. */
-const RULES = ["unsupported_number", "scope_overclaim", "worded_proportion", "invented_place_name"];
+const RULES = ["unsupported_number", "scope_overclaim", "worded_proportion", "invented_place_name", "wrong_unit"];
 
 interface Case {
   name: string;
@@ -68,6 +68,37 @@ const CASES: Case[] = [
   {
     name: "giá trị đo nguyên vẹn vẫn được chấp nhận",
     text: (f) => `Median home value sits at $${zipFact(f, "census_median_home_value_usd").toLocaleString()}.`,
+    shouldPass: true,
+  },
+  {
+    // REGRESSION cho một lỗ validator chưa bao giờ nhìn thấy: nó kiểm CON SỐ
+    // và không kiểm ĐƠN VỊ. Vô hình với vertical này vì label tình cờ mang
+    // đơn vị bằng chữ; mở toang với các vertical khí hậu, nơi dòng prompt là
+    // số trần ("annual precipitation: 8.79") và model viết inches, cm hay mm
+    // đều lọt — sai 2.54 lần, đọc trôi chảy.
+    name: "REGRESSION: figure đo bằng people bị gọi là households",
+    text: (f) => {
+      const fact = f.facts.find((x) => x.unit === "people/yr")!;
+      return `Last year ${fact.value.toLocaleString()} households arrived from elsewhere.`;
+    },
+    shouldPass: false,
+  },
+  {
+    name: "cùng con số đó, gọi đúng đơn vị -> im",
+    text: (f) => {
+      const fact = f.facts.find((x) => x.unit === "people/yr")!;
+      return `Last year ${fact.value.toLocaleString()} people arrived from elsewhere.`;
+    },
+    shouldPass: true,
+  },
+  {
+    // Luật chỉ được nói khi nó BIẾT. Một con số khớp nhiều fact với đơn vị
+    // khác nhau thì chọn bên nào cũng là đoán đội lốt kiểm tra.
+    name: "từ thường ngày cạnh một con số KHÔNG bị coi là đơn vị",
+    text: (f) => {
+      const fact = f.facts.find((x) => x.unit === "people/yr")!;
+      return `Last year ${fact.value.toLocaleString()} people moving from elsewhere settled here.`;
+    },
     shouldPass: true,
   },
   {

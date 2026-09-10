@@ -161,6 +161,35 @@ function matchesFact(value: number, facts: Fact[]): Fact | null {
   return null;
 }
 
+/**
+ * Words a figure may be called, mapped to the units they legitimately name.
+ *
+ * The validator has always checked the NUMBER and never the UNIT. That was
+ * invisible while every prompt line carried its unit in the label — "people
+ * who moved in from another state: 1,845" — and it opened the moment the
+ * climate verticals arrived, whose prompt lines were bare numbers: "annual
+ * precipitation: 8.79". A model could write inches, centimetres or millimetres
+ * and every gate here passed it. A 2.54x error, in fluent prose.
+ *
+ * The prompt now carries the unit (lib/ai/facts.ts), which is what created the
+ * standing to check this at all: before, "people" in a label was a convention
+ * to hope for; now it is a value to compare against.
+ *
+ * Deliberately SMALL. Measured across the 148 published passages, only two
+ * unit words occur next to numbers at any volume — households (143) and people
+ * (118) — and everything else in that position is ordinary prose ("440 from",
+ * "302 and"). A wider list would start flagging English.
+ */
+const UNIT_WORDS_IN_TEXT: Record<string, string[]> = {
+  people: ["people/yr"],
+  residents: ["people/yr"],
+  households: ["households/yr"],
+  inches: ["in/yr"],
+  inch: ["in/yr"],
+  cents: ["cents/kWh"],
+  kwh: ["kWh/yr", "kWh/m2/day"],
+};
+
 /** Phrases that claim a figure describes this specific zip. */
 const ZIP_SCOPE_CLAIM = /\b(in|for|within|across)\s+(zip\s*(code)?\s*)?\d{5}\b|\bthis\s+(zip|neighbou?rhood|area)\b/i;
 
@@ -207,8 +236,50 @@ const WORDED_PROPORTION =
  * cached — old text must clear today's rules, not the rules it was born
  * under.
  */
+/**
+ * Flags a figure called by the wrong unit.
+ *
+ * Only fires when the number ALREADY matches a fact — an unmatched number is
+ * rule 1's job, and reporting it twice under two names would make one problem
+ * look like two.
+ *
+ * Skips a number that matches facts with DIFFERENT units. "1,845" could be
+ * people in one fact and households in another, and choosing between them
+ * would be a guess dressed as a check. The whole value of this rule is that it
+ * only speaks when it knows.
+ */
+function checkUnitWords(text: string, facts: Fact[]): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  for (const m of text.matchAll(/(-?\$?[\d,]+(?:\.\d+)?%?)\s+([A-Za-z][A-Za-z-]{2,24})/g)) {
+    const written = Number(m[1].replace(/[$,%]/g, ""));
+    if (!Number.isFinite(written)) continue;
+    const allowedUnits = UNIT_WORDS_IN_TEXT[m[2].toLowerCase()];
+    if (!allowedUnits) continue;
+
+    const matching = facts.filter((f) => matchesFact(written, [f]) !== null);
+    if (matching.length === 0) continue; // rule 1 owns this
+    const units = new Set(matching.map((f) => f.unit));
+    if (units.size > 1) continue; // genuinely ambiguous — say nothing
+
+    const actual = [...units][0];
+    if (allowedUnits.includes(actual)) continue;
+
+    issues.push({
+      rule: "wrong_unit",
+      detail:
+        `"${m[1]} ${m[2]}" — con số này khớp chỉ số "${matching[0].label}", đo bằng ${actual}, ` +
+        `không phải ${m[2]}. Con số đúng, tên đơn vị sai, và không luật nào khác ở đây bắt được điều đó.`,
+    });
+  }
+  return issues;
+}
+
 export function validateGeneratedText(text: string, factSet: FactSet): ValidationResult {
   const issues: ValidationIssue[] = [];
+
+  // Runs alongside rule 1, not inside it: rule 1 asks whether a number exists
+  // in the data, this asks whether the words around it name the right thing.
+  issues.push(...checkUnitWords(text, factSet.facts));
 
   // --- Rule 1: every stated number must trace to a measured fact ---
   const zipAsNumber = Number(factSet.zip);

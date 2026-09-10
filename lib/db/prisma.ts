@@ -58,6 +58,70 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient();
+/**
+ * Names the tunnel when the tunnel is what broke.
+ *
+ * Deliberately NOT an auto-reconnect. Reopening the SSH forward on every
+ * failure would hide the fact that the connection is unstable, and an
+ * unreliable link to production data is a thing to see, not a thing to paper
+ * over. What was actually missing is diagnosis: Prisma reports
+ * "Can't reach database server at 127.0.0.1:55433", which is true and sends
+ * the reader to look at Postgres — a process that is running perfectly, on a
+ * machine they can reach, three thousand kilometres away.
+ *
+ * Only fires for :55433. The local container on 5433 failing means the
+ * container is down, and saying "check the tunnel" there would be the same
+ * error in the opposite direction.
+ *
+ * Measured today: the tunnel dropped with "Operation timed out / Broken pipe"
+ * after a network stall. ServerAliveInterval killed it on purpose rather than
+ * leaving a socket that accepts connections and never answers — a hung tunnel
+ * looks exactly like a slow database, which is far worse to debug than a
+ * closed port.
+ */
+const TUNNEL_PORT = ":55433";
+
+function explainConnectionFailure(error: unknown): unknown {
+  const url = process.env.DATABASE_URL ?? "";
+  if (!url.includes(TUNNEL_PORT)) return error;
+
+  const message = error instanceof Error ? error.message : String(error);
+  // Prisma's own wording for a refused/unreachable server. Matched loosely
+  // because the exact phrasing has changed across versions, and a matcher that
+  // only knows one version silently stops helping after an upgrade.
+  if (!/can't reach database server|connection refused|ECONNREFUSED|Timed out fetching a new connection/i.test(message)) {
+    return error;
+  }
+
+  return new Error(
+    `Không kết nối được database production qua tunnel (127.0.0.1${TUNNEL_PORT}).\n` +
+      `  Nhiều khả năng TUNNEL SSH ĐÃ ĐỨT, không phải Postgres hỏng — Postgres nằm trên VPS và chỉ nghe loopback ở đó.\n` +
+      `  Mở lại:      ./scripts/db-tunnel.sh\n` +
+      `  Kiểm nhanh:  lsof -ti:55433\n` +
+      `  Quay về DB cục bộ: ./scripts/use-db.sh local\n` +
+      `  Lỗi gốc: ${message}`
+  );
+}
+
+/**
+ * Every query goes through here so a dead tunnel is named once, at the layer
+ * that knows the URL, instead of being re-diagnosed at each of the dozens of
+ * call sites that would otherwise each report their own version of it.
+ */
+function withTunnelDiagnostics(client: PrismaClient): PrismaClient {
+  return client.$extends({
+    query: {
+      async $allOperations({ args, query }) {
+        try {
+          return await query(args);
+        } catch (error) {
+          throw explainConnectionFailure(error);
+        }
+      },
+    },
+  }) as unknown as PrismaClient;
+}
+
+export const prisma = globalForPrisma.prisma ?? withTunnelDiagnostics(new PrismaClient());
 
 if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
