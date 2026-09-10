@@ -25,7 +25,7 @@ Nhưng một trang publish ra phần lớn KHÔNG phải văn model sinh. Nó l�
 **template** — câu do code của site viết, nối quanh các con số. Văn template
 không đi qua model, nên không đi qua bất cứ chỗ nào biết tới luật.
 
-Đo được trên 192 trang: **369 câu vi phạm `no-supply-side-bridge`**, thuộc **9
+Đo được trên 192 trang: **368 câu vi phạm `no-supply-side-bridge`**, thuộc **9
 template**, lặp 127 / 97 / 57 / 44 / 16 / 13 / 12 lần. Không câu nào từng đi qua
 `validateGeneratedText()`. Nguyên văn một câu, xuất hiện y hệt trên 97 trang:
 
@@ -53,7 +53,7 @@ Kiểm được từ xa, cùng mô hình `lib/publisher/required-pages.ts`: nộ
 công khai, HQ chỉ cần hỏi site. Publisher mới thừa hưởng phép kiểm mà không phải
 cài gì.
 
-**Vị ngữ** (`isSupplySideBridge()` trong `scripts/scan-rendered-content.ts`) —
+**Vị ngữ** (`isSupplySideBridge()` trong `lib/content-rules/rendered-rules.ts`) —
 một câu bị TỪ CHỐI khi cả ba đúng:
 
 1. **ANTECEDENT** — phần trước connector có một đại lượng đo (con số, hoặc
@@ -231,7 +231,37 @@ chúng sẽ dạy người đọc lướt.
 
 ---
 
-## D. Hai luật hiện có nên SỬA, không phải thêm luật mới
+## D. Hai luật hiện có nên SỬA — HQ đã sửa, và đây là phép đo lại
+
+Cả hai đề xuất bên dưới HQ đã làm ở commit `27b9462`. Đo lại trên **cùng corpus
+192 trang** tải ngày 2026-09-10, nên trước/sau so được trực tiếp:
+
+| mẫu | trước | sau |
+|---|---|---|
+| `off_trade` | 2 template · 2 câu · 1 trang | **0** |
+| `migration_bridge` | 8 template · 32 câu · 23 trang, tính là VI PHẠM | 8 template · 32 câu, chuyển **hết** sang CẦN NGƯỜI XEM |
+
+Tổng vi phạm: 38 template → **29** (trong đó +1 là luật cụm mới ở mục B2). Không
+mẫu nào bị bịt miệng: `migration_bridge` vẫn báo đúng 32 câu ấy, chỉ nằm ở nhóm
+không chặn CI.
+
+**D1. `off_trade` báo nhầm trang pháp lý — đã sửa bằng dữ liệu, không bằng ngoại
+lệ trong scanner.** `stay-in-trade` giờ mang `notAppliedTo.paths`, lấy thẳng từ
+`REQUIRED_PAGES.flatMap(...)` chứ không chép — nên lần ai đó thêm một trang bắt
+buộc mới, miễn trừ đi theo. HQ phát biểu chỗ này mạnh hơn tôi và đúng hơn: đây
+không phải luật quá rộng, mà là **hai luật của cùng một bên nói ngược nhau** —
+HQ đòi một trang rồi phản đối nội dung bắt buộc của trang đó.
+
+**D2. `migration_bridge` sinh nhiễu khi chạy trên template — đã sửa bằng
+`Pattern.advisoryOnRendered`.** Trên generation nó là cổng; trên render nó là
+danh sách cần người xem. Khác biệt không nằm ở câu chữ mà ở NGƯỜI VIẾT: model có
+thể bịa một nhận định treo lên con số, còn template do người viết một lần và
+review một lần. Cùng regex, hai độ tin cậy — và HQ công bố điều đó thành dữ liệu
+thay vì để mỗi scanner tự nghĩ ra ngưỡng riêng.
+
+---
+
+## D-cũ. Nội dung hai đề xuất, giữ lại để đọc cùng phép đo
 
 **D1. `off_trade` báo nhầm trang pháp lý.** `moving-services` có
 `alsoOffLimits: ["warrant(y|ies)", …]`, nên tiêu đề **"No warranty"** trên
