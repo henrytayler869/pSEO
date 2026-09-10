@@ -41,6 +41,12 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
         >
           Bài viết
         </Link>
+        <Link
+          href={`/publisher/${websiteId}/articles`}
+          className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          Tạo bài viết
+        </Link>
       </div>
 
       <PageHeader

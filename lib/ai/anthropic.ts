@@ -90,7 +90,12 @@ export async function generateWithClaude(params: {
   system: string;
   prompt: string;
   vertical: string;
-  zip: string;
+  /** Null for an editorial article, which spans many ZIPs. */
+  zip: string | null;
+  /** Set for article generation so cost is attributable per publisher and per
+   * article. The ledger row is written either way — this only says WHOSE. */
+  websiteId?: string | null;
+  articleId?: string | null;
 }): Promise<GenerationResult> {
   const apiKey = await getCredential("ANTHROPIC_API_KEY");
   if (!apiKey) {
@@ -138,6 +143,8 @@ export async function generateWithClaude(params: {
     data: {
       vertical: params.vertical,
       zip: params.zip,
+      websiteId: params.websiteId ?? null,
+      articleId: params.articleId ?? null,
       model: config.model,
       inputTokens,
       outputTokens,

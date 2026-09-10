@@ -12,6 +12,16 @@ export interface SitemapCount {
   breakdown: { label: string; count: number }[];
   /** Sitemaps actually read, including nested ones. */
   sourcesRead: string[];
+  /**
+   * Every URL, not just the count.
+   *
+   * Exposed 2026-09-11 for the article QC checklist, which validates internal
+   * links against the pages the site ACTUALLY serves. The function already
+   * collected these in order to count them; returning them avoids a second
+   * sitemap fetcher, and a second fetcher is a second definition of "what this
+   * site publishes" that drifts from the first.
+   */
+  urls: string[];
 }
 
 /** A sitemap index may point at more sitemaps. Bounded so a misconfigured or
@@ -70,7 +80,7 @@ export async function fetchSitemapCounts(siteUrl: string): Promise<SitemapCount>
     throw new Error(`Sitemap ${root} không chứa URL nào (đã đọc ${sourcesRead.length} file).`);
   }
 
-  return { total: urls.length, sourcesRead, ...categoriseSitemapUrls(urls, siteUrl) };
+  return { urls, total: urls.length, sourcesRead, ...categoriseSitemapUrls(urls, siteUrl) };
 }
 
 /**
