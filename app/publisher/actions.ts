@@ -7,6 +7,7 @@ import { assertValidGscProperty, listSitemaps, submitSitemap } from "@/lib/googl
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "@/lib/google/analytics-data";
 import { notifySiteConfigChanged } from "@/lib/publisher/notify-site";
 import { normalizeHost } from "@/lib/publisher/link-domain";
+import { getVerticalsWithMarkets } from "@/lib/queries/verticals";
 
 export interface ActionResult {
   ok: boolean;
@@ -21,6 +22,7 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
   const wpApiBaseUrlRaw = String(formData.get("wpApiBaseUrl") ?? "").trim();
   const ga4MeasurementIdRaw = String(formData.get("ga4MeasurementId") ?? "").trim();
   const revalidateSecretRaw = String(formData.get("revalidateSecret") ?? "").trim();
+  const vertical = String(formData.get("vertical") ?? "").trim();
 
   if (!name || !url || !gscPropertyUrl || !ga4PropertyId) {
     return { ok: false, message: "Vui lòng nhập đủ Tên, URL, GSC property, và GA4 property ID." };
@@ -42,6 +44,24 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
    * Matched on host rather than on an id, same as the Domain <-> Publisher
    * link everywhere else — one rule, one definition of "the same site".
    */
+  /**
+   * Trade is required, and checked against trades that actually have markets.
+   *
+   * Not cosmetic validation: every content rule keyed on trade vocabulary
+   * refuses to run for a trade it does not know, so a typo here produces a
+   * site whose content checks silently do nothing. Rejecting at the door is
+   * the only place that failure is still visible.
+   */
+  const knownVerticals = await getVerticalsWithMarkets();
+  if (!knownVerticals.includes(vertical)) {
+    return {
+      ok: false,
+      message: vertical
+        ? `Ngành "${vertical}" chưa có market nào trong hệ thống. Đang có: ${knownVerticals.join(", ")}.`
+        : `Chưa chọn ngành. Mọi luật nội dung đều tra theo ngành, nên thiếu nó thì các phép kiểm chạy mà không soi gì.`,
+    };
+  }
+
   const host = normalizeHost(url);
   const domains = await prisma.domain.findMany({ select: { name: true } });
   if (!domains.some((d) => normalizeHost(d.name) === host)) {
@@ -70,6 +90,7 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
       data: {
         name,
         url,
+        vertical,
         gscPropertyUrl,
         ga4PropertyId,
         ga4MeasurementId: ga4MeasurementIdRaw || null,

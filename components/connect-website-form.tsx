@@ -9,6 +9,7 @@ const initialState: ActionResult = { ok: false, message: "" };
 const EMPTY_FIELDS = {
   name: "",
   url: "",
+  vertical: "",
   gscPropertyUrl: "",
   ga4PropertyId: "",
   ga4MeasurementId: "",
@@ -16,7 +17,7 @@ const EMPTY_FIELDS = {
   revalidateSecret: "",
 };
 
-export function ConnectWebsiteForm() {
+export function ConnectWebsiteForm({ verticals }: { verticals: string[] }) {
   const [state, formAction, pending] = useActionState(connectWebsiteAction, initialState);
   const [open, setOpen] = useState(false);
 
@@ -68,6 +69,25 @@ export function ConnectWebsiteForm() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {field("name", "Tên website", "VD: Moving Help Hub")}
         {field("url", "URL", "https://example.com")}
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">Ngành</span>
+          <select
+            name="vertical"
+            value={fields.vertical}
+            onChange={(e) => setFields((f) => ({ ...f, vertical: e.target.value }))}
+            className="rounded-md border px-2.5 py-1.5 text-sm"
+          >
+            {/* Không có lựa chọn mặc định nào được chọn sẵn: một ngành chọn sẵn
+                là một ngành ai đó sẽ gửi đi mà không đọc, và ngành sai làm mọi
+                luật nội dung tra nhầm từ vựng rồi báo sạch. */}
+            <option value="">— chọn ngành —</option>
+            {verticals.map((v) => (
+              <option key={v} value={v}>
+                {v}
+              </option>
+            ))}
+          </select>
+        </label>
         {field("gscPropertyUrl", "GSC property", "sc-domain:example.com")}
         {field("ga4PropertyId", "GA4 property ID (đọc báo cáo)", "553102895")}
         {field("ga4MeasurementId", "GA4 Measurement ID (site gửi sự kiện)", "G-XXXXXXXXXX")}
