@@ -29,6 +29,30 @@ export interface WpPost {
 export interface WpCredentials {
   username: string;
   applicationPassword: string;
+  /**
+   * Shared secret the publisher's must-use plugin checks before re-enabling
+   * Application Passwords, which WordPress disables on non-SSL connections.
+   *
+   * Sent on every request, read from nothing. That is the point: three
+   * attempts to identify this caller from properties of the request all failed,
+   * and the measurement that killed the last one is worth keeping close —
+   * mod_remoteip CONSUMES X-Forwarded-For, so PHP cannot see whether the header
+   * was sent, and "loopback with no XFF" and "loopback with a forged XFF" are
+   * indistinguishable to the plugin.
+   *
+   * Measured in the real WordPress context 2026-09-10 (an earlier probe that
+   * did not load wp-config.php reported the opposite for is_ssl and would have
+   * sent us the wrong way):
+   *
+   *              loopback        subdomain       loopback + forged XFF
+   *   XFF        absent          present         absent  <- consumed
+   *   REMOTE_ADDR 172.19.0.1     172.71.15.132   203.0.113.9  <- forged value
+   *   is_ssl()   false           true            false
+   *
+   * Null when the publisher has no such plugin. Writes then fail with 401,
+   * which is the visible direction.
+   */
+  loopbackSecret?: string | null;
 }
 
 export class WordPressError extends Error {
@@ -66,6 +90,10 @@ async function callWp(
     headers: {
       "Content-Type": "application/json",
       ...(creds ? { Authorization: authHeader(creds) } : {}),
+      // Only when there is one. Sending an empty header would be a value the
+      // plugin compares against and rejects, which reads downstream as a wrong
+      // secret rather than as no secret configured.
+      ...(creds?.loopbackSecret ? { "X-Atms-Loopback": creds.loopbackSecret } : {}),
     },
     ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
     cache: "no-store",

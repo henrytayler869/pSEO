@@ -14,6 +14,7 @@
 //     --url https://atmovingservices.com \
 //     --vertical moving-services \
 //     [--wp-username admin --wp-app-password-file /run/secrets/wp-app-pw] \
+//     [--wp-loopback-secret-file /run/secrets/wp-loopback] \
 //     --gsc sc-domain:atmovingservices.com \
 //     --ga4-property 553102895 \
 //     --ga4-measurement G-1TL8MDDEJH \
@@ -130,6 +131,9 @@ async function main() {
    */
   const wpUsername = arg("--wp-username");
   const wpAppPasswordFile = arg("--wp-app-password-file");
+  /** Same value the WordPress container gets as ATMS_LOOPBACK_SECRET. By file
+   * path for the same reason as the password above. */
+  const wpLoopbackSecretFile = arg("--wp-loopback-secret-file");
 
   if (!name || !url || !gsc || !ga4Property) {
     console.error("Thiếu tham số. Cần --name, --url, --vertical, --gsc, --ga4-property. Xem phần Usage ở đầu file.");
@@ -215,6 +219,9 @@ async function main() {
   const wpAppPassword = wpAppPasswordFile
     ? readSecretFile(wpAppPasswordFile, "--wp-app-password-file").replace(/\s+/g, "")
     : null;
+  const wpLoopbackSecret = wpLoopbackSecretFile
+    ? readSecretFile(wpLoopbackSecretFile, "--wp-loopback-secret-file")
+    : null;
 
   const known = await getVerticalsWithMarkets();
   if (!known.includes(vertical)) {
@@ -234,6 +241,7 @@ async function main() {
       url,
       vertical,
       ...(wpUsername && wpAppPassword ? { wpUsername, wpAppPassword } : {}),
+      ...(wpLoopbackSecret ? { wpLoopbackSecret } : {}),
       gscPropertyUrl: gsc,
       ga4PropertyId: ga4Property,
       ga4MeasurementId: ga4Measurement || null,
@@ -250,6 +258,7 @@ async function main() {
       // silently erase a secret that is already working.
       ...(revalidateSecret ? { revalidateSecret } : {}),
       ...(wpUsername && wpAppPassword ? { wpUsername, wpAppPassword } : {}),
+      ...(wpLoopbackSecret ? { wpLoopbackSecret } : {}),
     },
   });
 

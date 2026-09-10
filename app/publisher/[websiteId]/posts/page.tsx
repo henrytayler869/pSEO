@@ -16,7 +16,11 @@ export default async function PostsPage({ params }: { params: Promise<{ websiteI
   const base = website.wpApiBaseUrl ?? deriveWpApiBaseUrl(website.url);
   const creds =
     website.wpUsername && website.wpAppPassword
-      ? { username: website.wpUsername, applicationPassword: website.wpAppPassword }
+      ? {
+          username: website.wpUsername,
+          applicationPassword: website.wpAppPassword,
+          loopbackSecret: website.wpLoopbackSecret,
+        }
       : null;
 
   let posts: PostRow[] = [];

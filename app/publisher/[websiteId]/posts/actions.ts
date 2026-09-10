@@ -36,7 +36,11 @@ async function loadWritable(
 
   return {
     base: website.wpApiBaseUrl ?? deriveWpApiBaseUrl(website.url),
-    creds: { username: website.wpUsername, applicationPassword: website.wpAppPassword },
+    creds: {
+      username: website.wpUsername,
+      applicationPassword: website.wpAppPassword,
+      loopbackSecret: website.wpLoopbackSecret,
+    },
   };
 }
 
