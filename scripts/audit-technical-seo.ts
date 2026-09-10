@@ -22,6 +22,8 @@
 // Exit code 1 nếu có bất kỳ finding severity "error" — để CI của publisher có
 // thể gọi thẳng script này làm cổng chặn deploy.
 
+import { checkAggregateTechnique, checkDisplayedOnlyValue, type MeasuredValue } from "../lib/content-rules/jsonld-rules";
+
 interface Finding {
   id: string;
   severity: "error" | "warning" | "info";
@@ -34,6 +36,14 @@ interface Finding {
 
 const findings: Finding[] = [];
 const add = (f: Finding) => findings.push(f);
+
+/**
+ * Mẫu số của mọi phát biểu dạng "N trường hợp sai".
+ *
+ * Không có nó thì "96 lỗi" không phân biệt được với "96 trên 96" — và một
+ * người đọc báo cáo sẽ tự điền mẫu số họ đoán.
+ */
+const totals = { datasets: 0, propertyValues: 0 };
 
 /**
  * Cloudflare trả một tài liệu KHÁC cho `Accept: * / *` so với `Accept: text/html`
@@ -249,9 +259,44 @@ async function readPage(url: string): Promise<PageFacts | null> {
   return { url, status, html: body, jsonld, internalLinks: all(body, /<a[^>]+href="(\/[^"#]*)"/gi) };
 }
 
+/**
+ * Một node JSON-LD như site thật sự gửi.
+ *
+ * Giá trị là `unknown`, không phải `any`, và khác biệt đó là toàn bộ điểm của
+ * script này: đây là dữ liệu NGOÀI, do một site khác sinh ra, và mọi thứ ở đây
+ * đo được chính vì nó không được tin. `any` sẽ cho code đọc `ds.variableMeasured
+ * [0].value.toFixed(1)` mà không ai chặn — rồi script kiểm chất lượng schema sẽ
+ * tự nổ ở đúng cái schema nó được viết ra để bắt lỗi.
+ */
+type JsonLdNode = Record<string, unknown>;
+
+const asNodes = (v: unknown): JsonLdNode[] =>
+  Array.isArray(v) ? v.filter((x): x is JsonLdNode => typeof x === "object" && x !== null) : [];
+
 /** Trải @graph ra phẳng để hỏi "trang này có node loại X không". */
-const nodes = (jsonld: unknown[]): Record<string, any>[] =>
-  jsonld.flatMap((j: any) => (Array.isArray(j) ? j : j?.["@graph"] ? j["@graph"] : [j])).filter(Boolean);
+const nodes = (jsonld: unknown[]): JsonLdNode[] =>
+  jsonld.flatMap((j) => {
+    if (Array.isArray(j)) return asNodes(j);
+    if (typeof j !== "object" || j === null) return [];
+    const graph = (j as JsonLdNode)["@graph"];
+    return graph === undefined ? [j as JsonLdNode] : asNodes(graph);
+  });
+
+const str = (v: unknown): string | undefined => (typeof v === "string" ? v : undefined);
+
+/**
+ * Đọc variableMeasured thành đúng kiểu mà hai vị ngữ của HQ nhận.
+ *
+ * Một mục thiếu `value` thành NaN chứ không bị bỏ qua: "trường value không có"
+ * là một khiếm khuyết cần báo, và lọc nó đi ở đây sẽ khiến nó im lặng.
+ */
+const toMeasuredValues = (v: unknown): MeasuredValue[] =>
+  asNodes(v).map((n) => ({
+    name: str(n.name),
+    value: typeof n.value === "number" || typeof n.value === "string" ? n.value : NaN,
+    unitText: str(n.unitText),
+    measurementTechnique: str(n.measurementTechnique),
+  }));
 
 function auditPage(p: PageFacts) {
   const { url, html } = p;
@@ -293,8 +338,8 @@ function auditPage(p: PageFacts) {
 
   // Breadcrumb: kiểm CẤU TRÚC, vì lỗi hay gặp là position nhảy cóc hoặc thiếu item.
   for (const bc of ns.filter((n) => n["@type"] === "BreadcrumbList")) {
-    const items: any[] = bc.itemListElement ?? [];
-    const positions = items.map((i) => i.position);
+    const items = asNodes(bc.itemListElement);
+    const positions = items.map((i) => Number(i.position));
     const ok = positions.every((v, i) => v === i + 1) && items.every((i) => i.name && i.item);
     if (!ok) add({ id: "breadcrumb-shape", severity: "error", where: path, detail: `BreadcrumbList có position=[${positions.join(",")}], ${items.filter((i) => !i.item).length} mục thiếu item`, why: "Breadcrumb sai cấu trúc bị bỏ hoàn toàn — mất luôn đường dẫn hiển thị trên SERP." });
   }
@@ -302,6 +347,7 @@ function auditPage(p: PageFacts) {
   // Dataset: đây là schema mang giá trị thật của site dữ liệu. Kiểm trường
   // Google dùng, và kiểm ĐỘ CHÍNH XÁC của con số công bố.
   for (const ds of ns.filter((n) => n["@type"] === "Dataset")) {
+    totals.datasets++;
     for (const field of ["name", "description", "url", "creator"]) {
       if (!ds[field]) add({ id: "dataset-required", severity: "error", where: path, detail: `Dataset thiếu ${field}`, why: "Thiếu trường bắt buộc thì Dataset không đủ điều kiện cho Google Dataset Search — thứ duy nhất biến schema này thành lưu lượng." });
     }
@@ -318,21 +364,30 @@ function auditPage(p: PageFacts) {
         });
     }
 
+    // Hai luật dưới đây gọi ĐÚNG vị ngữ mà HQ công bố vector cho, ở
+    // lib/content-rules/jsonld-rules.ts. Cài lại chúng ở đây là tạo bản copy
+    // thứ hai để trôi lệch — thứ registry.ts tồn tại để chặn.
     const shown = visibleText(p.html);
-    for (const v of (ds.variableMeasured ?? []) as any[]) {
-      if (!v.measurementTechnique)
-        add({ id: "variable-no-technique", severity: "error", where: path, detail: `PropertyValue "${v.name}" không khai measurementTechnique`, why: "Luật aggregate-must-declare-scope yêu cầu phạm vi và phép tính phải vào measurementTechnique. Không có nó thì một số cấp hạt và một số cấp zip trông y hệt nhau." });
-
-      // Con số công bố cho MÁY phải là con số đã hiện cho NGƯỜI.
-      const s = String(v.value);
-      const decimals = (s.split(".")[1] ?? "").length;
-      if (decimals > 2 && !shown.includes(s))
+    for (const v of toMeasuredValues(ds.variableMeasured)) {
+      totals.propertyValues++;
+      const scope = checkAggregateTechnique(v);
+      if (!scope.passed)
         add({
-          id: "jsonld-precision",
+          id: "jsonld-aggregate-declares-scope",
           severity: "error",
           where: path,
-          detail: `PropertyValue "${v.name}" = ${s} (${v.unitText ?? "?"}) — chuỗi này không xuất hiện ở đâu trên trang`,
-          why: "Site đã có luật 'displayed-only' cho văn bản: mọi chữ số vượt quá mức đã in ra là chữ số bịa. Luật đó dừng ở ranh giới HTML — JSON-LD không ai kiểm, nên nó công bố giá trị thô. Đây lại chính là bề mặt máy đọc: một ước lượng ACS có sai số ±1-2 điểm phần trăm đang được khai với 14 chữ số thập phân.",
+          detail: `PropertyValue "${v.name}": ${scope.reason}`,
+          why: "Nửa JSON-LD của luật aggregate-must-declare-scope. Cộng một chỉ số cấp COUNTY theo từng ZIP nhân nó lên 13.07 lần (đo được), và từ bên ngoài không cách nào phân biệt phép cộng đúng với phép cộng sai nếu con số không tự khai phạm vi và số lượng địa bàn.",
+        });
+
+      const displayed = checkDisplayedOnlyValue(v, shown);
+      if (!displayed.passed)
+        add({
+          id: "jsonld-value-displayed-only",
+          severity: "error",
+          where: path,
+          detail: `PropertyValue "${v.name}" = ${v.value} (${v.unitText ?? "?"}): ${displayed.reason}`,
+          why: "Luật 'displayed-only' của HQ chặn model bịa chữ số trong VĂN BẢN, và dừng ở ranh giới HTML. JSON-LD là bề mặt duy nhất viết ra cho máy đọc, không ai kiểm — nên nó công bố giá trị thô. Một ước lượng ACS sai số ±1-2 điểm phần trăm đang được khai với 14 chữ số thập phân, ở đúng chỗ máy tin.",
         });
     }
   }
@@ -340,9 +395,10 @@ function auditPage(p: PageFacts) {
   // FAQ trong schema mà không có trên trang là structured data không khớp nội dung.
   for (const faq of ns.filter((n) => n["@type"] === "FAQPage")) {
     const shown = visibleText(p.html);
-    const missing = ((faq.mainEntity ?? []) as any[]).filter((q) => q.name && !shown.includes(String(q.name).slice(0, 40)));
+    const questions = asNodes(faq.mainEntity);
+    const missing = questions.filter((q) => q.name && !shown.includes(String(q.name).slice(0, 40)));
     if (missing.length > 0)
-      add({ id: "faq-not-visible", severity: "error", where: path, detail: `${missing.length}/${(faq.mainEntity ?? []).length} câu hỏi trong FAQPage không có trên trang`, why: "Chính sách structured data của Google: nội dung đánh dấu phải nhìn thấy được. Đánh dấu nội dung ẩn là lý do bị phạt thủ công, không phải lý do mất rich result." });
+      add({ id: "faq-not-visible", severity: "error", where: path, detail: `${missing.length}/${questions.length} câu hỏi trong FAQPage không có trên trang`, why: "Chính sách structured data của Google: nội dung đánh dấu phải nhìn thấy được. Đánh dấu nội dung ẩn là lý do bị phạt thủ công, không phải lý do mất rich result." });
   }
 }
 
@@ -424,7 +480,6 @@ async function main() {
     // đều trả 200 và đều không thuộc câu hỏi này — lọc bằng content-type chứ
     // không bằng danh sách đuôi file, vì danh sách đuôi file sẽ thiếu một cái.
     if (res.status !== 200 || !(res.headers.get("content-type") ?? "").includes("text/html")) continue;
-    const status = res.status;
     const body = await res.text();
     const robotsMeta = attr(body, /<meta[^>]+name="robots"[^>]+content="([^"]*)"/i) ?? "";
     if (/noindex/i.test(robotsMeta)) continue;
@@ -453,7 +508,13 @@ async function main() {
     }
     console.log(`     ${f.where}: ${f.detail}`);
   }
-  console.log(`\n${counts.error} lỗi · ${counts.warning} cảnh báo · ${counts.info} ghi nhận`);
+  const failed = (id: string) => findings.filter((f) => f.id === id).length;
+  console.log(
+    `\nSchema đã đọc: ${totals.datasets} Dataset · ${totals.propertyValues} PropertyValue` +
+      ` — jsonld-value-displayed-only ${totals.propertyValues - failed("jsonld-value-displayed-only")}/${totals.propertyValues} đạt` +
+      ` · jsonld-aggregate-declares-scope ${totals.propertyValues - failed("jsonld-aggregate-declares-scope")}/${totals.propertyValues} đạt`
+  );
+  console.log(`${counts.error} lỗi · ${counts.warning} cảnh báo · ${counts.info} ghi nhận`);
 
   if (jsonOut) {
     const { writeFileSync } = await import("node:fs");

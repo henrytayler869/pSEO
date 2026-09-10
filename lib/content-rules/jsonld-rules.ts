@@ -41,21 +41,49 @@ export interface RuleVerdict {
 /**
  * Cách một con số có thể XUẤT HIỆN với người đọc.
  *
- * Không so chuỗi thô, vì trang in "$372,100" còn JSON-LD ghi 372100 — hai
- * cách viết của cùng một con số, và coi đó là lệch sẽ khiến luật kêu ở mọi
- * trang rồi bị tắt đi. Cái luật này săn là con số mà KHÔNG cách in nào của nó
- * có trên trang.
+ * Không so chuỗi thô, vì trang in "$372,100" còn JSON-LD ghi 372100 — hai cách
+ * viết của cùng một con số, và coi đó là lệch sẽ khiến luật kêu ở mọi trang rồi
+ * bị tắt đi. Cái luật này săn là con số mà KHÔNG cách in nào của nó có trên
+ * trang.
+ *
+ * RANH GIỚI QUAN TRỌNG, và bản đầu tiên của hàm này đã vượt qua nó: được phép
+ * THÊM chữ số 0 ở cuối (46 in thành "46.0"), KHÔNG được phép BỚT chữ số
+ * (15.77459714851814 in thành "15.8"). Bản đầu sinh mọi độ chính xác ngắn hơn,
+ * nên nó chấp nhận đúng ca mà luật này tồn tại để từ chối — và scripts/
+ * verify-technical-rules.ts bắt được bằng phép kiểm độ phủ nhánh: nhánh
+ * "reject — chữ số vượt mức đã in" không có vector nào chạm tới, vì không ca
+ * nào còn reject được nữa.
  */
 function renderings(value: number): string[] {
-  const out = new Set<string>([String(value)]);
-  out.add(value.toLocaleString("en-US"));
-  const decimals = (String(value).split(".")[1] ?? "").length;
-  // Mọi độ chính xác NGẮN HƠN đều là cách trang có thể đã in con số này.
-  for (let d = 0; d < decimals; d++) {
-    out.add(value.toFixed(d));
-    out.add(Number(value.toFixed(d)).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const out = new Set<string>();
+  const withSeparators = (s: string): string => {
+    const [int, frac] = s.split(".");
+    return int.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (frac ? `.${frac}` : "");
+  };
+  const offer = (s: string) => {
+    out.add(s);
+    out.add(withSeparators(s));
+  };
+
+  offer(String(value));
+  // Chỉ những độ chính xác KHÔNG làm mất giá trị: Number(toFixed(d)) === value.
+  for (let d = 0; d <= 6; d++) {
+    const padded = value.toFixed(d);
+    if (Number(padded) === value) offer(padded);
   }
   return [...out];
+}
+
+/**
+ * Con số phải xuất hiện NHƯ MỘT CON SỐ, không phải như một mảnh của con số khác.
+ *
+ * "46" nằm trong "46.0%" và trong "460 households". Không có ranh giới thì một
+ * giá trị thô lọt qua chỉ vì phần nguyên của nó tình cờ là đầu một số khác —
+ * và nó lọt theo hướng dễ dãi, tức là im lặng.
+ */
+function appearsAsNumber(text: string, candidate: string): boolean {
+  const escaped = candidate.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\d.,])${escaped}(?!\\d)(?!\\.\\d)`).test(text);
 }
 
 /**
@@ -75,7 +103,18 @@ export function checkDisplayedOnlyValue(mv: MeasuredValue, visibleText: string):
   if (!Number.isFinite(value)) {
     return { passed: false, reason: `value "${mv.value}" không phải số` };
   }
-  const found = renderings(value).find((r) => visibleText.includes(r));
+  // SỐ NGUYÊN nằm ngoài phạm vi luật, và đây là chỗ bản đầu tiên quá rộng.
+  //
+  // Trang in "$2.25 billion" cho 2249409000 — chính sách rounding.policy của HQ
+  // cho phép "một dạng đổi thang của giá trị đo (nghìn/triệu/tỷ)". Bắt số
+  // nguyên phải xuất hiện nguyên dạng sẽ buộc JSON-LD công bố 2.25e9 thay cho
+  // con số IRS thật, tức là luật đòi dữ liệu máy KÉM chính xác hơn. Đổi thang
+  // không bịa ra chữ số nào; chỉ phần thập phân mới bịa được.
+  if (Number.isInteger(value)) {
+    return { passed: true, reason: `${value} là số nguyên — không có chữ số thập phân nào để bịa` };
+  }
+
+  const found = renderings(value).find((r) => appearsAsNumber(visibleText, r));
   if (found) return { passed: true, reason: `trang có in "${found}"` };
   return {
     passed: false,
@@ -172,9 +211,15 @@ export const TECHNICAL_VECTORS: TechnicalVector[] = [
   },
   {
     rule: "jsonld-value-displayed-only",
-    value: { name: "Homeownership rate", value: 46.0, unitText: "%" },
-    visibleText: "46.0% of homes are owner-occupied.",
-    why: "Giá trị đã làm tròn đúng mức trang in.",
+    value: { name: "Homeownership rate", value: 46.9, unitText: "%" },
+    visibleText: "46.9% of homes are owner-occupied.",
+    why: "Có phần thập phân, và đúng mức trang in. Ca accept của nhánh so-khớp — không có nó thì không phân biệt được luật này với một luật từ chối mọi số thập phân.",
+  },
+  {
+    rule: "jsonld-value-displayed-only",
+    value: { name: "Income arriving with inbound households", value: 2249409000, unitText: "USD/yr" },
+    visibleText: "Income arriving with inbound households $2.25 billion, county level.",
+    why: "ĐANG XẢY RA và ĐÚNG: /moving-services/ca/sacramento-95823. Trang in dạng đổi thang đã làm tròn, JSON-LD giữ con số IRS nguyên vẹn. Luật phải cho qua — bắt nó công bố 2.25e9 là đòi dữ liệu máy kém chính xác hơn dữ liệu thật.",
   },
   {
     rule: "jsonld-value-displayed-only",
@@ -213,7 +258,7 @@ export const TECHNICAL_VECTORS: TechnicalVector[] = [
     value: { name: "Households in", value: 66853, measurementTechnique: "" },
     why: "Rỗng. Nhánh im lặng của luật — phải nổ, nếu không thì một site bỏ trống trường này sẽ pass mà không ai biết.",
   },
-{
+  {
     rule: "jsonld-aggregate-declares-scope",
     value: { name: "moved within the same county", value: 1271931, measurementTechnique: "sum Census ACS5 across 256 ZIP codes" },
     why: "Có phép tính VÀ có số lượng, thiếu chữ 'of' nối sang nguồn. Ca này tồn tại vì nhánh 'thiếu nguồn' nằm SAU nhánh 'thiếu số lượng' — không có nó thì xoá nhánh đó đi bộ vector vẫn xanh.",
