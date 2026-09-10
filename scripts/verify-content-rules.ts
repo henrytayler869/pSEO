@@ -19,6 +19,12 @@
 import { buildContentRules } from "../lib/content-rules/registry";
 import { validateGeneratedText } from "../lib/ai/validate";
 import { measureVectors } from "../lib/content-rules/jsonld-rules";
+import {
+  runVectors,
+  runScopeVectors,
+  proveSupplyBridgeBranches,
+  proveScopeBranches,
+} from "../lib/content-rules/rendered-rules";
 import type { FactSet } from "../lib/ai/facts";
 
 async function main() {
@@ -149,6 +155,58 @@ async function main() {
     }
   }
 
+  // --- luật trên HTML đã render ---
+  //
+  // Chạy ở đây vì cả hai luật khai `provenBy: "HQ tự chạy"`. Một provenBy mà
+  // không script nào thực thi là câu KHẲNG ĐỊNH về bằng chứng, không phải bằng
+  // chứng — và tôi vừa viết đúng câu đó cho hai luật JSON-LD một giờ trước,
+  // nên nó không phải rủi ro giả định.
+  //
+  // Kiểm CẢ ba thứ, vì chúng hỏng theo ba cách khác nhau:
+  //   verdict khớp        -> vị ngữ còn phân loại đúng
+  //   cả hai chiều        -> bộ vector còn bất đồng được
+  //   nhánh còn ép nổ     -> nhánh thu hẹp chưa chết
+  //
+  // Cái thứ ba là cái hai cái đầu KHÔNG bắt được: một nhánh chết vẫn để mọi
+  // vector xanh, vì các ca còn lại vẫn phân loại đúng nhờ nhánh khác.
+  const renderedSuites = [
+    { id: "rendered-supply-side-bridge", vectors: runVectors(), proofs: proveSupplyBridgeBranches() },
+    { id: "cluster-scope-count-mismatch", vectors: runScopeVectors(), proofs: proveScopeBranches() },
+  ];
+  console.log();
+  for (const suite of renderedSuites) {
+    const bad = suite.vectors.filter((v) => !v.ok);
+    const accepts = suite.vectors.filter((v) => v.expect === "accept").length;
+    const rejects = suite.vectors.length - accepts;
+
+    if (bad.length === 0 && accepts > 0 && rejects > 0) {
+      passed++;
+      console.log(`✓ ${suite.id}: ${suite.vectors.length} vector khớp (${accepts} accept / ${rejects} reject)`);
+    } else {
+      failures.push(
+        bad.length > 0
+          ? `${suite.id}: ${bad.length} vector lệch verdict`
+          : `${suite.id}: vector chỉ có một chiều (${accepts} accept / ${rejects} reject)`
+      );
+      console.log(`✗ ${suite.id}: ${bad.length} lệch, ${accepts} accept / ${rejects} reject`);
+    }
+
+    const dead = suite.proofs.filter((p) => p.vectorsChanged === 0);
+    if (dead.length === 0) {
+      passed++;
+      console.log(
+        `✓ ${suite.id}: ${suite.proofs.length} nhánh đều ép nổ được — ` +
+          suite.proofs.map((p) => `${p.branch}:${p.vectorsChanged}`).join(", ")
+      );
+    } else {
+      failures.push(
+        `${suite.id}: nhánh ${dead.map((d) => d.branch).join(", ")} không ca nào ép nổ được — ` +
+          `xoá nhánh đi mà bộ vector vẫn xanh thì nó không canh gì`
+      );
+      console.log(`✗ ${suite.id}: nhánh chết — ${dead.map((d) => d.branch).join(", ")}`);
+    }
+  }
+
   // --- metric resolutions ---
   const ambiguous = rules.metricResolutions.filter((m) => m.ambiguous);
   if (rules.metricResolutions.length === 0) {
@@ -205,6 +263,7 @@ async function main() {
     1 + // vector làm tròn có cả hai chiều
     1 + // verdict công bố khớp verdict đo lại
     jsonLdDeclared * 2 + // mỗi luật: cả hai chiều, và có vector mang tên nó
+    renderedSuites.length * 2 + // mỗi luật render: vector khớp, và mọi nhánh ép nổ được
     (rules.metricResolutions.length === 0 ? 0 : 1);
   console.log(`\n${passed}/${total} kiểm tra đúng.`);
   if (failures.length > 0) {
