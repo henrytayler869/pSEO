@@ -1,0 +1,75 @@
+name: PR gates
+
+# Chặn TRƯỚC khi vào main, thay vì báo sau khi đã vào.
+#
+# Vì sao cần thêm file này khi đã có "CI + Deploy": workflow kia chỉ chạy
+# `on: push: branches: [main]`. Nghĩa là một PR merge được với 0 check, và máy
+# chỉ kiểm SAU khi code đã nằm trên main. Repo này có bốn session cùng đẩy vào
+# một nhánh, và `deploy` thì `needs: ci` — nên một commit đỏ không chỉ đỏ, nó
+# chặn deploy của tất cả những người còn lại cho tới khi ai đó sửa.
+#
+# Đã xảy ra hai lần, và cả hai lần đều là cổng TĨNH bắt được:
+#   a0d76c7  "tôi push dù tsc đã báo lỗi"
+#   7e5d191  eslint đỏ vì `any` trong file bị quét nhầm vào commit
+#
+# Nên file này cố tình KHÔNG phải bản sao của pipeline chính.
+#
+# CÁI NÓ KHÔNG CHẠY, và vì sao:
+#
+# Không có Postgres, không `migrate deploy`, không `next build`, không mấy
+# script test đọc dữ liệu thật. Chúng cần một DB có dữ liệu, và chạy chúng với
+# DB rỗng sẽ báo xanh trong khi không kiểm gì — đúng thứ workflow kia đã ghi rõ
+# ở khối "NOT run here". Một cổng nói dối còn tệ hơn không có cổng, vì nó tiêu
+# luôn sự chú ý mà lẽ ra dành cho cổng thật.
+#
+# Pipeline đầy đủ vẫn chạy khi commit vào main. File này chỉ bảo đảm thứ vào
+# main không đỏ vì lý do có thể biết trước mà không cần DB.
+on:
+  pull_request:
+    branches: [main]
+
+# KHÔNG dùng chung nhóm với `deploy-production`. Nhóm đó cố ý không huỷ job cũ
+# (VPS chỉ có một checkout), nên nếu PR chen vào đó thì mỗi PR phải xếp hàng
+# sau một lần deploy production — và bốn session mở PR sẽ nối đuôi nhau. Ở đây
+# thì ngược lại: push mới vào cùng PR nên huỷ lượt cũ, vì kết quả của lượt cũ
+# đã không còn nói về đầu nhánh nữa.
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Ghim npm khớp VPS
+        run: npm i -g npm@11.6.2
+
+      - run: npm ci
+
+      # Cần cho tsc: kiểu của @prisma/client là kiểu SINH RA, không có sẵn
+      # trong node_modules sau npm ci. `generate` đọc schema chứ không gọi DB,
+      # nên bước này chạy được mà không cần Postgres.
+      - name: Prisma client
+        run: npx prisma generate
+
+      - name: Kiểu
+        run: npx tsc --noEmit
+
+      # `eslint .`, không phải `eslint <file vừa sửa>`. Chính chỗ này hỏng ở
+      # 7e5d191: cổng tại chỗ chạy trên vài file nên xanh, cổng CI chạy toàn
+      # repo nên đỏ — một phép kiểm không phủ thứ nó có vẻ phủ.
+      - name: Lint
+        run: npx eslint .
+
+      # Không mạng, không DB: vector dùng fact tổng hợp cố định. Canh nhiều hơn
+      # "vector còn xanh" — đòi mỗi luật còn cả accept lẫn reject, đòi mọi nhánh
+      # của vị ngữ có ca chạm tới, và đòi một validator "accept mọi thứ" bị bắt.
+      - name: Luật JSON-LD, và bộ vector của chúng còn từ chối được
+        run: npx tsx scripts/verify-technical-rules.ts
