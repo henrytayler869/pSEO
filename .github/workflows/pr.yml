@@ -106,6 +106,13 @@ jobs:
       # nó bắt được cột khai ra mà không migration nào tạo — bất kể database có
       # gì. Đo: schema sai -> "[+] Added column `wpUsername`" trên
       # MarketIdentity, exit khác 0.
+      # `migrate diff --from-migrations` dựng lại toàn bộ migrations vào một
+      # database TRỐNG để so — Prisma gọi nó là shadow database, và nó phải tồn
+      # tại sẵn. Không có nó thì bước dưới trả P1003 và cổng đỏ vì lý do không
+      # liên quan tới thay đổi, tức đúng loại cổng người ta học cách bỏ qua.
+      - name: Shadow database cho migrate diff
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE pseo_shadow'
+
       - name: Schema khớp migrations
         run: >
           npx prisma migrate diff
