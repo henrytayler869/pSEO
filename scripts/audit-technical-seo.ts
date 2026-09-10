@@ -211,7 +211,7 @@ async function readSitemap(origin: string): Promise<{ urls: string[]; lastmods: 
       severity: "warning",
       where: "/sitemap.xml",
       detail: `${lastmods.length}/${urls.length} URL dùng CHUNG một lastmod: ${[...distinct][0]}`,
-      why: "Một lastmod giống hệt nhau ở mọi URL là dấu thời gian BUILD, không phải ngày trang đổi nội dung. Google nói rõ sẽ bỏ qua lastmod khi thấy nó không đáng tin — và bỏ qua theo cả site, kể cả những trang khai đúng.",
+      why: "Nội dung một trang đổi thì lastmod của CHÍNH NÓ không nhúc nhích, nên crawler mất tín hiệu để chọn ghé lại trang nào. KHÔNG kết luận đây là giờ build: bản đầu của phép kiểm này nói vậy và SAI — trên atmovingservices, giá trị đó khớp manifest.generatedAt trong khi build chạy ba ngày sau, tức nó là mốc nội dung đúng thiết kế. Một quan sát đúng (mọi giá trị giống nhau) cộng một suy luận chưa kiểm (nên nó là giờ build) đọc y hệt một phát hiện. Phân biệt được bằng cách so lastmod với thời điểm build và với mốc nội dung của site — ba con số mà chỉ site mới có đủ.",
     });
   }
   if (withoutLastmod.length > 0) {
@@ -334,6 +334,33 @@ function auditPage(p: PageFacts) {
       if (!types.has(required))
         add({ id: "jsonld-site-identity", severity: "warning", where: path, detail: `thiếu node ${required}`, why: "Danh tính site phải nhất quán ở mọi trang; thiếu ở một trang làm gãy chuỗi @id mà các node khác trỏ tới." });
     }
+  }
+
+  /**
+   * Địa chỉ nội bộ in ra HTML công khai.
+   *
+   * Đo được 2026-09-10: /blog in `http://127.0.0.1:8090/wp-json/wp/v2` trong
+   * một thông báo trạng thái rỗng — trang trả 200 và `index, follow`, nên
+   * chuỗi đó là thứ Googlebot đọc được và có thể đem hiển thị.
+   *
+   * Không phải lỗi thẩm mỹ. Nó nói cho người ngoài biết backend nghe ở cổng
+   * nào, và nó là dấu hiệu một biến môi trường đang giữ giá trị của máy dev
+   * trên máy production — cùng lớp lỗi mà repo này đã gặp hai lần (`WP_HOME`
+   * phải là tên miền công khai; link chết trỏ vào loopback).
+   *
+   * Kiểm cả `localhost` và `0.0.0.0`, không chỉ 127.0.0.1: ba cách viết của
+   * cùng một sai lầm, và một danh sách thiếu một cách viết sẽ báo sạch trong
+   * khi chuỗi vẫn nằm đó.
+   */
+  const internalHosts = html.match(/https?:\/\/(?:127\.0\.0\.1|localhost|0\.0\.0\.0)[:\d]*[^\s"'<\\]*/g);
+  if (internalHosts) {
+    add({
+      id: "internal-address-leak",
+      severity: "error",
+      where: path,
+      detail: `HTML công khai chứa ${[...new Set(internalHosts)].join(", ")}`,
+      why: "Địa chỉ loopback lọt ra trang công khai nói cho người ngoài biết backend nghe ở đâu, và thường là dấu hiệu một biến môi trường còn giữ giá trị của máy dev trên production. Nếu trang đó index được thì chuỗi này là thứ công cụ tìm kiếm đọc và có thể đem hiển thị.",
+    });
   }
 
   /**
@@ -557,13 +584,30 @@ async function main() {
    * Cùng một sự rạn, lộ ra ở hai phía khác nhau.
    */
   const sitemapBroken = findings.filter((f) => f.id === "sitemap-url-not-200").length;
-  if (brokenLinks > 0 && sitemapBroken === 0 && pages.length > 0) {
+  const unsubmitted = findings.filter((f) => f.id === "indexable-not-in-sitemap").length;
+
+  // Hai chiều, và phải kể CẢ HAI.
+  //
+  // Bản đầu chỉ nói được chiều "link trỏ vào hư không". Chiều kia — trang sống,
+  // index được, mà không ai nộp — bị bỏ, và đó chính là chiều mà dc/ks rơi vào:
+  // cả 4 ZIP của hai bang đều đã gộp nên `publishedMarkets()` rỗng, hai bang
+  // biến khỏi sitemap lẫn trang index trong khi hub vẫn trả 200.
+  //
+  // Cùng một phép thay thế đã gây ba sự cố ở publisher này: hỏi "market nào tồn
+  // tại" khi câu hỏi là "TRANG nào tồn tại". Một phép kiểm chỉ nhìn một chiều
+  // sẽ bắt được hai lần đầu và bỏ lọt lần thứ ba.
+  const symptoms = [
+    brokenLinks > 0 ? `${brokenLinks} link nội bộ gãy` : null,
+    unsubmitted > 0 ? `${unsubmitted} trang index được nhưng không có trong sitemap` : null,
+  ].filter(Boolean);
+
+  if (symptoms.length > 0 && sitemapBroken === 0 && pages.length > 0) {
     add({
       id: "link-source-divergence",
       severity: "error",
       where: "toàn site",
-      detail: `${brokenLinks} link nội bộ gãy, trong khi ${pages.length}/${pages.length} URL sitemap đọc được đều trả 200`,
-      why: "Sitemap và đồ thị link nội bộ đang được dựng từ hai nguồn khác nhau, và chỉ một nguồn biết trang nào thật sự được publish. Sửa từng link là sửa triệu chứng — chỗ phải sửa là để hai bên đọc chung một danh sách.",
+      detail: `${symptoms.join(" + ")}, trong khi ${pages.length}/${pages.length} URL sitemap đọc được đều trả 200`,
+      why: "Sitemap và đồ thị link nội bộ đang được dựng từ hai nguồn khác nhau, và chỉ một nguồn biết TRANG nào thật sự tồn tại. Sửa từng URL là sửa triệu chứng — chỗ phải sửa là để hai bên đọc chung một danh sách.",
     });
   }
 
