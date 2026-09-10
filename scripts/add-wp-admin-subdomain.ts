@@ -121,12 +121,36 @@ function wpConfigExtra(host: string, port: string, publicUrl: string): string {
         // Kèm theo: nginx của ${new URL(publicUrl).hostname} phải phục vụ
         // /wp-content/uploads/ (xem mục 3b), nếu không ảnh vẫn 404 — chỉ là
         // 404 ở đúng tên miền.
+        //
+        // HAI DẤU ĐÔ-LA ở hai dòng dưới, và đó không phải lỗi đánh máy.
+        //
+        // Khối này là giá trị trong một file YAML của Docker Compose, mà
+        // Compose nội suy biến môi trường TRƯỚC khi chuỗi tới PHP. Một dấu
+        // đô-la thì tên biến PHP bị nuốt thành chuỗi rỗng; hai dấu là cách
+        // Compose hiểu "để nguyên". Sau nội suy, PHP nhận đúng một dấu.
+        //
+        // Viết một dấu ở dòng gán HTTPS thì PHP nhận ['HTTPS'] = 'on' và chết
+        // với "Assignments can only happen to writable values" — WordPress trả
+        // 500 cho MỌI request. Đã xảy ra thật, 2026-09-10, chết khoảng 4 phút.
+        //
+        // Dòng if còn nguy hơn vì nó KHÔNG chết: điều kiện bị nuốt tên biến
+        // vẫn là biểu thức hợp lệ, chỉ là không bao giờ khớp hostname. Sai một
+        // mình dòng đó thì WordPress chạy bình thường và âm thầm luôn đi nhánh
+        // else — không có 500, không có log, chỉ có wp-admin không dùng được.
+        //
+        // Chú thích này cũng viết vòng để tránh dấu đô-la trần: nếu không,
+        // chính nó bị nội suy nuốt mất và câu cảnh báo tự mâu thuẫn.
+        //
+        // Kiểm TRƯỚC khi up, nhưng đừng đọc giá trị mà lệnh
+        // \`docker compose config\` in ra: nó tự escape lại khi xuất, nên file
+        // đúng và file sai hiện ra giống hệt nhau. Xem mục 3 để biết phép
+        // phân biệt thật.
         define('WP_HOME', '${publicUrl}');
-        if ((\$_SERVER['HTTP_HOST'] ?? '') === '${host}') {
+        if (($$_SERVER['HTTP_HOST'] ?? '') === '${host}') {
             define('WP_SITEURL', 'https://${host}');
             // nginx kết thúc TLS; nếu không nói, WordPress tưởng là HTTP và
             // sinh link http:// bên trong một trang https://.
-            \$_SERVER['HTTPS'] = 'on';
+            $$_SERVER['HTTPS'] = 'on';
         } else {
             define('WP_SITEURL', 'http://127.0.0.1:${port}');
         }`;
@@ -256,7 +280,34 @@ certbot --nginx -d ${host}
 ${"-".repeat(78)}
 ${wpConfigExtra(host, port, publicUrl)}
 
-   rồi: docker compose up -d wordpress
+   rồi, THEO ĐÚNG THỨ TỰ NÀY:
+     # (i) phải RỖNG — đây là phép phân biệt duy nhất đúng
+     docker compose config 2>&1 | grep "variable is not set"
+
+     docker compose up -d wordpress
+     docker compose logs --tail=50 wordpress | grep -i fatal   # phải rỗng
+
+   ĐỪNG đọc giá trị mà \`docker compose config\` in ra. Đo 2026-09-10: nó TỰ
+   ESCAPE LẠI khi xuất, nên in ra hai dấu đô-la trong CẢ HAI trường hợp — file
+   đúng và file sai hiện ra giống hệt nhau. Nhìn vào đó là nhìn vào một phép
+   đo không phân biệt được gì.
+
+   Thứ phân biệt được nằm ở stderr: file sai làm Compose kêu
+   \"The _SERVER variable is not set\" hai lần; file đúng thì im.
+
+   Muốn chắc hơn nữa thì hỏi thẳng container — đây mới là chuỗi PHP thật sự
+   nhận, và nó phải có MỘT dấu đô-la:
+     docker compose run --rm --entrypoint sh wordpress -c 'printenv WORDPRESS_CONFIG_EXTRA'
+
+   Bỏ bước này thì lỗi nội suy chỉ lộ ra dưới dạng HTTP 500, và trang công
+   khai vẫn 200 vì nó phục vụ từ ISR cache, nên nhìn hai URL đó sẽ không
+   thấy gì.
+
+   LƯU Ý: deploy/wordpress/docker-compose.yml là file ĐƯỢC GIT THEO DÕI, và
+   deploy.sh chạy \`git reset --hard\`. Sửa tại chỗ mà không commit vào repo
+   atmovingservices thì lần deploy sau sẽ hoàn nguyên. Container không đọc
+   lại compose khi restart nên nó KHÔNG hỏng ngay — nó hỏng lần sau có ai
+   chạy \`docker compose up\`.
 
 3b) Đường công khai cho ảnh — BẮT BUỘC, không phải tuỳ chọn
 ${"-".repeat(78)}
