@@ -77,6 +77,31 @@ model MarketIdentity {
   zip      String
   vertical String
 
+  /**
+   * WordPress Application Password, for WRITING posts from this panel.
+   *
+   * Two fields because WP Basic auth needs both, and the username is not
+   * derivable — an Application Password is issued TO a user account.
+   *
+   * NOT the account password. WordPress issues application passwords per
+   * application; they can be revoked one at a time without changing the login,
+   * and they are what WP itself documents for REST writes. Head Quarter never
+   * holds the account password.
+   *
+   * Nullable, and reading still works without it: WP serves published content
+   * unauthenticated. So a site with no credential shows a read-only list
+   * rather than an error — but it cannot see drafts, and the UI says so
+   * instead of showing a shorter list that looks complete.
+   *
+   * Stored in the clear, same as `revalidateSecret` above. That is the
+   * existing shape of this table and not a decision made here; the panel sits
+   * behind Basic Auth on nginx and the database is not reachable from the
+   * internet. Worth revisiting together with revalidateSecret if either ever
+   * needs to be, not one at a time.
+   */
+  wpUsername       String?
+  wpAppPassword    String?
+
   // Descriptive label only, frozen at first sighting. City/state for a given
   // zip essentially never change in practice; if a later import disagrees,
   // that's coverage-file noise, not a reason to treat this as versioned data.
@@ -174,6 +199,31 @@ model KeywordMetric {
 model SemanticKeyword {
   id       String @id @default(cuid())
   vertical String
+
+  /**
+   * WordPress Application Password, for WRITING posts from this panel.
+   *
+   * Two fields because WP Basic auth needs both, and the username is not
+   * derivable — an Application Password is issued TO a user account.
+   *
+   * NOT the account password. WordPress issues application passwords per
+   * application; they can be revoked one at a time without changing the login,
+   * and they are what WP itself documents for REST writes. Head Quarter never
+   * holds the account password.
+   *
+   * Nullable, and reading still works without it: WP serves published content
+   * unauthenticated. So a site with no credential shows a read-only list
+   * rather than an error — but it cannot see drafts, and the UI says so
+   * instead of showing a shorter list that looks complete.
+   *
+   * Stored in the clear, same as `revalidateSecret` above. That is the
+   * existing shape of this table and not a decision made here; the panel sits
+   * behind Basic Auth on nginx and the database is not reachable from the
+   * internet. Worth revisiting together with revalidateSecret if either ever
+   * needs to be, not one at a time.
+   */
+  wpUsername       String?
+  wpAppPassword    String?
 
   keyword           String
   searchVolume      Int
@@ -442,6 +492,31 @@ model ValidationFlag {
 model AiGeneration {
   id       String @id @default(cuid())
   vertical String
+
+  /**
+   * WordPress Application Password, for WRITING posts from this panel.
+   *
+   * Two fields because WP Basic auth needs both, and the username is not
+   * derivable — an Application Password is issued TO a user account.
+   *
+   * NOT the account password. WordPress issues application passwords per
+   * application; they can be revoked one at a time without changing the login,
+   * and they are what WP itself documents for REST writes. Head Quarter never
+   * holds the account password.
+   *
+   * Nullable, and reading still works without it: WP serves published content
+   * unauthenticated. So a site with no credential shows a read-only list
+   * rather than an error — but it cannot see drafts, and the UI says so
+   * instead of showing a shorter list that looks complete.
+   *
+   * Stored in the clear, same as `revalidateSecret` above. That is the
+   * existing shape of this table and not a decision made here; the panel sits
+   * behind Basic Auth on nginx and the database is not reachable from the
+   * internet. Worth revisiting together with revalidateSecret if either ever
+   * needs to be, not one at a time.
+   */
+  wpUsername       String?
+  wpAppPassword    String?
   zip      String
 
   // Fingerprint of the exact facts the text was generated from. Cache hits
@@ -475,6 +550,31 @@ model AiSpend {
   id String @id @default(cuid())
 
   vertical String
+
+  /**
+   * WordPress Application Password, for WRITING posts from this panel.
+   *
+   * Two fields because WP Basic auth needs both, and the username is not
+   * derivable — an Application Password is issued TO a user account.
+   *
+   * NOT the account password. WordPress issues application passwords per
+   * application; they can be revoked one at a time without changing the login,
+   * and they are what WP itself documents for REST writes. Head Quarter never
+   * holds the account password.
+   *
+   * Nullable, and reading still works without it: WP serves published content
+   * unauthenticated. So a site with no credential shows a read-only list
+   * rather than an error — but it cannot see drafts, and the UI says so
+   * instead of showing a shorter list that looks complete.
+   *
+   * Stored in the clear, same as `revalidateSecret` above. That is the
+   * existing shape of this table and not a decision made here; the panel sits
+   * behind Basic Auth on nginx and the database is not reachable from the
+   * internet. Worth revisiting together with revalidateSecret if either ever
+   * needs to be, not one at a time.
+   */
+  wpUsername       String?
+  wpAppPassword    String?
   zip      String
   model    String
 
@@ -560,6 +660,31 @@ model Website {
   // would create a second definition of what a trade is. Validated on write
   // against the trades that actually have markets — see app/publisher/actions.ts.
   vertical String
+
+  /**
+   * WordPress Application Password, for WRITING posts from this panel.
+   *
+   * Two fields because WP Basic auth needs both, and the username is not
+   * derivable — an Application Password is issued TO a user account.
+   *
+   * NOT the account password. WordPress issues application passwords per
+   * application; they can be revoked one at a time without changing the login,
+   * and they are what WP itself documents for REST writes. Head Quarter never
+   * holds the account password.
+   *
+   * Nullable, and reading still works without it: WP serves published content
+   * unauthenticated. So a site with no credential shows a read-only list
+   * rather than an error — but it cannot see drafts, and the UI says so
+   * instead of showing a shorter list that looks complete.
+   *
+   * Stored in the clear, same as `revalidateSecret` above. That is the
+   * existing shape of this table and not a decision made here; the panel sits
+   * behind Basic Auth on nginx and the database is not reachable from the
+   * internet. Worth revisiting together with revalidateSecret if either ever
+   * needs to be, not one at a time.
+   */
+  wpUsername       String?
+  wpAppPassword    String?
 
   // Search Console property identity, e.g. "sc-domain:example.com" or
   // "https://example.com/" (URL-prefix form) — GSC requires the exact
