@@ -534,6 +534,76 @@ model Domain {
 // into this DB, so numbers can never go stale relative to the real source.
 // ---------------------------------------------------------------------------
 
+/// One editorial article, from candidate to WordPress draft.
+model Article {
+  id        String @id @default(cuid())
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  /// Candidate it came from — stable across runs, so the same angle is not
+  /// offered again once written.
+  candidateId String
+  vertical    String
+  intent      String
+  angle       String
+
+  title   String
+  content String
+
+  /**
+   * Every attempt, not just the last.
+   *
+   * A rewrite loop that only kept the winning draft would hide the thing most
+   * worth seeing: which check failed, how often, and whether the model fixed
+   * it or merely moved the problem. Cost is charged per attempt, so attempts
+   * is also what makes the price of an article explainable.
+   */
+  attempts Int   @default(1)
+  costUsd  Float @default(0)
+
+  /// Result of the last QC run: which checks passed, which failed and why.
+  qcReport Json
+
+  /// "draft" until every check passes; "failed" when the loop gave up.
+  status String @default("draft")
+
+  /// WordPress post id once created. Null means QC passed but nothing was
+  /// written yet — a distinct state from "not generated".
+  wpPostId Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([websiteId, candidateId])
+  @@index([websiteId, status])
+}
+
+/// A batch run, so a long generation can be watched and resumed.
+model ArticleJob {
+  id        String @id @default(cuid())
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  intent String
+
+  total   Int @default(0)
+  done    Int @default(0)
+  failed  Int @default(0)
+
+  /// "running" | "done" | "stopped". A job left "running" with no progress is
+  /// a job whose process died — visible as a stuck bar rather than as silence.
+  status String @default("running")
+
+  /// Last thing it was working on, so a stuck job says WHERE it stuck.
+  currentTitle String?
+  error        String?
+
+  startedAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([websiteId, status])
+}
+
 model Website {
   id   String @id @default(cuid())
   name String
@@ -620,6 +690,9 @@ model Website {
    * rather than succeeding through a wider door.
    */
   wpLoopbackSecret String?
+
+  articles    Article[]
+  articleJobs ArticleJob[]
 
   // Search Console property identity, e.g. "sc-domain:example.com" or
   // "https://example.com/" (URL-prefix form) — GSC requires the exact
