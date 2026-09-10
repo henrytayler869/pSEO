@@ -18,6 +18,7 @@
 
 import { buildContentRules } from "../lib/content-rules/registry";
 import { validateGeneratedText } from "../lib/ai/validate";
+import { measureVectors } from "../lib/content-rules/jsonld-rules";
 import type { FactSet } from "../lib/ai/facts";
 
 async function main() {
@@ -73,6 +74,57 @@ async function main() {
     console.log(`✗ vector chỉ có một chiều`);
   }
 
+  // --- vector JSON-LD: verdict công bố phải khớp verdict ĐO LẠI ---
+  //
+  // Cùng phép kiểm staleness mà `rounding.vectors` được hưởng, áp cho mục
+  // `jsonLd` mới.
+  //
+  // NÓ BẮT ĐƯỢC GÌ, VÀ KHÔNG BẮT ĐƯỢC GÌ — vì cả hai vế chạy trong CÙNG tiến
+  // trình, và một phép so hai thứ luôn bằng nhau là một phép không bao giờ đổ.
+  //
+  // KHÔNG bắt được: vị ngữ đổi hành vi. Nếu checkDisplayedOnlyValue đổi, cả
+  // vector công bố lẫn vector đo lại đổi theo cùng nhau. Phép canh việc đó là
+  // độ phủ nhánh trong scripts/verify-technical-rules.ts.
+  //
+  // BẮT ĐƯỢC: vector công bố ngừng đến từ việc CHẠY vị ngữ — ai đó thay lời gọi
+  // bằng một bảng viết tay, hoặc cache một response cũ. Đó đúng chế độ hỏng mà
+  // chú thích đầu file registry.ts mô tả ("something is caching or hand-editing
+  // them"). Đã ép nổ một lần bằng đột biến 2026-09-10: sửa verdict của vector
+  // đầu tiên thành "reject" thì phép này đổ, 11/12.
+  //
+  // Và đây là phép DUY NHẤT ở phía HQ. Phép thật nằm ở phía publisher: fetch
+  // endpoint, chạy vector qua validator CỦA MÌNH, khẳng định verdict khớp —
+  // hai tiến trình, hai bản cài đặt, nên chúng bất đồng được.
+  const measured = measureVectors();
+  const publishedJsonLd = rules.jsonLd.vectors;
+  console.log();
+  if (publishedJsonLd.length !== measured.length) {
+    failures.push(`jsonLd.vectors công bố ${publishedJsonLd.length} vector, đo lại được ${measured.length}`);
+    console.log(`✗ số vector JSON-LD không khớp`);
+  } else {
+    const drifted = publishedJsonLd.filter((v, i) => v.expect !== measured[i].expect || v.rule !== measured[i].rule);
+    if (drifted.length === 0) {
+      passed++;
+      console.log(`✓ ${publishedJsonLd.length} vector JSON-LD: verdict công bố khớp verdict đo lại`);
+    } else {
+      failures.push(`${drifted.length} vector JSON-LD có verdict công bố khác verdict đo lại`);
+      console.log(`✗ ${drifted.length} vector JSON-LD đã trôi lệch`);
+    }
+  }
+
+  for (const rule of ["jsonld-value-displayed-only", "jsonld-aggregate-declares-scope"] as const) {
+    const forRule = publishedJsonLd.filter((v) => v.rule === rule);
+    const a = forRule.filter((v) => v.expect === "accept").length;
+    const r = forRule.length - a;
+    if (a > 0 && r > 0) {
+      passed++;
+      console.log(`✓ ${rule}: ${a} chấp nhận, ${r} từ chối`);
+    } else {
+      failures.push(`${rule}: vector chỉ có một chiều (${a} chấp nhận, ${r} từ chối)`);
+      console.log(`✗ ${rule}: vector chỉ có một chiều`);
+    }
+  }
+
   // --- metric resolutions ---
   const ambiguous = rules.metricResolutions.filter((m) => m.ambiguous);
   if (rules.metricResolutions.length === 0) {
@@ -117,7 +169,9 @@ async function main() {
   // file. Trên database rỗng, phép chỉ số không hỏi được gì nên nó rời khỏi cả
   // tử số lẫn mẫu số — nếu chỉ rời tử số thì kết quả thành 9/10 và trông như
   // một phép vừa TRƯỢT.
-  const total = rules.rounding.vectors.length + 1 + (rules.metricResolutions.length === 0 ? 0 : 1);
+  // +3: một phép staleness cho vector JSON-LD, và một phép hai-chiều cho mỗi
+  // trong hai luật JSON-LD.
+  const total = rules.rounding.vectors.length + 1 + 3 + (rules.metricResolutions.length === 0 ? 0 : 1);
   console.log(`\n${passed}/${total} kiểm tra đúng.`);
   if (failures.length > 0) {
     console.error(`\nTHẤT BẠI:\n  ${failures.join("\n  ")}`);

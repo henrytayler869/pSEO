@@ -271,8 +271,17 @@ export const TECHNICAL_VECTORS: TechnicalVector[] = [
   },
 ];
 
+/**
+ * Một vector đã được CHẤM bằng cách chạy vị ngữ, không phải bằng cách khai.
+ *
+ * Có tên riêng vì `/api/v1/content-rules` công bố đúng hình dạng này, và một
+ * consumer đọc nó cần một kiểu để bám vào. Khai lại hình dạng ở registry.ts sẽ
+ * là bản sao thứ hai — thứ chính file registry đó tồn tại để chặn.
+ */
+export type MeasuredVector = TechnicalVector & { expect: "accept" | "reject"; measuredReason: string };
+
 /** Chạy vị ngữ thật để lấy verdict. Không hàm nào ở đây được phép GHI verdict. */
-export function measureVectors(): (TechnicalVector & { expect: "accept" | "reject"; measuredReason: string })[] {
+export function measureVectors(): MeasuredVector[] {
   return TECHNICAL_VECTORS.map((v) => {
     const verdict =
       v.rule === "jsonld-value-displayed-only"
