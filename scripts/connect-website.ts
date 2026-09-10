@@ -13,6 +13,7 @@
 //     --name "AT Moving Services" \
 //     --url https://atmovingservices.com \
 //     --vertical moving-services \
+//     [--wp-username admin --wp-app-password-file /run/secrets/wp-app-pw] \
 //     --gsc sc-domain:atmovingservices.com \
 //     --ga4-property 553102895 \
 //     --ga4-measurement G-1TL8MDDEJH \
@@ -53,6 +54,21 @@ async function main() {
   const wpApiBase = arg("--wp-api-base");
   const serviceAccountFile = arg("--service-account-file");
   const revalidateSecretFile = arg("--revalidate-secret-file");
+  /**
+   * WordPress username + Application Password, so a publisher arrives with
+   * write access already working instead of someone opening wp-admin later.
+   *
+   * By FILE PATH, never as an argument. A password on a command line is in the
+   * shell history, in `ps` output for every user on the box, and in any CI log
+   * that echoes the command. The file can be created, read once, and deleted.
+   *
+   * Meant for the provisioning script that brings up a publisher's WordPress:
+   * it already has container access, so it can mint the password with wp-cli
+   * and hand the path over here. Nobody types it, and it never appears in a
+   * chat window.
+   */
+  const wpUsername = arg("--wp-username");
+  const wpAppPasswordFile = arg("--wp-app-password-file");
 
   if (!name || !url || !gsc || !ga4Property) {
     console.error("Thiếu tham số. Cần --name, --url, --vertical, --gsc, --ga4-property. Xem phần Usage ở đầu file.");
@@ -127,6 +143,18 @@ async function main() {
    * into this file — a list here would be the second definition of what a trade
    * is, and it would drift from the coverage data that is the first.
    */
+  // Cả hai hoặc không cái nào. Một username không kèm mật khẩu tạo ra một
+  // website trông như đã cấu hình mà mọi thao tác ghi đều 401 — và thông báo
+  // lỗi lúc đó nói về xác thực, không nói về việc thiếu một nửa cấu hình.
+  if (Boolean(wpUsername) !== Boolean(wpAppPasswordFile)) {
+    console.error("\n--wp-username và --wp-app-password-file phải đi cùng nhau, hoặc bỏ cả hai.");
+    process.exitCode = 1;
+    return;
+  }
+  const wpAppPassword = wpAppPasswordFile
+    ? readSecretFile(wpAppPasswordFile, "--wp-app-password-file").replace(/\s+/g, "")
+    : null;
+
   const known = await getVerticalsWithMarkets();
   if (!known.includes(vertical)) {
     console.error(
@@ -144,6 +172,7 @@ async function main() {
       name,
       url,
       vertical,
+      ...(wpUsername && wpAppPassword ? { wpUsername, wpAppPassword } : {}),
       gscPropertyUrl: gsc,
       ga4PropertyId: ga4Property,
       ga4MeasurementId: ga4Measurement || null,
@@ -159,6 +188,7 @@ async function main() {
       // Only overwritten when a new one was supplied. Passing nothing must not
       // silently erase a secret that is already working.
       ...(revalidateSecret ? { revalidateSecret } : {}),
+      ...(wpUsername && wpAppPassword ? { wpUsername, wpAppPassword } : {}),
     },
   });
 
