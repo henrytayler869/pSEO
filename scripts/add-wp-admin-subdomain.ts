@@ -199,9 +199,32 @@ location ^~ /wp-content/uploads/ {
     # WordPress mặc định chặn upload .php nên chưa có đường vào, nhưng bất kỳ
     # plugin nào nới điều đó ra sẽ biến khối này thành RCE công khai. Chặn ở
     # nginx thì nó không phụ thuộc cấu hình của WordPress.
-    location ~ \.php$ {
+    #
+    # '(/|$)' chứ không phải '$', và '~*' chứ không phải '~'. Bản đầu của khối
+    # này dùng '~ \\.php$' và ĐỂ LỌT hai biến thể — cả hai đo được, không suy ra:
+    #
+    #   /uploads/x.php/anh.jpg   URI kết thúc bằng .jpg nên '$' KHÔNG khớp,
+    #                            request được proxy, và Apache vẫn phân giải
+    #                            x.php là file còn /anh.jpg là PATH_INFO rồi
+    #                            CHẠY nó. 200, PHP thực thi.
+    #   /uploads/x.PHP           200, trả về MÃ NGUỒN PHP dạng text. Không phải
+    #                            RCE — image dùng <FilesMatch \\.php$> phân biệt
+    #                            hoa thường nên Apache không chạy — nhưng vẫn
+    #                            rò nguồn, và '~*' đóng nó miễn phí.
+    #
+    # Tức bản đầu chặn đúng ca dễ và để mở đúng ca kẻ tấn công sẽ dùng.
+    location ~* \\.php(/|$) {
         return 403;
     }
+    #
+    # KHÔNG chặn '.php' ở GIỮA tên (ví dụ ten.php.jpg). Nó trả về mã nguồn dạng
+    # text và Apache không chạy — đo trực tiếp, không đọc doc. Điều đó phụ thuộc
+    # image dùng SetHandler trong FilesMatch chứ không phải AddHandler; với
+    # AddHandler thì file đó SẼ chạy, đó là lỗ Apache kinh điển.
+    #
+    # Ghi ra như một ĐIỀU KIỆN, không phải một lời hứa: publisher nào đổi base
+    # image phải đo lại. Chặn '\\.php' giữa tên sẽ bắt cả tên file hợp lệ, nên
+    # đánh đổi này chỉ đúng chừng nào điều kiện trên còn đúng.
 
     proxy_pass         http://127.0.0.1:${port};
     proxy_http_version 1.1;
