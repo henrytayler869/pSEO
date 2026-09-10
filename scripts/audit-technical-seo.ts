@@ -502,6 +502,42 @@ async function main() {
     }
   }
 
+  /**
+   * Trang mang y hệt title của TRANG CHỦ.
+   *
+   * Tín hiệu này do session Pubsite chỉ ra, sau khi `verify:rendered` của họ
+   * bắt được một ca mà phép kiểm ở đây bỏ lọt. Câu hỏi thật là "generateMetadata
+   * của route này đã chạy chưa" — một trang thừa kế title của layout gốc là một
+   * trang chưa từng tự khai metadata.
+   *
+   * VÀ ĐÂY LÀ GIỚI HẠN CỦA VỊ TRÍ, KHÔNG PHẢI CỦA PHÉP KIỂM.
+   *
+   * Phía site biết trang NÀO lẽ ra phải tự khai metadata, nên họ bắt được ca
+   * MỘT trang. Từ ngoài chỉ đọc được HTML, nên `duplicate-title` bên dưới cần
+   * HAI trang cùng hỏng và cần cả hai lọt vào mẫu — trên atmovingservices,
+   * /moving-services/ks và /moving-services/dc hỏng cùng lúc nên nó bắt được;
+   * nếu chỉ một bang hỏng thì không.
+   *
+   * So với title trang chủ là thứ gần nhất làm được từ ngoài, và nó bắt được ca
+   * một-trang. Cái nó KHÔNG làm được: phân biệt "thừa kế" với "cố ý đặt giống".
+   * Nên đây là cảnh báo, không phải lỗi.
+   */
+  const homeTitle = attr(homeHtml, /<title[^>]*>([\s\S]*?)<\/title>/i)?.trim();
+  if (homeTitle) {
+    for (const p of pages) {
+      const path = new URL(p.url).pathname;
+      if (path === "/") continue;
+      if (attr(p.html, /<title[^>]*>([\s\S]*?)<\/title>/i)?.trim() !== homeTitle) continue;
+      add({
+        id: "title-inherited-from-home",
+        severity: "warning",
+        where: path,
+        detail: `title y hệt trang chủ: "${homeTitle}"`,
+        why: "Nhiều khả năng route này chưa tự khai metadata, nên nó thừa kế mặc định của layout gốc. Từ ngoài không phân biệt được với việc cố ý đặt giống — nhưng một trang con mang title trang chủ thì dù cố ý hay không, nó cũng không nói được nó là trang gì trên SERP.",
+      });
+    }
+  }
+
   // Trùng title/description: đo trên mẫu, nên chỉ báo khi THẤY trùng thật.
   for (const [field, re] of [["title", /<title[^>]*>([\s\S]*?)<\/title>/i], ["description", /<meta[^>]+name="description"[^>]+content="([^"]*)"/i]] as const) {
     const seen = new Map<string, string[]>();

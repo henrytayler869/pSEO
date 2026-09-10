@@ -288,6 +288,58 @@ thuộc phía QC Content.
 
 ---
 
+### 6.1 Một đề xuất của tôi bị bác bằng docs, và bác đúng
+
+`/blog/:slug` trả **200** cho slug không tồn tại (soft 404), kèm
+`<meta name="robots" content="noindex">` mà `notFound()` tự chèn.
+
+Tôi đề xuất chuyển phép kiểm tồn tại vào `proxy` — docs `not-found.md` của bản
+Next đang cài chỉ thẳng lối đó: *"With Cache Components, every dynamic route
+streams a static shell first, so run that check in proxy instead."* Và tôi bác
+lý do ban đầu của Pubsite (danh sách slug gắn với build) vì hook publish đã tồn
+tại, nên tập slug tươi được **lúc publish** chứ không phải lúc build.
+
+Pubsite bỏ lý do đó, rồi đưa một lý do khác từ docs `proxy` của **cùng bản
+Next**:
+
+> Using fetch with `options.cache`, `options.next.revalidate`, or
+> `options.next.tags`, has no effect in Proxy.
+
+Đó là lý do thật, và nó giết cả hai biến thể của đề xuất: mỗi slug lạ trả tiền
+một round-trip đầy đủ tới WordPress, trên đường chặn **mọi** request blog, và
+không cách nào cache. Manifest thị trường chạy được trong proxy chính vì nó là
+**import tĩnh** — không fetch. Một tập slug làm mới lúc publish thì theo định
+nghĩa không thể là import tĩnh. Hai yêu cầu "đọc được trong proxy mà không
+fetch" và "đổi được giữa hai lần build" mâu thuẫn nhau trong kiến trúc này.
+
+Giữ soft 404 là đúng, và thiệt hại còn lại hẹp: không phải bị index (đã
+`noindex`), mà là một dòng Soft 404 trong Search Console cộng crawl budget tiêu
+vào slug chết.
+
+**Hai điều kiện vẫn đứng nếu ràng buộc đổi** — ghi lại để người sau không phải
+dựng lại: fail **open** với mọi lỗi/timeout/không-đọc-được-danh-sách, và chỉ trả
+404 khi có **bằng chứng dương tính** rằng slug không tồn tại. Không bao giờ 404
+vì "không biết" — nếu không, một lần WordPress chập chờn biến bài thật thành 404
+hàng loạt, đúng thiệt hại đang tránh, chỉ to hơn.
+
+### 6.2 Giới hạn của vị trí, không phải của phép kiểm
+
+`verify:rendered` phía site bắt được một trang thừa kế title của layout gốc;
+audit này bỏ lọt cho tới khi **hai** trang cùng hỏng (`duplicate-title`). Lý do
+không phải phép kiểm dở hơn: phía site **biết trang nào lẽ ra phải tự khai
+metadata**, còn từ ngoài chỉ đọc được HTML.
+
+Thứ gần nhất làm được từ ngoài — và đã thêm vào audit — là so title với title
+trang chủ (`title-inherited-from-home`). Nó bắt được ca một-trang. Nó **không**
+phân biệt được "thừa kế" với "cố ý đặt giống", nên nó là cảnh báo.
+
+Nguyên tắc rút ra, đáng hơn phép kiểm: hai bộ kiểm chỉ xác nhận lẫn nhau khi
+chúng đứng ở **hai vị trí khác nhau** — một bên crawl HTTP từ ngoài, một bên đọc
+file build ra. Nếu cả hai cùng crawl live thì chúng mù cùng một chỗ, và sự trùng
+khớp không nói lên điều gì.
+
+---
+
 ## 7. Phản hồi về phân loại DataForSEO OnPage
 
 HQ mời phản hồi `lib/dataforseo/on-page.ts`. Hai chỗ đo được:
