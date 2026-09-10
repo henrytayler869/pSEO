@@ -22,6 +22,138 @@ import type { Fact } from "@/lib/ai/facts";
 
 export type CandidateAngle = "zip-ranking" | "county-ranking" | "zip-spread-in-county";
 
+/**
+ * What the reader is trying to do when they land on the article.
+ *
+ * Added after the first batch of candidates came out data-first — "5 ZIPs in
+ * AZ lead on homeownership" — which attracts someone curious about numbers,
+ * not someone who needs a mover. The dataset was being asked "what is
+ * interesting here" when the business question is "who is about to move".
+ *
+ *   move-underway    the reader is moving, or has just moved. Served by the
+ *                    figures that measure MOVING itself.
+ *   choosing-place   the reader is deciding between places. Served by the
+ *                    figures that describe what a place costs and who owns
+ *                    there.
+ *   market-context   background. Real, and lowest intent — this is what the
+ *                    first batch was, all of it.
+ *
+ * Intent changes WHICH figures are eligible and how the piece is framed. It
+ * does NOT license supply-side claims: no dataset here measures what movers
+ * charge or how busy they are, and `rendered-supply-side-bridge` still
+ * rejects a figure hung on a claim about companies. Commercial intent is
+ * served by directing the READER — which the content rules explicitly permit
+ * — not by asserting about suppliers.
+ */
+export type Intent = "move-underway" | "choosing-place" | "market-context";
+
+/**
+ * Which intent a metric can honestly serve, for THIS trade.
+ *
+ * DECLARED, not measured — unlike resolution, which is read from the data.
+ * There is no column saying "this number speaks to someone mid-move"; that is
+ * a judgement about what the figure means to a reader, and it is written here
+ * so it can be argued with rather than left implicit in a prompt.
+ *
+ * Keyed by trade because the same metric serves different intents elsewhere:
+ * `census_moved_from_different_state` is the whole subject for a mover and
+ * mere background for a roofer. Anything unlisted falls to market-context,
+ * which is the honest default — the figure is real, it just does not speak to
+ * a person with a job to hire for.
+ */
+const INTENT_BY_METRIC: Record<string, Record<string, Intent>> = {
+  "moving-services": {
+    census_moved_from_different_state: "move-underway",
+    census_moved_from_different_county: "move-underway",
+    census_moved_within_county: "move-underway",
+    census_moved_from_abroad: "move-underway",
+    census_mobility_rate_pct: "move-underway",
+    irs_migration_inflow_households: "move-underway",
+    irs_migration_outflow_households: "move-underway",
+    irs_migration_net_households: "move-underway",
+
+    census_median_home_value_usd: "choosing-place",
+    census_median_household_income_usd: "choosing-place",
+    census_homeownership_rate_pct: "choosing-place",
+    irs_migration_inflow_agi_usd: "choosing-place",
+  },
+};
+
+export function intentOf(vertical: string, metric: string): Intent {
+  return INTENT_BY_METRIC[vertical]?.[metric] ?? "market-context";
+}
+
+/**
+ * What a metric is called in a sentence a reader would read.
+ *
+ * `irs_migration_inflow_households` is a column name. A title carrying it
+ * announces that a machine assembled the page, which is the same failure the
+ * `seo_leak` content rule catches when copy prints keyword volumes.
+ *
+ * Unlisted metrics keep their raw name ON PURPOSE rather than being
+ * prettified by a rule: a metric nobody has written a phrase for is a metric
+ * nobody has decided how to talk about, and that should be visible in the
+ * candidate list rather than hidden behind an automatic transformation.
+ */
+const METRIC_PHRASE: Record<string, string> = {
+  census_moved_from_different_state: "arrivals from another state",
+  census_moved_from_different_county: "arrivals from another county",
+  census_moved_within_county: "moves within the county",
+  census_moved_from_abroad: "arrivals from abroad",
+  census_mobility_rate_pct: "share of residents who moved in the last year",
+  irs_migration_inflow_households: "households moving in",
+  irs_migration_outflow_households: "households moving out",
+  irs_migration_net_households: "net household change",
+  irs_migration_inflow_agi_usd: "income arriving with new households",
+  census_median_home_value_usd: "median home value",
+  census_median_household_income_usd: "median household income",
+  census_homeownership_rate_pct: "homeownership rate",
+  census_median_year_built: "median year built",
+};
+
+function phrase(metric: string): string {
+  return METRIC_PHRASE[metric] ?? metric;
+}
+
+/**
+ * The suggested post title, shaped by what the reader came to do.
+ *
+ * ENGLISH, because it becomes the WordPress post title on an English site —
+ * unlike `why`, which is written for the operator reading this list.
+ *
+ * The first batch of candidates titled everything the same way, "N places
+ * lead on <column name>", and that framing serves a reader who is curious
+ * about data. Someone who needs a mover is not. Same figures, same rules,
+ * different question answered first.
+ *
+ * What the framing must NOT do is promise something the dataset cannot
+ * support. None of these titles say anything about movers, prices or
+ * availability, because nothing here measures those.
+ */
+function titleFor(
+  intent: Intent,
+  angle: CandidateAngle,
+  metric: string,
+  scopeName: string,
+  count: number
+): string {
+  const p = phrase(metric);
+  if (angle === "zip-spread-in-county") {
+    return intent === "move-underway"
+      ? `Moving inside ${scopeName}? ${p} is not the same across it`
+      : `How far apart ${scopeName} ZIP codes are on ${p}`;
+  }
+  const unit = angle === "county-ranking" ? "counties" : "ZIP codes";
+  switch (intent) {
+    case "move-underway":
+      return `Moving to ${scopeName}? The ${count} ${unit} taking in the most people`;
+    case "choosing-place":
+      return `Choosing where to live in ${scopeName}: ${count} ${unit} compared on ${p}`;
+    default:
+      return `${count} ${unit} in ${scopeName} ranked by ${p}`;
+  }
+}
+
 export interface ArticleCandidate {
   /** Stable across runs for the same data, so a candidate already turned into
    * a post can be recognised rather than offered again. */
@@ -36,6 +168,7 @@ export interface ArticleCandidate {
    * should be skipped, and a reader can only judge that from the number. */
   why: string;
   metric: string;
+  intent: Intent;
   scope: { kind: "STATE" | "COUNTY"; name: string };
   /** The ONLY numbers this article may contain. */
   facts: Fact[];
@@ -206,11 +339,13 @@ async function zipRankings(vertical: string, metric: string): Promise<ArticleCan
       id: `${vertical}:zip-ranking:${metric}:${state}`,
       vertical,
       angle: "zip-ranking",
-      title: `${RANK_SIZE} ZIP ở ${state} dẫn đầu về ${metric}`,
+      title: titleFor(intentOf(vertical, metric), "zip-ranking", metric, state, RANK_SIZE),
       why:
-        `${list.length} ZIP có số liệu; cao nhất ${formatForPrompt(top[0].value, top[0].unit)} ` +
-        `(${top[0].city ?? top[0].zip}), gấp ${spread.toFixed(1)} lần thấp nhất.`,
+        `${phrase(metric)} — ${list.length} ZIP có số liệu; cao nhất ` +
+        `${formatForPrompt(top[0].value, top[0].unit)} (${top[0].city ?? top[0].zip}), ` +
+        `gấp ${spread.toFixed(1)} lần thấp nhất.`,
       metric,
+      intent: intentOf(vertical, metric),
       scope: { kind: "STATE", name: state },
       facts: top.map(factFrom),
     });
@@ -256,11 +391,13 @@ async function countyRankings(vertical: string, metric: string): Promise<Article
       id: `${vertical}:county-ranking:${metric}:${state}`,
       vertical,
       angle: "county-ranking",
-      title: `${RANK_SIZE} county ở ${state} dẫn đầu về ${metric}`,
+      title: titleFor(intentOf(vertical, metric), "county-ranking", metric, state, RANK_SIZE),
       why:
-        `${list.length} county có số liệu; cao nhất ${formatForPrompt(top[0].value, top[0].unit)} ` +
-        `(${top[0].county}). Chỉ số này đo ở cấp COUNTY nên xếp hạng county là đúng đơn vị.`,
+        `${phrase(metric)} — ${list.length} county có số liệu; cao nhất ` +
+        `${formatForPrompt(top[0].value, top[0].unit)} (${top[0].county}). ` +
+        `Đo ở cấp COUNTY nên xếp hạng county là đúng đơn vị.`,
       metric,
+      intent: intentOf(vertical, metric),
       scope: { kind: "STATE", name: state },
       facts: top.map((r) => ({ ...factFrom(r), label: `${metric} — ${r.county}, ${r.state}` })),
     });
@@ -303,11 +440,12 @@ async function zipSpreadInCounty(vertical: string, metric: string): Promise<Arti
       id: `${vertical}:zip-spread:${metric}:${hi.countyFips}`,
       vertical,
       angle: "zip-spread-in-county",
-      title: `Chênh lệch ${ratio.toFixed(1)} lần về ${metric} bên trong ${hi.county}`,
+      title: titleFor(intentOf(vertical, metric), "zip-spread-in-county", metric, hi.county ?? hi.countyFips!, list.length),
       why:
         `${list.length} ZIP trong cùng một county, cao nhất ${formatForPrompt(hi.value, hi.unit)} ` +
         `(${hi.city ?? hi.zip}) so với ${formatForPrompt(lo.value, lo.unit)} (${lo.city ?? lo.zip}).`,
       metric,
+      intent: intentOf(vertical, metric),
       scope: { kind: "COUNTY", name: hi.county ?? hi.countyFips! },
       facts: [hi, lo].map(factFrom),
     });
@@ -316,7 +454,35 @@ async function zipSpreadInCounty(vertical: string, metric: string): Promise<Arti
 }
 
 export async function discoverCandidates(vertical: string): Promise<ArticleCandidate[]> {
+  /**
+   * Only metrics from sources tagged for this trade.
+   *
+   * The tag already existed on DataSource and this file ignored it, so the
+   * first batch offered a moving company 24 candidates about solar radiation,
+   * 12 about heating degree days and 4 about disaster declarations. Those are
+   * real numbers measured at real ZIPs — and nothing a person hiring a mover
+   * would read.
+   *
+   * Read from `relevantVerticals` rather than a list here: the tag is where
+   * that decision already lives, and a second copy would drift the first time
+   * a source is retagged.
+   */
+  const sources = await prisma.dataSource.findMany({
+    where: { isActive: true, relevantVerticals: { has: vertical } },
+    select: { id: true },
+  });
+  if (sources.length === 0) return [];
+
+  const snapshotIds = (
+    await prisma.dataSnapshot.findMany({
+      where: { sourceId: { in: sources.map((s) => s.id) }, status: "OK" },
+      select: { id: true },
+    })
+  ).map((s) => s.id);
+  if (snapshotIds.length === 0) return [];
+
   const metrics = await prisma.dataPoint.findMany({
+    where: { snapshotId: { in: snapshotIds } },
     select: { metric: true },
     distinct: ["metric"],
     orderBy: { metric: "asc" },
