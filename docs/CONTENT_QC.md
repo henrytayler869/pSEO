@@ -95,17 +95,43 @@ công việc" trên MỌI loại figure, và chỉ chạy trên văn đã render
 ## B. Đã sửa trong lúc QC — đơn vị bị in hai lần
 
 Đo lần đầu: **"households households" 504 lần trên 126/192 trang**, có cả trong
-`acceptedAnswer` của JSON-LD FAQ.
+`acceptedAnswer` của JSON-LD FAQ. Đo lại sau đó: **14/14 trang zip sạch**.
 
-HQ tự tái hiện, truy ra nguyên nhân là commit `4bf32ca` của chính HQ (đổi nghĩa
-trường `display` công khai mà không bump version), và sửa ở `7e5d191` bằng cách
-tách `display` / `displayNumber`.
+Nguyên nhân là commit `4bf32ca` của HQ — đổi `formatForPrompt()` để trường
+`display` trên `/api/v1` mang luôn đơn vị, không bump version, không báo phía
+tiêu thụ. Template của site nối thêm `" households"` như nó vẫn làm suốt.
 
-Đã đo lại sau khi bản sửa lên sóng: **14/14 trang zip sạch**.
+**Cái sửa được site KHÔNG phải bản sửa của HQ.** Bản đầu tiên của tài liệu này
+ghi "đo lại sau khi 7e5d191 lên sóng", và đó là một quy kết sai — hai phép đo
+cách nhau vài giờ, ở giữa có một commit của HQ, và tôi nối chúng lại thành nhân
+quả mà không có bằng chứng nào cho mắt xích ở giữa.
 
-Bài học ghi lại cho publisher mới: một trường trong `/api/v1` đổi nghĩa mà không
-đổi version thì phía tiêu thụ không có cách nào biết. Dấu vết đọc được ngay
-trong câu — một slot bị đôi đơn vị còn slot bên cạnh thì không.
+Ba thứ bác bỏ nó, xếp theo độ chắc:
+
+1. **`display` vẫn mang đơn vị sau `7e5d191`.** Commit đó THÊM `displayNumber`
+   và `unitWord` chứ không đổi `display` — đọc được ở
+   `app/api/v1/niches/[vertical]/markets/[zip]/route.ts:149`. Một consumer vẫn
+   nối `" households"` vào `display` thì vẫn in đôi, dù commit ấy có deploy hay
+   không. Bản sửa của HQ một mình KHÔNG thể làm site sạch.
+2. **Phía site đã tự sửa**, bằng một hàm `withUnit()` chỉ nối đơn vị khi chuỗi
+   chưa có — nên nó đúng với cả `display` cũ lẫn mới, và không phụ thuộc HQ
+   deploy gì. (Báo cáo từ session HQ, đọc trong repo của site; session này không
+   có quyền vào máy đó để tự xác minh.)
+3. `7e5d191` **trượt CI** (`gh run list`: failure, 07:53Z). Lý do yếu nhất trong
+   ba, và đáng ghi lại vì sao nó yếu: commit kế tiếp `3ac0623` CI XANH lúc
+   08:07Z, mà `3ac0623` là con của `7e5d191` — nên "commit này trượt CI" không
+   kết luận được rằng code của nó chưa lên sóng.
+
+Hai bài học, và cái thứ hai đắt hơn:
+
+- Một trường trong `/api/v1` đổi nghĩa mà không đổi version thì phía tiêu thụ
+  không có cách nào biết. Dấu vết đọc được ngay trong câu — một slot bị đôi đơn
+  vị còn slot bên cạnh thì không.
+- **Một phép đo đúng vẫn có thể mang một quy kết sai.** "Đo trước, sửa, đo sau,
+  sạch" đọc như một chuỗi nhân quả, và nó không phải — trong một dự án có ba
+  session cùng sửa một hệ thống, giữa hai phép đo luôn có nhiều hơn một thay đổi.
+  Trước khi gắn kết quả vào một commit, phải kiểm được rằng commit đó chạm tới
+  đúng thứ đã đổi.
 
 ---
 
