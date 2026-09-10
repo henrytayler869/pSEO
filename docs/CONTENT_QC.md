@@ -218,8 +218,17 @@ một bộ regex. Chép sang nơi thứ hai là tạo bản sao thứ ba của m
   danh từ chỉ công việc chung (`jobs`, `crew`, `logistics`) nên nhiều khả năng
   chuyển được sang ngành khác, nhưng chưa có trang publish nào của ngành khác để
   đo. Đừng ghi nó là đã chứng minh cho 13 nghề.
-- **`assertScannerWorks()` của `scan-generated-copy.ts` chưa chạy lại được sau
-  khi tách module** — script đó cần DB, và session này không có tunnel. `tsc
-  --noEmit` sạch, và phần tách là thuần cơ học (di chuyển + thêm `export`, không
-  sửa một ký tự regex nào), nhưng self-test của nó vẫn nên được chạy một lần ở
-  nơi có DB trước khi tin.
+Việc từng treo ở đây — self-test của `scan-generated-copy.ts` sau khi tách
+module — **đã đóng**. Session HQ chạy trên máy có tunnel DB, và xác minh rằng bản
+được chạy đúng là bản đã tách (`scan-generated-copy.ts:26` import từ
+`copy-patterns.ts`, `git diff HEAD` trên hai file rỗng):
+
+```
+assertScannerWorks(moving-services)  qua
+bề mặt: seo_leak 148 · off_trade 148 · migration_bridge 147 · supply_side_claim 148
+148/148 đoạn sạch cả 4 mẫu, 0 lần khớp
+```
+
+Dòng "bề mặt" đáng đọc kỹ hơn dòng kết quả: **cả bốn mẫu đều có bề mặt khác
+rỗng**. "0 lần khớp" trên một mẫu có bề mặt 0 là con số vô nghĩa — nó không phân
+biệt được "đã kiểm và sạch" với "chưa từng có gì để kiểm". Ở đây không phải vậy.
