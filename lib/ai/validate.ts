@@ -296,8 +296,25 @@ function checkUnitWords(text: string, facts: Fact[]): ValidationIssue[] {
     // amount of reading them said so.
     if (matching.length === 0) continue;
 
-    const units = new Set(matching.map((f) => f.unit));
-    if (units.size > 1) continue; // genuinely ambiguous — say nothing
+    // Genuinely ambiguous — say nothing. A number matching facts with two
+    // different units could be either, and choosing would be a guess wearing
+    // the costume of a check.
+    //
+    // The mutation above proves this line RUNS. It cannot prove the line is
+    // right, and the difference is not academic. The enforcing session had the
+    // same silence in their unit rule, reached by accident — `units.some(...)`
+    // happened to fall through — with no reason written anywhere. Their tests
+    // were green, their measurements were green, and the behaviour was
+    // correct. Nothing to force, because nothing was wrong yet.
+    //
+    // It surfaced when they read the reason written here and found they had
+    // none. So: forcing a branch finds WRONG BEHAVIOUR; reading finds an
+    // ABSENT REASON. Correct behaviour with no reason is correct by accident,
+    // and it survives until someone changes `some` to `every` — at which point
+    // no check complains, because checks only know behaviour.
+    //
+    // Which is why this comment is load-bearing, not decoration.
+    if (units.size > 1) continue;
 
     const actual = [...units][0];
     if (allowedUnits.includes(actual)) continue;
