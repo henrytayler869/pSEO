@@ -4,48 +4,76 @@
 > giữ Head Quarter, để publisher mới KẾ THỪA thay vì tự phát hiện lại.
 >
 > Mọi con số trong tài liệu này **đo được**, không phát biểu. Lệnh tái lập nằm
-> ở §7. Publisher đo: **atmovingservices.com**, lúc **2026-09-10T07:56Z**, đọc
-> **56/192 URL** trong sitemap (lấy mẫu theo độ sâu, lấy hết các nhóm nhỏ),
-> **34 Dataset**, **449 PropertyValue**.
+> ở §9. Publisher đo: **atmovingservices.com**.
+>
+> Hai lần đo, và tài liệu giữ **cả hai** thay vì ghi đè:
+>
+> | | baseline | hiện tại |
+> |---|---|---|
+> | thời điểm | 2026-09-10T07:56Z | **2026-09-10T10:27Z** |
+> | URL sitemap | 192 | 194 |
+> | trang đọc | 56 | 56 |
+> | Dataset · PropertyValue | 34 · 449 | 42 · 494 |
+> | **lỗi** | **98** | **0** |
+> | cảnh báo · ghi nhận | 120 · 46 | 91 · 46 |
+>
+> Giữ cả hai vì phát hiện là thứ được KẾ THỪA, còn trạng thái site thì không.
+> Một publisher mới đọc tài liệu này cần biết lỗi nào **đã từng xảy ra thật** —
+> đó là bằng chứng phép kiểm xứng đáng có mặt. Xoá đi rồi chỉ ghi "0 lỗi" sẽ
+> biến một danh sách đã trả giá thành một tờ giấy khen.
 
 ---
 
 ## 1. Kết luận một dòng
 
-Hạ tầng crawl/index của site **đúng ở gần như mọi điểm cổ điển** — redirect gom
-host, 404 cứng, nén, canonical trên mọi trang nội dung, một h1, sitemap khai
-trong robots. Cái hỏng nằm ở chỗ không ai nhìn: **JSON-LD là bề mặt duy nhất
-viết cho máy đọc, và là bề mặt duy nhất không luật nào của dự án chạm tới.**
-21.4% giá trị công bố ở đó mang chữ số mà trang không hề in ra.
+Hạ tầng crawl/index của site **đúng ở gần như mọi điểm cổ điển** ngay từ
+baseline — redirect gom host, 404 cứng, nén, một h1, sitemap khai trong robots.
+Cái hỏng nằm ở chỗ không ai nhìn: **JSON-LD là bề mặt duy nhất viết cho máy
+đọc, và là bề mặt duy nhất không luật nào của dự án chạm tới.** 21.4% giá trị
+công bố ở đó mang chữ số mà trang không hề in ra.
+
+**Vòng đã khép trong cùng một ngày:** luật vào hợp đồng
+(`/api/v1/content-rules`, mục `jsonLd`, `RULES_VERSION` 6) → checker đo → session
+Pubsite sửa → đo lại **0 lỗi**. Đó là điều đáng giữ lại từ tài liệu này, hơn là
+danh sách lỗi: một luật viết thành DỮ LIỆU và một checker chạy được đã đi hết
+từ phát hiện tới sửa xong mà không cần ai đọc văn xuôi rồi tự cài lại.
 
 ---
 
 ## 2. Đo được gì
 
-| Hạng mục | Kết quả đo | Mức |
+Cột **baseline** là lúc bắt đầu QC; cột **hiện tại** là 10:27Z cùng ngày.
+
+| Hạng mục | baseline | hiện tại |
 |---|---|---|
-| `jsonld-value-displayed-only` | **353/449 PropertyValue đạt** — 96 ca công bố chữ số không có trên trang | lỗi |
-| `jsonld-aggregate-declares-scope` | **449/449 đạt** | đạt |
-| Canonical | thiếu ở **trang chủ**; `/?utm_source=…` trả 200 cũng không có canonical. 55 trang còn lại đều tự trỏ chính mình | lỗi |
-| Trang index được mà không có trong sitemap | `/blog/hello-world`, `/moving-services/dc` (+ `/moving-services/ks`, tìm tay) | cảnh báo |
-| Hub bang không được index `/moving-services` link tới | `dc`, `ks` — 24/26 bang có hub trong danh sách | cảnh báo |
-| `lastmod` | **190/194 URL dùng chung một giá trị** `2026-09-07T12:46:37.067Z`; 4 URL không có. KHÔNG phải giờ build — xem §3.4, chỗ này tôi kết luận sai một lần | cảnh báo |
-| Dataset thiếu `license` / `temporalCoverage` | 68 ca (mọi Dataset đo được) | cảnh báo |
-| Favicon | không có `<link rel="icon">`, `/favicon.ico` → 404 | cảnh báo |
-| JSON-LD vắng mặt | `/blog` không có khối nào; bài blog không có `Article`/`BlogPosting` | cảnh báo |
-| Title > 60 ký tự | 47/56 | cảnh báo |
-| Meta description > 160 ký tự | 40/56 | ghi nhận |
-| `http→https`, `www→apex` | 301, đúng | đạt |
-| URL không tồn tại | 404 cứng (không phải soft 404) | đạt |
-| Trailing slash | 308 về dạng không slash | đạt |
-| Nén / HTTP2 / HTTP3 | `br`, h2, `alt-svc: h3` | đạt |
-| FAQPage khớp nội dung hiển thị | mọi câu hỏi đều có trên trang | đạt |
+| `jsonld-value-displayed-only` | 353/449 đạt — **96 ca** công bố chữ số không có trên trang | **494/494 đạt** |
+| `jsonld-aggregate-declares-scope` | 449/449 đạt | **494/494 đạt** |
+| Canonical | thiếu ở **trang chủ**; `/?utm_source=…` trả 200 cũng không có | có ở mọi trang đo được |
+| Trang index được mà không có trong sitemap | `/blog/hello-world`, `/moving-services/dc`, `/moving-services/ks` | không còn ca nào |
+| Hub bang được `/moving-services` link tới | 24/26 | **26/26** |
+| Metadata riêng cho hub bang | `ks`/`dc` mang title + description của trang chủ, 0 khối JSON-LD | title riêng, canonical, 2 khối JSON-LD |
+| Rò rỉ địa chỉ nội bộ | `/blog` in `http://127.0.0.1:8090/wp-json/wp/v2` ra HTML công khai | không còn |
+| Thẻ robots | layout khai `index,follow` cho mọi trang → trang tự đặt `noindex` phát **hai** thẻ | đúng một thẻ |
+| `Dataset.license` | thiếu ở mọi Dataset | có |
+| `Dataset.temporalCoverage` | thiếu ở mọi Dataset | **vẫn thiếu (42)** — chờ HQ, xem §5 |
+| Bảng số liệu không có `Dataset` | 10 trang | **2 trang** |
+| Favicon | không có | có |
+| `lastmod` | 190/194 dùng chung một mốc **nội dung** (không phải giờ build — §3.4) | không đổi |
+| Title > 60 ký tự | 47/56 | 46/56 |
+| `http→https` · `www→apex` · trailing slash · 404 cứng · `br`/h2/h3 · FAQPage khớp nội dung | đạt | đạt |
+| **Tổng** | **98 lỗi** · 120 cảnh báo | **0 lỗi** · 91 cảnh báo |
 
 ---
 
 ## 3. Phát hiện chính, theo thứ tự đáng sửa
 
+> Mọi mục dưới đây mô tả **baseline**. Trạng thái hiện tại ghi ngay dưới mỗi
+> tiêu đề. Giữ nguyên phần mô tả vì đó là thứ dạy publisher tiếp theo phải nhìn
+> vào đâu — một lỗi đã sửa vẫn là bằng chứng rằng phép kiểm bắt được nó.
+
 ### 3.1 JSON-LD công bố chữ số mà trang không in ra — 96/449
+
+> **ĐÃ SỬA** (Pubsite, cùng ngày) — 494/494 đạt.
 
 Đo trên `/moving-services/ca/sacramento-95823`:
 
@@ -70,6 +98,8 @@ mà prompt đã dùng, không lấy từ giá trị thô.
 
 ### 3.2 Trang chủ không có canonical
 
+> **ĐÃ SỬA** — canonical có ở mọi trang đo được, kể cả khi kèm `?utm_source`.
+
 Trang chủ là trang duy nhất trong 56 trang đo được không có `<link
 rel="canonical">`. `https://atmovingservices.com/?utm_source=qc` trả **200** và
 cũng không có canonical — nghĩa là mọi link chia sẻ mang `utm_*`, mọi tham số
@@ -79,6 +109,8 @@ Trớ trêu: `/moving-services?utm_source=qc` **có** canonical trỏ về bản
 Nên đây không phải quyết định thiết kế, mà là một trang lọt khỏi template.
 
 ### 3.3 Sitemap và đồ thị link nội bộ không khớp nhau, không ai kiểm
+
+> **ĐÃ SỬA** — 26/26 hub bang trong sitemap và trong trang index; `/blog/hello-world` đã `noindex`. Gốc: cả 4 ZIP của `dc`/`ks` đều đã gộp nên `publishedMarkets()` rỗng — lần thứ tư và thứ năm của cùng một phép thay thế, xem §3.7.
 
 Ba thứ khác nhau, cùng một gốc:
 
@@ -126,6 +158,8 @@ trang nào, nên một dấu thời gian per-market trong manifest là thứ đ�
 
 ### 3.5 Dataset thiếu hai trường quyết định giá trị của nó
 
+> **SỬA MỘT NỬA** — `license` đã có. `temporalCoverage` vẫn thiếu, và **cố ý**: xem §5.
+
 Mọi Dataset đo được đều thiếu `license` và `temporalCoverage`.
 `temporalCoverage` là trường nặng nhất ở đây: với ước lượng 5 năm của ACS,
 "kỳ nào" là **một nửa ý nghĩa của con số**, và hiện không có gì trong schema
@@ -138,6 +172,8 @@ trang đều khai `twitter:card: summary` — thẻ card không có ảnh.
 
 ### 3.6 Một chỗ site nói với NGƯỜI nhiều hơn nói với MÁY
 
+> Chưa đổi. HQ không kiểm được từ xa — xem §6.
+
 Trên trang zip, chỉ số dẫn xuất in ra cho người đọc kèm **phép tính**:
 
 > Income arriving with inbound households ÷ Moved in over the year — $71,674, County level across Sacramento County, IRS SOI County Migration
@@ -145,6 +181,48 @@ Trên trang zip, chỉ số dẫn xuất in ra cho người đọc kèm **phép 
 Nhưng `measurementTechnique` của đúng mục đó chỉ ghi `IRS SOI County Migration
 (county-level)` — mất chữ `÷`. Nửa văn bản của luật `aggregate-must-declare-scope`
 mạnh hơn nửa JSON-LD của nó. Đây là **thứ HQ không kiểm được từ xa** (xem §6).
+
+---
+
+### 3.7 Một phép thay thế, năm sự cố, và cả năm đều do người ngoài crawl mới ra
+
+Không phải phát hiện của session này — session Pubsite tự truy ra và chuyển
+sang. Ghi vào đây vì nó là mẫu **có thể tái diễn ở publisher tiếp theo**, và vì
+nó giải thích vì sao một bộ kiểm đứng ngoài lại đáng có.
+
+Cùng một câu hỏi bị hỏi sai ở năm chỗ:
+
+| # | Chỗ | Hậu quả |
+|---|---|---|
+| 1 | `relatedMarkets` | bỏ đói 31 trang cụm |
+| 2 | xếp hạng trên trang trụ | link 12 ZIP đã gộp vào 404 |
+| 3 | `sitemap` + trang index | đánh rơi hai bang (`dc`, `ks`) |
+| 4 | `generateStaticParams` | hai bang **không bao giờ** được prerender |
+| 5 | `generateMetadata` | hai bang rơi về title/description của trang chủ |
+
+Mọi lần đều là: hỏi **"market nào tồn tại"** khi câu hỏi đúng là **"TRANG nào
+tồn tại"**. Hai câu đó trùng nhau ở gần hết dữ liệu, và tách ra đúng ở chỗ ZIP
+đã bị gộp vào trang cụm.
+
+Ba điều đáng giữ:
+
+**a. Thân trang đúng chính là thứ làm nó vô hình.** Ở ca #4 và #5, trang render
+đúng với người đọc — `h1` biết nó là KS — nên không ai mở `<head>` ra xem. Lỗi
+nằm trọn trong phần chỉ máy đọc.
+
+**b. Hiểu một lỗi không ngăn được nó tái diễn.** Pubsite đã sửa lỗi này hai
+lần và viết commit message giải thích chính xác nó là gì cả hai lần, rồi vẫn để
+nó ship lần thứ ba, thứ tư, thứ năm — ở những chỗ họ chưa nhìn.
+
+**c. Cả năm đều do người khác crawl mới ra.** Mọi guard rail phía site khi đó
+soi dữ liệu và hàm; không cái nào soi HTML. Đó là lý do phép kiểm đứng ngoài
+không thừa: nó hỏi câu mà một bộ kiểm nội bộ không hỏi được, vì nó không chia
+giả định nào với code sinh ra trang.
+
+Sau vòng này Pubsite dựng `verify:rendered` — đi qua các trang build ra và
+khẳng định thứ crawler sẽ thấy. **Ngay lần chạy đầu nó tìm ra `/blog` thiếu
+JSON-LD, độc lập với audit ở đây.** Xem §6.2 về việc vì sao sự trùng khớp đó
+đáng tin — và nó chỉ đáng tin vì hai bộ kiểm đứng ở hai vị trí khác nhau.
 
 ---
 
@@ -240,19 +318,30 @@ tin cậy.
 Đúng ranh giới HQ nêu: đây là phần trình bày. Chúng có giá trị, nhưng nhét vào
 endpoint hợp đồng sẽ tạo thêm luật khai báo không bằng chứng.
 
-| # | Việc | Đo được ở atmovingservices |
-|---|---|---|
-| 1 | Canonical tự trỏ trên **mọi** trang, kể cả trang chủ, kể cả khi có query string | thiếu ở trang chủ |
-| 2 | Xoá hoặc `noindex` nội dung giữ chỗ của CMS trước khi mở index | `/blog/hello-world` đang sống |
-| 3 | `lastmod` riêng cho từng trang, để một trang đổi thì mốc của chính nó đổi | 190/194 dùng chung một mốc nội dung (KHÔNG phải giờ build — §3.4) |
-| 4 | Mọi trang trong danh sách phân cấp phải được trang cha link tới | 24/26 hub bang |
-| 5 | `Article`/`BlogPosting` cho bài viết; `Organization` có `logo`, `sameAs`, `contactPoint` | thiếu toàn bộ |
-| 6 | `Dataset` có `license` + `temporalCoverage` | thiếu ở mọi Dataset |
-| 7 | Favicon | không có |
-| 8 | `og:image` nếu đã khai `twitter:card` | khai card, không có ảnh |
-| 9 | Title ≤ ~60 ký tự — ưu tiên cắt tên thương hiệu, không cắt địa danh | 47/56 vượt |
-| 10 | Ngân sách JS | ~600KB JS chưa nén cho trang không có ảnh nào, cộng GTM + beacon Cloudflare |
-| 11 | Chính sách bot AI trong `robots.txt` | 9 user-agent bị chặn bằng khối Cloudflare mặc định |
+| # | Việc | baseline | hiện tại |
+|---|---|---|---|
+| 1 | Canonical tự trỏ trên **mọi** trang, kể cả trang chủ, kể cả khi có query string | thiếu ở trang chủ | ✅ |
+| 2 | Xoá hoặc `noindex` nội dung giữ chỗ của CMS trước khi mở index | `/blog/hello-world` `index,follow` | ✅ `noindex` — xoá hẳn cần đăng nhập WordPress, đã lên chủ dự án |
+| 3 | `lastmod` riêng cho từng trang | 190/194 dùng chung một mốc | ⏳ chưa đổi, không gấp |
+| 4 | Mọi trang trong danh sách phân cấp phải được trang cha link tới | 24/26 hub bang | ✅ 26/26 |
+| 5 | `Article`/`BlogPosting`; `Organization` có `logo`, `sameAs`, `contactPoint` | thiếu toàn bộ | ⏳ cần tài sản hình ảnh chưa tồn tại |
+| 6 | `Dataset` có `license` + `temporalCoverage` | thiếu cả hai | ✅ `license` · ⏳ `temporalCoverage` |
+| 7 | Favicon | không có | ✅ |
+| 8 | `og:image` nếu đã khai `twitter:card` | khai card, không ảnh | ⏳ cần tài sản hình ảnh |
+| 9 | Title ≤ ~60 ký tự — ưu tiên cắt tên thương hiệu, không cắt địa danh | 47/56 vượt | ⏳ 46/56; phần bị cắt hiện đã là tên thương hiệu |
+| 10 | Ngân sách JS | ~600KB chưa nén, cộng GTM + beacon Cloudflare | ⏳ chưa đo lại |
+| 11 | Chính sách bot AI trong `robots.txt` | 9 user-agent bị chặn mặc định | ⏳ chờ quyết định của người |
+| 12 | Không in địa chỉ nội bộ ra HTML công khai | `/blog` in `127.0.0.1:8090` | ✅ |
+| 13 | Đúng **một** thẻ robots mỗi trang | layout khai `index,follow` cho mọi trang | ✅ bỏ khỏi layout |
+
+**`temporalCoverage` để trống là quyết định đã đo, không phải hàng tồn.** Nó là
+trường tồn tại để nói "con số thuộc kỳ nào", nên điền bằng phỏng đoán thì tệ hơn
+để trống. HQ **có** con số — `ACS_YEAR = 2023` trong hai adapter Census,
+`countyinflow2223.csv` cho IRS — nhưng chưa phơi ra API. Đã đề nghị HQ phơi
+vintage **theo từng nguồn**, vì kỳ thuộc về nguồn chứ không thuộc về trang: một
+`Dataset` trộn ACS (2019–2023) với IRS (2022–2023) không có khoảng nào đúng cho
+cả hai. Lời giải nhiều khả năng là **một `Dataset` cho mỗi nguồn**, và đó là
+thay đổi phải làm có chủ ý chứ không phải tác dụng phụ của việc lấp một ô.
 
 **Về mục 11, cần một quyết định của người, không phải của session nào:** khối
 `# BEGIN Cloudflare Managed content` đang chặn `GPTBot`, `ClaudeBot`, `CCBot`,
