@@ -3,6 +3,7 @@ import { validateGeneratedText } from "@/lib/ai/validate";
 import { listReservedTerms } from "@/lib/keywords/patterns";
 import type { FactSet } from "@/lib/ai/facts";
 import { measureVectors, type MeasuredVector } from "@/lib/content-rules/jsonld-rules";
+import { buildFieldContracts, type FieldContracts } from "./field-contract";
 
 /**
  * The rules every published site must enforce identically, in a form a machine
@@ -80,6 +81,15 @@ export interface ContentRules {
     description: string;
     vectors: MeasuredVector[];
   };
+
+  /**
+   * Per-field semantic contract — hash decides, label only reads.
+   *
+   * See lib/content-rules/field-contract.ts for why it exists. Short version:
+   * a field can change MEANING without changing TYPE, and a consumer's schema
+   * validation cannot see that. It happened, it cost 126 pages.
+   */
+  fieldContract: FieldContracts;
 
   reservedTerms: { term: string; ownedBy: string }[];
 
@@ -165,7 +175,7 @@ export interface ContentRules {
 // SITE_INTEGRATION_GUIDE.md consumer phải coi nó là optional trong một chu kỳ
 // deploy — đã có một ca thật: consumer cache response, build validate thân cũ,
 // lỗi hàng loạt trong khi API hoàn toàn bình thường.
-const RULES_VERSION = "7";
+const RULES_VERSION = "8";
 
 /**
  * The trust pages. Measured absence on atmovingservices.com 2026-09-09: all
@@ -348,6 +358,8 @@ export async function buildContentRules(): Promise<ContentRules> {
         ambiguous: set.size > 1,
       }))
       .sort((a, b) => a.metric.localeCompare(b.metric)),
+
+    fieldContract: await buildFieldContracts(),
 
     requiredPages: REQUIRED_PAGES,
 
