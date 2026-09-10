@@ -40,6 +40,38 @@ concurrency:
 jobs:
   static:
     runs-on: ubuntu-latest
+
+    # Postgres RỖNG, và "rỗng" ở đây là một lựa chọn đã được đo chứ không phải
+    # một sự tiện tay.
+    #
+    # verify-content-rules.ts cần DB để chạy (buildContentRules gọi
+    # prisma.dataPoint.groupBy), nhưng phần đáng canh nhất của nó — 8 vector qua
+    # validator thật, cộng phép đòi bộ vector có cả hai chiều — dùng fact tổng
+    # hợp cố định nên không phụ thuộc dữ liệu.
+    #
+    # Trước ffcd3d5 thì đưa nó vào đây là sai: phép kiểm resolution của chỉ số
+    # ĐẠT RỖNG trên DB trống — "✓ 0 chỉ số, mỗi chỉ số đúng resolution" đúng về
+    # logic vì nó nói về tập rỗng, và đọc y hệt một phép vừa xác nhận điều gì
+    # đó. Một PR xanh sẽ đọc như "đã kiểm resolution" trong khi nó chưa hỏi chỉ
+    # số nào. Từ ffcd3d5, script đếm phép đó là KHÔNG KẾT LUẬN ĐƯỢC và rời khỏi
+    # cả tử số lẫn mẫu số, nên cổng này nói đúng điều nó kiểm được.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: pseo
+          POSTGRES_PASSWORD: pseo
+          POSTGRES_DB: pseo_control_panel
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U pseo"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://pseo:pseo@localhost:5432/pseo_control_panel
+
     steps:
       - uses: actions/checkout@v4
 
@@ -87,3 +119,12 @@ jobs:
       # của vị ngữ có ca chạm tới, và đòi một validator "accept mọi thứ" bị bắt.
       - name: Luật JSON-LD, và bộ vector của chúng còn từ chối được
         run: npx tsx scripts/verify-technical-rules.ts
+
+      # Schema phải có trước khi script chạm Prisma. Không dữ liệu nào được
+      # nạp: xem chú thích ở khối `services` về việc DB rỗng kiểm được gì và
+      # KHÔNG kiểm được gì.
+      - name: Schema DB
+        run: npx prisma migrate deploy
+
+      - name: Luật nội dung công bố khớp hành vi thật
+        run: npx tsx scripts/verify-content-rules.ts

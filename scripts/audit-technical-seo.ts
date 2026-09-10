@@ -336,6 +336,34 @@ function auditPage(p: PageFacts) {
     }
   }
 
+  /**
+   * Trang bày bảng số liệu mà không công bố Dataset.
+   *
+   * Câu hỏi này do session QC Content chuyển sang: 0/31 trang cụm có Dataset
+   * hay FAQPage, trong khi 127/127 trang ZIP có cả hai. Họ ngờ audit sẽ đọc
+   * khoảng trống đó thành thiếu sót.
+   *
+   * Đo ra thì ngược lại, và tệ hơn: audit KHÔNG NÓI GÌ CẢ. Nhánh
+   * `dataset-required` chỉ chạy bên trong vòng lặp qua các node Dataset đã có,
+   * còn `jsonld-absent` chỉ nổ khi trang không có khối JSON-LD nào — trang cụm
+   * có bốn node, nên nó lọt qua cả hai. Một trang dựng bảng 23 ZIP × 5 chỉ số
+   * từ dữ liệu liên bang đi qua bộ kiểm này mà không phép nào hỏi tới.
+   *
+   * Phép kiểm ở đây KHÔNG phán trang cụm phải có Dataset. Nó phán rằng khoảng
+   * trống đó phải được NÓI RA — "cố ý không có" và "quên" sửa theo hai cách
+   * khác nhau, và hiện không có chỗ nào trong dự án ghi đó là cái nào.
+   */
+  const tableCells = (html.match(/<td[\s>]/gi) ?? []).length;
+  if (tableCells >= 20 && ns.length > 0 && !types.has("Dataset")) {
+    add({
+      id: "table-without-dataset",
+      severity: "warning",
+      where: path,
+      detail: `trang render ${tableCells} ô bảng và có JSON-LD (${[...types].join(", ")}) nhưng không có node Dataset`,
+      why: "Cố ý hay bỏ sót? Hai thứ đó sửa khác nhau, và hiện không có gì ghi lại là cái nào. Nếu cố ý — một trang gộp nhiều địa bàn không mô tả gọn thành một dataset — thì phải ghi thành quyết định; nếu quên thì đây là trang giàu dữ liệu nhất của site đang bỏ trống đúng schema mà dữ liệu của nó có cửa nhất.",
+    });
+  }
+
   // Breadcrumb: kiểm CẤU TRÚC, vì lỗi hay gặp là position nhảy cóc hoặc thiếu item.
   for (const bc of ns.filter((n) => n["@type"] === "BreadcrumbList")) {
     const items = asNodes(bc.itemListElement);
@@ -474,12 +502,34 @@ async function main() {
   const orphanCandidates = [...linked]
     .filter((href) => href && !inSitemap.has(href) && !href.startsWith("/api"))
     .sort();
+  let brokenLinks = 0;
   for (const href of orphanCandidates.slice(0, 40)) {
     const res = await fetch(`${origin}${href}`, { headers: BROWSER_HEADERS, redirect: "follow" });
+
+    // Link nội bộ trỏ vào chỗ không tồn tại.
+    //
+    // Vòng lặp này TRƯỚC ĐÂY bỏ qua mọi thứ không phải 200, nên link gãy đi
+    // qua bộ kiểm mà không phép nào hỏi tới — và 10 link gãy trên hai trang
+    // trụ phải do một session khác đọc bằng mắt mới ra. Tệ hơn: chúng bị dán
+    // nhãn `indexable-not-in-sitemap`, tức là chỉ người đọc đi sửa SITEMAP,
+    // trong khi sitemap chưa bao giờ sai. Một nhãn sai không trung tính — nó
+    // tiêu công của người tin nó.
+    if (res.status !== 200) {
+      brokenLinks++;
+      add({
+        id: "broken-internal-link",
+        severity: "error",
+        where: href,
+        detail: `được link tới, trả HTTP ${res.status}`,
+        why: "Sửa ở nơi SINH RA link, không phải ở sitemap. Hai lỗi này trông giống nhau trong một bảng URL và sửa ở hai chỗ khác hẳn nhau.",
+      });
+      continue;
+    }
+
     // Chỉ trang HTML mới có chuyện "index hay không". /sitemap.xml, ảnh, feed
     // đều trả 200 và đều không thuộc câu hỏi này — lọc bằng content-type chứ
     // không bằng danh sách đuôi file, vì danh sách đuôi file sẽ thiếu một cái.
-    if (res.status !== 200 || !(res.headers.get("content-type") ?? "").includes("text/html")) continue;
+    if (!(res.headers.get("content-type") ?? "").includes("text/html")) continue;
     const body = await res.text();
     const robotsMeta = attr(body, /<meta[^>]+name="robots"[^>]+content="([^"]*)"/i) ?? "";
     if (/noindex/i.test(robotsMeta)) continue;
@@ -489,6 +539,31 @@ async function main() {
       where: href,
       detail: `trả 200, meta robots "${robotsMeta || "không khai"}", nhưng không có trong sitemap`,
       why: "Trang được link, index được, mà site không nộp. Hai hệ quả: Google index một trang site không chủ ý nộp, và mẫu số tỷ lệ index của HQ (đếm theo sitemap) thiếu nó — tỷ lệ có thể vượt 100%.",
+    });
+  }
+
+  /**
+   * Sitemap sạch + link nội bộ gãy = hai tập được dựng từ HAI NGUỒN khác nhau.
+   *
+   * Đây là phát biểu QUAN HỆ, không phải một nhãn nữa, và nó do session Pubsite
+   * chỉ ra sau khi sửa 10 link gãy trên hai trang trụ. Từng URL rời rạc chỉ mô
+   * tả triệu chứng; đặt hai tập cạnh nhau thì chỉ thẳng vào nguyên nhân —
+   * sitemap dựng từ danh sách thị trường đã publish, còn bảng xếp hạng dựng từ
+   * một truy vấn khác, và truy vấn đó không biết ZIP nào đã bị gộp vào trang
+   * cụm. Không phép kiểm nào tìm ra điều đó bằng cách phân loại từng URL.
+   *
+   * Chiều ngược lại cũng nói điều tương tự và đã được báo riêng bên trên
+   * (`indexable-not-in-sitemap`): link tới một trang thật mà sitemap không có.
+   * Cùng một sự rạn, lộ ra ở hai phía khác nhau.
+   */
+  const sitemapBroken = findings.filter((f) => f.id === "sitemap-url-not-200").length;
+  if (brokenLinks > 0 && sitemapBroken === 0 && pages.length > 0) {
+    add({
+      id: "link-source-divergence",
+      severity: "error",
+      where: "toàn site",
+      detail: `${brokenLinks} link nội bộ gãy, trong khi ${pages.length}/${pages.length} URL sitemap đọc được đều trả 200`,
+      why: "Sitemap và đồ thị link nội bộ đang được dựng từ hai nguồn khác nhau, và chỉ một nguồn biết trang nào thật sự được publish. Sửa từng link là sửa triệu chứng — chỗ phải sửa là để hai bên đọc chung một danh sách.",
     });
   }
 
