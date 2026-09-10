@@ -133,7 +133,7 @@ export interface ContentRules {
   }[];
 }
 
-const RULES_VERSION = "5";
+const RULES_VERSION = "6";
 
 /**
  * The trust pages. Measured absence on atmovingservices.com 2026-09-09: all
@@ -355,6 +355,35 @@ export async function buildContentRules(): Promise<ContentRules> {
         notAppliedTo: {
           paths: REQUIRED_PAGES.flatMap((p) => p.paths),
           why: "Luật này cấm hứa bảo hành, còn một trang điều khoản BẮT BUỘC phải từ chối bảo hành — và chính requiredPages ở trên đòi site có trang đó. Session QC Content đo được trên atmovingservices: tiêu đề 'No warranty' ở /terms bị tính là lạc nghề. Chạy luật ở đây là HQ tự mâu thuẫn: đòi một trang rồi phản đối nội dung bắt buộc của nó. Danh sách đường dẫn lấy thẳng từ REQUIRED_PAGES, không chép lại — chép là bản thứ hai sẽ trôi lệch khi ai đó thêm một trang bắt buộc mới.",
+        },
+      },
+      /**
+       * Hai luật cho JSON-LD, nối vào hợp đồng 2026-09-10.
+       *
+       * Trước đó chúng là code có sẵn trong repo (lib/content-rules/jsonld-rules.ts)
+       * mà KHÔNG nằm trong endpoint này — nghĩa là một publisher mới đọc
+       * /api/v1/content-rules sẽ không kế thừa chúng. Session QC Technical SEO
+       * cố ý để trống chỗ này và nói ra thay vì tự nối: "chúng mới là code có
+       * sẵn trong repo, chưa phải hợp đồng".
+       *
+       * Khác biệt đó không phải hình thức. Một luật nằm trong repo bảo vệ site
+       * nào có người nhớ chạy nó; một luật nằm trong hợp đồng thì publisher
+       * tiếp theo nhận được mà không cần ai nhớ.
+       */
+      {
+        id: "jsonld-value-displayed-only",
+        rule: "Giá trị trong JSON-LD không được công bố chữ số mà trang không in ra. Được thêm số 0 ở cuối, không được bớt chữ số. Chỉ áp cho giá trị có phần thập phân — đổi thang (2249409000 -> '$2.25 billion') là chính sách được phép, nên bắt số nguyên xuất hiện nguyên dạng sẽ là đòi JSON-LD công bố dữ liệu kém chính xác hơn dữ liệu thật.",
+        enforcedBy: "lib/content-rules/jsonld-rules.ts — checkDisplayedOnlyValue",
+        provenBy: "HQ tự chạy: measureVectors() trong jsonld-rules.ts, đo lại mỗi lần gọi. 6 vector, 3 accept / 3 reject. Trên publisher thật (atmovingservices, 56/192 URL, 2026-09-10): 96/449 PropertyValue công bố chữ số không có ở đâu trên trang — 46.02954943221133 trong khi trang in 46.0%.",
+      },
+      {
+        id: "jsonld-aggregate-declares-scope",
+        rule: "measurementTechnique phải có đúng một trong hai hình dạng: '<nguồn> (<zip|county>-level)' hoặc '<phép tính> of <nguồn> across <N> <danh từ phạm vi>', với từ vựng phép tính cố định. Đây là nửa JSON-LD của aggregate-must-declare-scope — nửa văn bản HQ không kiểm được vì chỉ build của site thấy nó.",
+        enforcedBy: "lib/content-rules/jsonld-rules.ts — checkAggregateTechnique",
+        provenBy: "HQ tự chạy: measureVectors(). 6 vector, 2 accept / 4 reject. Trên publisher thật: 449/449 đạt — đọc con số đó KÈM 4 ca reject, vì một luật chỉ từng pass không phân biệt được với một luật không kiểm gì.",
+        notAppliedTo: {
+          paths: [],
+          why: "Chưa có ngoại lệ nào. Nhưng ghi ra một chỗ trống có tên còn hơn để người đọc tự hỏi liệu ngoại lệ có tồn tại mà chưa ai viết. Một giới hạn ĐÃ BIẾT: chỉ số DẪN XUẤT không phân biệt được với chỉ số thô từ bên ngoài — '$71,674' là thương của hai chỉ số IRS, trang in phép chia đó cho người đọc nhưng measurementTechnique chỉ ghi nguồn, và vị ngữ hiện tại CHO CA NÀY QUA. Bịt được, nhưng phải mở rộng hợp đồng thành 'quotient of A and B across 1 county' — một ràng buộc lên cách site viết schema, chưa ai quyết.",
         },
       },
     ],

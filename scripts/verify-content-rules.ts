@@ -17,6 +17,7 @@
 // Usage: tsx scripts/verify-content-rules.ts
 
 import { buildContentRules } from "../lib/content-rules/registry";
+import { measureVectors } from "../lib/content-rules/jsonld-rules";
 import { validateGeneratedText } from "../lib/ai/validate";
 import type { FactSet } from "../lib/ai/facts";
 
@@ -53,6 +54,47 @@ async function main() {
     if (ok) passed++;
     else failures.push(`vector "${v.text}" — công bố ${v.expect}, thực tế ${actual}`);
     console.log(`${ok ? "✓" : "✗"} [${v.expect}] ${v.text}`);
+  }
+
+  // --- JSON-LD vectors ---
+  //
+  // Chạy ở đây vì registry vừa khai `provenBy: "HQ tự chạy: measureVectors()"`.
+  // Một provenBy mà không script nào thực thi là một câu khẳng định về bằng
+  // chứng, không phải bằng chứng — và nó đọc y hệt bằng chứng thật.
+  //
+  // measureVectors() ĐO verdict bằng cách gọi checkDisplayedOnlyValue /
+  // checkAggregateTechnique, không đọc một hằng số. Nên nếu vị ngữ đổi mà
+  // vector không đổi, chỗ này lệch chứ không im.
+  const jsonld = measureVectors();
+  const jsonldByRule = new Map<string, { accept: number; reject: number }>();
+  for (const v of jsonld) {
+    const entry = jsonldByRule.get(v.rule) ?? { accept: 0, reject: 0 };
+    if (v.expect === "accept") entry.accept++;
+    else entry.reject++;
+    jsonldByRule.set(v.rule, entry);
+  }
+  console.log();
+  for (const [rule, c] of jsonldByRule) {
+    const bothWays = c.accept > 0 && c.reject > 0;
+    if (bothWays) {
+      passed++;
+      console.log(`✓ ${rule}: ${c.accept} chấp nhận, ${c.reject} từ chối — vector có cả hai chiều`);
+    } else {
+      failures.push(`${rule} chỉ có một chiều (${c.accept} chấp nhận, ${c.reject} từ chối)`);
+      console.log(`✗ ${rule} chỉ có một chiều`);
+    }
+  }
+
+  // Mọi luật khai `HQ tự chạy` phải có mặt trong số vừa đo. Nếu ai đó thêm một
+  // luật JSON-LD vào registry mà quên thêm vector, chỗ này nói ra — thay vì để
+  // danh sách declaredRules trông đầy đủ hơn thứ thật sự chạy được.
+  const claimsSelfRun = rules.declaredRules.filter((d) => d.id.startsWith("jsonld-"));
+  for (const d of claimsSelfRun) {
+    if (jsonldByRule.has(d.id)) passed++;
+    else {
+      failures.push(`${d.id} khai provenBy nhưng measureVectors() không sinh vector nào cho nó`);
+      console.log(`✗ ${d.id}: khai có bằng chứng chạy, nhưng không vector nào mang tên nó`);
+    }
   }
 
   // --- the vectors must be able to disagree ---
@@ -117,7 +159,12 @@ async function main() {
   // file. Trên database rỗng, phép chỉ số không hỏi được gì nên nó rời khỏi cả
   // tử số lẫn mẫu số — nếu chỉ rời tử số thì kết quả thành 9/10 và trông như
   // một phép vừa TRƯỢT.
-  const total = rules.rounding.vectors.length + 1 + (rules.metricResolutions.length === 0 ? 0 : 1);
+  const total =
+    rules.rounding.vectors.length +
+    1 +
+    (rules.metricResolutions.length === 0 ? 0 : 1) +
+    jsonldByRule.size +
+    claimsSelfRun.length;
   console.log(`\n${passed}/${total} kiểm tra đúng.`);
   if (failures.length > 0) {
     console.error(`\nTHẤT BẠI:\n  ${failures.join("\n  ")}`);
