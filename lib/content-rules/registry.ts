@@ -110,7 +110,27 @@ export interface ContentRules {
    * have, then fetches vectors from a repo whose validator can actually
    * execute them.
    */
-  declaredRules: { id: string; rule: string; enforcedBy: string; provenBy?: string }[];
+  declaredRules: {
+    id: string;
+    rule: string;
+    enforcedBy: string;
+    provenBy?: string;
+    /**
+     * Paths this rule must NOT be applied to, and why.
+     *
+     * Published as data rather than left to each scanner, because the first
+     * exemption found here was HQ contradicting itself: `requiredPages` demands
+     * every site serve /terms, and `stay-in-trade` flagged the heading "No
+     * warranty" on that page as writing outside the trade. A terms page is
+     * REQUIRED to disclaim warranty. HQ was asking for a page and then
+     * objecting to its mandatory contents.
+     *
+     * A scanner that has to re-derive that exemption will derive it differently
+     * on each site, and the sites that derive it wrong will report a violation
+     * nobody can fix without deleting a page HQ insists on.
+     */
+    notAppliedTo?: { paths: string[]; why: string };
+  }[];
 }
 
 const RULES_VERSION = "5";
@@ -332,6 +352,10 @@ export async function buildContentRules(): Promise<ContentRules> {
         rule: "Đoạn viết cho một ngành không được nói như ngành khác, không hứa bảo hành, không mô tả dịch vụ định kỳ nếu ngành đó không phải vậy. Bắt prompt drift giữa các vertical dùng chung template.",
         enforcedBy: "phía site — niche-other-trade, niche-warranty, niche-routine-service",
         provenBy: "atmovingservices: contracts/vectors.json (6 vector, 1 accept / 5 reject).",
+        notAppliedTo: {
+          paths: REQUIRED_PAGES.flatMap((p) => p.paths),
+          why: "Luật này cấm hứa bảo hành, còn một trang điều khoản BẮT BUỘC phải từ chối bảo hành — và chính requiredPages ở trên đòi site có trang đó. Session QC Content đo được trên atmovingservices: tiêu đề 'No warranty' ở /terms bị tính là lạc nghề. Chạy luật ở đây là HQ tự mâu thuẫn: đòi một trang rồi phản đối nội dung bắt buộc của nó. Danh sách đường dẫn lấy thẳng từ REQUIRED_PAGES, không chép lại — chép là bản thứ hai sẽ trôi lệch khi ai đó thêm một trang bắt buộc mới.",
+        },
       },
     ],
   };
