@@ -479,7 +479,23 @@ model AiSpend {
 
   vertical String
 
-  zip      String
+  /**
+   * Nullable since 2026-09-11: an editorial article spans many ZIPs, so there
+   * is no single one to charge it to.
+   *
+   * The row is still written, and that is the point — `getTotalSpendUsd()`
+   * sums this table with no filter, so anything that skipped it would spend
+   * outside the hard cap. A second ledger for articles would have been the
+   * easy shape and would have made the cap silently stop covering the newest
+   * way to spend money.
+   */
+  zip      String?
+
+  /// Set for article generation, so per-publisher cost is a query rather than
+  /// an estimate. Null for market interpretation, which is not per-site.
+  websiteId String?
+  articleId String?
+
   model    String
 
   inputTokens  Int
