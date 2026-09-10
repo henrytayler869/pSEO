@@ -477,6 +477,40 @@ cách đó hỏng thỉnh thoảng; với bốn session thì nó hỏng theo l�
    --noEmit` → `eslint .` (toàn repo, không phải file vừa sửa) →
    `verify-technical-rules.ts`.
 
+### 8.1 Xoá một nhánh: hỏi đúng câu
+
+Đo 2026-09-10, khi bốn nhánh cần dọn. Ba lệnh, cùng một nhánh, ba câu trả lời —
+và hai trong ba dẫn tới kết luận sai tuỳ kiểu merge:
+
+| Lệnh | Câu nó THẬT SỰ hỏi | Chết vì |
+|---|---|---|
+| `git log main..nhánh` | SHA nào chưa nằm trong ancestry của main | **rebase** — GitHub sinh SHA mới, ancestry đứt |
+| `git cherry main nhánh` | patch nào chưa có bản tương đương trên main | **squash** — n commit thành 1, patch-id không còn khớp |
+| so nội dung file | cây có khác nhau không | không chết vì kiểu merge nào |
+
+Cả hai chuyện đều xảy ra thật trong cùng một buổi:
+
+- `hq/rule-fixes` merge bằng **squash** (PR #5). `git cherry` báo `+` cho cả 4
+  commit — đọc như "chưa có trên main, đừng xoá". Sai: nội dung đã ở main.
+- `qc/rendered-content-scan` merge bằng **rebase** (PR #2). `git log
+  main..nhánh` báo 5 commit — cũng đọc như "chưa có trên main". Cũng sai.
+
+Hai phép đo, hai kiểu merge, cùng một kết luận sai theo hai hướng ngược nhau.
+
+Và cùng tín hiệu còn mang hai nghĩa trái ngược: `hq/wire-jsonld-contract` cũng
+bị `git cherry` báo `+`, nhưng lần đó **đúng** — đó là PR #7 bị ĐÓNG có chủ ý,
+nội dung cố ý không lên main. Đọc dấu `+` mà không biết PR đó đóng hay squash
+thì không phân biệt được "đã có rồi" với "cố ý không đưa lên".
+
+**Quy tắc:** trước khi xoá một nhánh, đừng hỏi *"git có nói nó đã merge chưa"*
+mà hỏi *"nội dung của nó có trên main chưa"*. Hai câu đó chỉ trùng nhau khi
+merge thường.
+
+Cụ thể: `git diff --stat main nhánh` — nếu diff gần như toàn XOÁ thì nhánh lùi
+sau main và merge nó sẽ hoàn nguyên việc mới hơn. Trong lần dọn này, cả bốn
+nhánh đều vậy: merge mù một trong số đó sẽ xoá mất cột `Website.vertical`,
+`verify-content-rules.ts` và `scripts/connect-website.ts`.
+
 Cổng PR **cố ý không** dựng Postgres, không `next build`, không chạy mấy script
 đọc dữ liệu thật — chúng cần DB có dữ liệu, và chạy với DB rỗng sẽ báo xanh
 trong khi không kiểm gì. Pipeline đầy đủ vẫn chạy khi commit vào main.
