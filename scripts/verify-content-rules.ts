@@ -75,7 +75,18 @@ async function main() {
 
   // --- metric resolutions ---
   const ambiguous = rules.metricResolutions.filter((m) => m.ambiguous);
-  if (ambiguous.length === 0) {
+  if (rules.metricResolutions.length === 0) {
+    // KHÔNG tính là đạt. Với database rỗng — cổng PR, một checkout sạch —
+    // phép này không có gì để soi, và "✓ 0 chỉ số, mỗi chỉ số đúng một
+    // resolution" là một câu ĐÚNG nói về tập rỗng. Nó đọc y hệt một phép kiểm
+    // vừa xác nhận điều gì đó.
+    //
+    // Đo 2026-09-10 trên Postgres rỗng vừa migrate: 9/10 phép ở đây vẫn kiểm
+    // thật (8 vector chạy qua validator thật, cộng phép đòi vector có cả hai
+    // chiều) vì chúng dùng fact tổng hợp. Chỉ phép này là rỗng.
+    console.log(`— chỉ số: KHÔNG KẾT LUẬN ĐƯỢC (database không có DataPoint nào)`);
+    console.log(`  Không phải đạt, cũng không phải trượt — không có dữ liệu để hỏi.`);
+  } else if (ambiguous.length === 0) {
     passed++;
     console.log(`✓ ${rules.metricResolutions.length} chỉ số, mỗi chỉ số đúng một resolution`);
   } else {
@@ -102,7 +113,11 @@ async function main() {
   console.log(`\nTerm dành riêng: ${rules.reservedTerms.length}`);
   for (const t of rules.reservedTerms) console.log(`   "${t.term}" -> ${t.ownedBy}`);
 
-  const total = rules.rounding.vectors.length + 2;
+  // Tổng đếm theo số phép THẬT SỰ hỏi được, không theo số phép có mặt trong
+  // file. Trên database rỗng, phép chỉ số không hỏi được gì nên nó rời khỏi cả
+  // tử số lẫn mẫu số — nếu chỉ rời tử số thì kết quả thành 9/10 và trông như
+  // một phép vừa TRƯỢT.
+  const total = rules.rounding.vectors.length + 1 + (rules.metricResolutions.length === 0 ? 0 : 1);
   console.log(`\n${passed}/${total} kiểm tra đúng.`);
   if (failures.length > 0) {
     console.error(`\nTHẤT BẠI:\n  ${failures.join("\n  ")}`);
