@@ -19,6 +19,7 @@
 import { buildContentRules } from "../lib/content-rules/registry";
 import { validateGeneratedText } from "../lib/ai/validate";
 import { measureVectors } from "../lib/content-rules/jsonld-rules";
+import { proveFieldContractSensitivity } from "../lib/content-rules/field-contract";
 import {
   runVectors,
   runScopeVectors,
@@ -207,6 +208,18 @@ async function main() {
     }
   }
 
+  // --- fieldContract: băm phải NHẠY và phải CÔ LẬP ---
+  const sens = proveFieldContractSensitivity(rules.fieldContract);
+  const brokenFields = sens.filter((p) => !p.isolated);
+  console.log();
+  if (brokenFields.length === 0) {
+    passed++;
+    console.log(`✓ fieldContract: ${Object.keys(rules.fieldContract).length} băm, mỗi băm nhạy với đầu vào của nó và không trùng nhau`);
+  } else {
+    for (const b of brokenFields) failures.push(`fieldContract.${b.field}: ${b.detail}`);
+    console.log(`✗ fieldContract: ${brokenFields.map((b) => `${b.field} (${b.detail})`).join("; ")}`);
+  }
+
   // --- metric resolutions ---
   const ambiguous = rules.metricResolutions.filter((m) => m.ambiguous);
   if (rules.metricResolutions.length === 0) {
@@ -264,6 +277,7 @@ async function main() {
     1 + // verdict công bố khớp verdict đo lại
     jsonLdDeclared * 2 + // mỗi luật: cả hai chiều, và có vector mang tên nó
     renderedSuites.length * 2 + // mỗi luật render: vector khớp, và mọi nhánh ép nổ được
+    1 + // fieldContract: băm nhạy và cô lập
     (rules.metricResolutions.length === 0 ? 0 : 1);
   console.log(`\n${passed}/${total} kiểm tra đúng.`);
   if (failures.length > 0) {
