@@ -91,6 +91,38 @@ jobs:
       - name: Prisma client
         run: npx prisma generate
 
+      # schema.prisma phải khớp với những gì migrations THẬT SỰ tạo ra.
+      #
+      # Thêm sau sự cố 2026-09-10: một khối cột được chèn vào NĂM model thay vì
+      # một, vì `str.replace` không giới hạn số lần và chuỗi neo (`vertical
+      # String`) có mặt ở cả năm. tsc xanh, eslint xanh, và `next build` TẠI CHỖ
+      # cũng xanh — vì database test rỗng, nên nhánh code truy vấn model bị hỏng
+      # không bao giờ chạy. Chỉ build trên VPS đỏ, nơi có dữ liệu thật.
+      #
+      # Nghĩa là mọi cổng đang có đều mù với loại lỗi này, và cái mù chung là
+      # chúng phụ thuộc vào việc CÓ DỮ LIỆU để chạm tới truy vấn hỏng.
+      #
+      # `migrate diff` không phụ thuộc dữ liệu: nó so schema với migrations, nên
+      # nó bắt được cột khai ra mà không migration nào tạo — bất kể database có
+      # gì. Đo: schema sai -> "[+] Added column `wpUsername`" trên
+      # MarketIdentity, exit khác 0.
+      # `migrate diff --from-migrations` dựng lại toàn bộ migrations vào một
+      # database TRỐNG để so — Prisma gọi nó là shadow database, và nó phải tồn
+      # tại sẵn. Không có nó thì bước dưới trả P1003 và cổng đỏ vì lý do không
+      # liên quan tới thay đổi, tức đúng loại cổng người ta học cách bỏ qua.
+      - name: Shadow database cho migrate diff
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE pseo_shadow'
+
+      - name: Schema khớp migrations
+        run: >
+          npx prisma migrate diff
+          --from-migrations prisma/migrations
+          --to-schema-datamodel prisma/schema.prisma
+          --shadow-database-url "$SHADOW_DATABASE_URL"
+          --exit-code
+        env:
+          SHADOW_DATABASE_URL: postgresql://pseo:pseo@localhost:5432/pseo_shadow
+
       # Kiểu do Next SINH RA — RouteContext, LayoutProps, PageProps — không có
       # sẵn sau `npm ci`. Chúng ra đời từ `next dev`, `next build` hoặc
       # `next typegen` (docs của chính bản Next này: 01-app/01-getting-started/
