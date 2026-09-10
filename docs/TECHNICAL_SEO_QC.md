@@ -290,7 +290,47 @@ theo dõi thì phải là phép kiểm của chính HQ — đó là lý do
 
 ---
 
-## 8. Chạy lại
+## 8. Quy trình: worktree + PR cho mọi session
+
+Chốt 2026-09-10 giữa session này và HQ, và chốt bằng **bằng chứng trong ngày**,
+không phải bằng nguyên tắc:
+
+| Chuyện xảy ra | Hệ thống đã dựa vào điều gì |
+|---|---|
+| `git add -A` cuốn file đang dở của **hai** session khác vào commit của HQ, rồi push lên main | mỗi người nhớ chỉ add file của mình |
+| `eslint` chạy trên vài file thay vì `eslint .` — cổng tại chỗ xanh, cổng CI đỏ | mỗi người nhớ chạy đúng phạm vi |
+| `a0d76c7`: `tsc` báo lỗi, commit vẫn push vì lệnh git ở dòng khác và không có `set -e` | mỗi người nhớ đọc output |
+
+Cả ba đều là "hệ thống dựa vào việc mỗi người nhớ làm đúng". Với một session thì
+cách đó hỏng thỉnh thoảng; với bốn session thì nó hỏng theo lịch.
+
+**Quy tắc:**
+
+1. Mỗi session làm trong **git worktree riêng** (`.claude/worktrees/<tên>`).
+   `git add -A` của session khác không nhìn thấy file ở đó.
+2. Vào main qua **PR**, không push thẳng.
+3. `.github/workflows/pr.yml` chạy trên mọi PR: `prisma generate` → `tsc
+   --noEmit` → `eslint .` (toàn repo, không phải file vừa sửa) →
+   `verify-technical-rules.ts`.
+
+Cổng PR **cố ý không** dựng Postgres, không `next build`, không chạy mấy script
+đọc dữ liệu thật — chúng cần DB có dữ liệu, và chạy với DB rỗng sẽ báo xanh
+trong khi không kiểm gì. Pipeline đầy đủ vẫn chạy khi commit vào main.
+
+Chi phí đo được: một lượt CI khoảng hai phút. So với một giờ để phát hiện mình
+đã cuốn file của người khác vào commit.
+
+**Còn treo:** `verify-content-rules.ts` sẽ vào cổng PR (cần thêm service
+Postgres + `prisma migrate deploy`), nhưng **chỉ sau khi `ffcd3d5` lên main**.
+HQ đo thật với DB rỗng và tìm ra 1 trong 10 phép của script đó **đạt rỗng**: "✓
+0 chỉ số, mỗi chỉ số đúng resolution" — đúng về mặt logic, vì nó nói về tập
+rỗng, và đọc y hệt một phép vừa xác nhận điều gì đó. Đưa vào trước bản sửa thì
+một PR xanh sẽ đọc như "đã kiểm resolution của chỉ số" trong khi nó chưa hỏi chỉ
+số nào.
+
+---
+
+## 9. Chạy lại
 
 ```bash
 tsx scripts/verify-technical-rules.ts
