@@ -590,6 +590,37 @@ model Website {
   wpUsername       String?
   wpAppPassword    String?
 
+  /**
+   * Shared secret proving a WordPress request came from Head Quarter itself.
+   *
+   * Sent as X-Atms-Loopback on every write. The publisher's must-use plugin
+   * compares it and only then re-enables Application Passwords, which
+   * WordPress disables on non-SSL connections.
+   *
+   * Why a secret rather than a network property. Three network-based scopes
+   * were tried and each rested on an assumption about the infrastructure:
+   *
+   *   REMOTE_ADDR === 127.0.0.1   never matches — the published port means the
+   *                               container sees the bridge gateway
+   *   absence of X-Forwarded-For  measured false 2026-09-10: mod_remoteip
+   *                               CONSUMES the header, so PHP never sees it and
+   *                               the filter matched every non-SSL request
+   *   REMOTE_ADDR in RFC1918      still rests on mod_remoteip, the very thing
+   *                               we had just proven we misunderstood
+   *
+   * A string comparison rests on nothing. Docker can renumber its subnet, the
+   * published port can change, a proxy can be added — none of it moves this.
+   *
+   * The threat model is unchanged: whatever can read this secret can already
+   * read /opt/pseo/.env on the same host. It is not an escalation path. What it
+   * buys is that everyone ELSE — including a public HTTP route someone adds
+   * later — is excluded without anyone having to remember why.
+   *
+   * Null means the publisher has no such plugin, and writes then fail with 401
+   * rather than succeeding through a wider door.
+   */
+  wpLoopbackSecret String?
+
   // Search Console property identity, e.g. "sc-domain:example.com" or
   // "https://example.com/" (URL-prefix form) — GSC requires the exact
   // registered format, see README once written.
