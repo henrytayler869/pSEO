@@ -51,6 +51,40 @@
 //
 // That failure mode is why this is written down rather than left to be
 // rediscovered: nothing about it looks like a failure while it is happening.
+//
+// AND MINTING IS NOT ENOUGH — WordPress refuses Application Passwords over
+// plain HTTP
+//
+// `wp_is_application_passwords_available()` returns false when `is_ssl()` is
+// false. HQ reaches WordPress at http://127.0.0.1:8090, so the loopback path —
+// the safest one — is exactly the path WordPress disables. Measured with a real
+// minted credential on 2026-09-10: posts?context=edit -> 401
+// rest_forbidden_context, users/me -> 401 rest_not_logged_in.
+//
+// A credential can therefore be SAVED and UNUSABLE, and those are two different
+// states. The measurement that tells them apart is context=edit returning 200
+// with content.raw rather than 400/401 — not "the column has a value".
+//
+// The fix belongs in a must-use plugin in the PUBLISHER's repo (mounted at
+// wp-content/mu-plugins), filtering wp_is_application_passwords_available.
+// NOT in WORDPRESS_CONFIG_EXTRA: wp-config.php runs before wp-settings.php, so
+// `add_filter` does not exist yet there.
+//
+// Two hypotheses that look right and are not, both measured false, both worth
+// naming so the next person does not spend a day on them:
+//
+//   1. "Apache strips the Authorization header." It does not — .htaccess line 4
+//      carries it into PHP and mod_rewrite is enabled.
+//   2. "Scope the filter to REMOTE_ADDR === 127.0.0.1." That never matches.
+//      The port is published as 127.0.0.1:8090:80, so the container sees the
+//      bridge gateway (measured: 172.19.0.1), and mod_remoteip — enabled in the
+//      image, trusting 172.16.0.0/12 — rewrites REMOTE_ADDR from
+//      X-Forwarded-For whenever that header is present.
+//
+// Hard-coding 172.19.0.1 fails silently too: Docker allocates it, and a
+// `compose down -v` or a renamed project can move the subnet. The property that
+// actually separates the two paths is whether nginx put an X-Forwarded-For on
+// the request, so that is what the filter should read.
 
 import fs from "node:fs";
 import { prisma } from "../lib/db/prisma";
