@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { validateGeneratedText } from "@/lib/ai/validate";
 import { listReservedTerms } from "@/lib/keywords/patterns";
 import type { FactSet } from "@/lib/ai/facts";
+import { measureVectors, type MeasuredVector } from "@/lib/content-rules/jsonld-rules";
 
 /**
  * The rules every published site must enforce identically, in a form a machine
@@ -51,6 +52,33 @@ export interface ContentRules {
     description: string;
     /** Verdicts produced by the live validator, not by hand. */
     vectors: ConformanceVector[];
+  };
+
+  /**
+   * Luật cho JSON-LD, và vector đã chấm bằng cách chạy vị ngữ thật.
+   *
+   * VÌ SAO CHÚNG ĐI KÈM VECTOR CÒN declaredRules THÌ KHÔNG
+   *
+   * Nguyên tắc ở `declaredRules` bên dưới: HQ công bố LUẬT NÀO TỒN TẠI, bên
+   * thực thi công bố BẰNG CHỨNG LUẬT ĐÓ CHẠY — vì HQ không được phép phát ra
+   * verdict cho một vị ngữ HQ không chạy được.
+   *
+   * Hai luật ở đây là ngoại lệ theo đúng cái lý do đó, chứ không phải bất chấp
+   * nó: HQ SỞ HỮU vị ngữ (lib/content-rules/jsonld-rules.ts) và chạy được
+   * chúng. Verdict dưới đây do `measureVectors()` sinh ra tại thời điểm gọi,
+   * y như `rounding.vectors` — không dòng nào trong file này được phép viết
+   * "accept" hay "reject" bằng tay.
+   *
+   * VÌ SAO HQ KIỂM ĐƯỢC MÀ LUẬT VĂN BẢN THÌ KHÔNG
+   *
+   * Luật nội dung phải chạy trong build của publisher vì chỉ build mới thấy
+   * văn bản trước khi nó lên sóng. JSON-LD thì nằm trong HTML công khai — HQ
+   * chỉ cần gọi HTTP, đúng mô hình `requiredPages`. Nên một publisher mới thừa
+   * hưởng phép kiểm này mà không phải cài gì.
+   */
+  jsonLd: {
+    description: string;
+    vectors: MeasuredVector[];
   };
 
   reservedTerms: { term: string; ownedBy: string }[];
@@ -133,7 +161,11 @@ export interface ContentRules {
   }[];
 }
 
-const RULES_VERSION = "5";
+// 6: thêm mục `jsonLd`. Trường mới, nên theo quy tắc ở §7 của
+// SITE_INTEGRATION_GUIDE.md consumer phải coi nó là optional trong một chu kỳ
+// deploy — đã có một ca thật: consumer cache response, build validate thân cũ,
+// lỗi hàng loạt trong khi API hoàn toàn bình thường.
+const RULES_VERSION = "6";
 
 /**
  * The trust pages. Measured absence on atmovingservices.com 2026-09-09: all
@@ -298,6 +330,12 @@ export async function buildContentRules(): Promise<ContentRules> {
       ],
     },
 
+    jsonLd: {
+      description:
+        "Chính sách displayed-only áp cho CẢ JSON-LD, không dừng ở ranh giới HTML. Một giá trị có phần thập phân công bố trong Dataset phải là giá trị trang đã in ra — được thêm số 0 ở cuối và dấu phân cách nghìn, không được bớt chữ số. Số nguyên nằm ngoài phạm vi luật vì đổi thang (nghìn/triệu/tỷ) không bịa ra chữ số nào. Và mọi PropertyValue phải khai measurementTechnique theo đúng một trong hai hình dạng: '<nguồn> (<cấp>-level)' cho số thô, '<phép tính> of <nguồn> across <N> <danh từ phạm vi>' cho số gộp.",
+      vectors: measureVectors(),
+    },
+
     reservedTerms: listReservedTerms(),
 
     metricResolutions: [...byMetric.entries()]
@@ -333,7 +371,8 @@ export async function buildContentRules(): Promise<ContentRules> {
       {
         id: "aggregate-must-declare-scope",
         rule: "Một con số gộp qua nhiều địa bàn phải in kèm, ngay cạnh nó: phép tính đã dùng, SỐ LƯỢNG geography góp vào, danh từ chỉ phạm vi, và nguồn — và phải vào cả measurementTechnique trong JSON-LD. Phải key theo đúng resolution của metric: cộng một metric cấp COUNTY theo từng ZIP nhân lên tới 13.07x (đo được, irs_migration_net_households). Phần 'số lượng geography' không phải trang trí — nó là thứ cho người đọc kiểm được phép cộng.",
-        enforcedBy: "phía site — HQ không sinh số gộp",
+        enforcedBy: "phía site cho nửa văn bản — HQ không sinh số gộp. Nửa JSON-LD: lib/content-rules/jsonld-rules.ts — checkAggregateTechnique.",
+        provenBy: "HQ tự chạy, nửa JSON-LD: scripts/verify-technical-rules.ts (2 accept / 4 reject, verdict đo) và scripts/audit-technical-seo.ts đọc site đang chạy. Đo trên atmovingservices 2026-09-10: 449/449 PropertyValue đạt. Nửa VĂN BẢN vẫn chưa có bằng chứng chạy — chỉ build của site mới thấy văn bản, nên đừng đọc mục này thành 'luật đã được chứng minh toàn phần'.",
       },
       {
         id: "cluster-no-zip-anchor",
@@ -356,6 +395,18 @@ export async function buildContentRules(): Promise<ContentRules> {
           paths: REQUIRED_PAGES.flatMap((p) => p.paths),
           why: "Luật này cấm hứa bảo hành, còn một trang điều khoản BẮT BUỘC phải từ chối bảo hành — và chính requiredPages ở trên đòi site có trang đó. Session QC Content đo được trên atmovingservices: tiêu đề 'No warranty' ở /terms bị tính là lạc nghề. Chạy luật ở đây là HQ tự mâu thuẫn: đòi một trang rồi phản đối nội dung bắt buộc của nó. Danh sách đường dẫn lấy thẳng từ REQUIRED_PAGES, không chép lại — chép là bản thứ hai sẽ trôi lệch khi ai đó thêm một trang bắt buộc mới.",
         },
+      },
+      {
+        id: "jsonld-value-displayed-only",
+        rule: "Một giá trị CÓ PHẦN THẬP PHÂN trong variableMeasured phải là giá trị trang đã in ra. Được thêm số 0 ở cuối và dấu phân cách nghìn; không được bớt chữ số. Số nguyên nằm ngoài phạm vi: trang in '$2.25 billion' cho 2249409000 là đổi thang, và đổi thang không bịa ra chữ số nào — bắt số nguyên xuất hiện nguyên dạng là đòi JSON-LD công bố dữ liệu KÉM chính xác hơn dữ liệu thật.",
+        enforcedBy: "lib/content-rules/jsonld-rules.ts — checkDisplayedOnlyValue. HQ kiểm được từ xa: scripts/audit-technical-seo.ts.",
+        provenBy: "HQ tự chạy: scripts/verify-technical-rules.ts (3 accept / 3 reject, verdict đo), và vector công bố ngay trong `jsonLd.vectors` ở endpoint này. Đo trên atmovingservices 2026-09-10: 353/449 PropertyValue đạt — 96 ca công bố chữ số không xuất hiện ở đâu trên trang.",
+      },
+      {
+        id: "jsonld-aggregate-declares-scope",
+        rule: "Mọi PropertyValue phải khai measurementTechnique theo đúng một trong hai hình dạng, không có hình thứ ba: '<nguồn> (<zip|county|state|metro|cbsa>-level)' cho số thô, hoặc '<phép tính> of <nguồn> across <N> <danh từ phạm vi>' cho số gộp. Từ vựng phép tính cố định. Đây là nửa JSON-LD của aggregate-must-declare-scope, tách ra thành luật riêng vì nó là nửa DUY NHẤT mà HQ kiểm được từ xa.",
+        enforcedBy: "lib/content-rules/jsonld-rules.ts — checkAggregateTechnique. HQ kiểm được từ xa: scripts/audit-technical-seo.ts.",
+        provenBy: "HQ tự chạy: scripts/verify-technical-rules.ts (2 accept / 4 reject, verdict đo). Đo trên atmovingservices 2026-09-10: 449/449 đạt. Một luật chỉ từng pass không phân biệt được với một luật không kiểm gì — nên đọc kèm bốn ca reject, chúng là thứ chứng minh vị ngữ còn từ chối được.",
       },
     ],
   };
