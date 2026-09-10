@@ -175,6 +175,15 @@ const ISSUE_CHECKS: Record<string, { label: string; severity: OnPageIssue["sever
   redirect_chain: { label: "Chuỗi redirect nhiều bước", severity: "warning" },
   canonical_another_page: { label: "Canonical trỏ sang trang khác", severity: "warning" },
   is_redirect: { label: "Trang là redirect", severity: "warning" },
+  // Chỉ MỘT key cho việc thiếu favicon. Trước 2026-09-10 có cả
+  // `no_favicon_check: info` bên cạnh, cùng một sự kiện dưới hai nhãn và hai
+  // mức. Trên một site thật sự không có favicon, hoặc UI hiện hai dòng cho một
+  // việc, hoặc một trong hai key KHÔNG BAO GIỜ nổ — và một nhánh không bao giờ
+  // nổ trông y hệt một nhánh đang canh gì đó.
+  //
+  // Bỏ key nghi ngờ thay vì đoán key nào có thật: nếu DataForSEO có trả
+  // `no_favicon_check`, nó rơi vào `unclassified` và HIỆN RA, đúng cách file
+  // này xử lý mọi thứ nó chưa nhận ra.
   no_favicon: { label: "Thiếu favicon", severity: "warning" },
   no_image_title: { label: "Ảnh thiếu thuộc tính title", severity: "warning" },
   irrelevant_title: { label: "Title không khớp nội dung", severity: "warning" },
@@ -191,7 +200,6 @@ const ISSUE_CHECKS: Record<string, { label: string; severity: OnPageIssue["sever
   deprecated_html_tags: { label: "Dùng thẻ HTML đã lỗi thời", severity: "warning" },
   lorem_ipsum: { label: "Còn văn bản giữ chỗ lorem ipsum", severity: "error" },
   is_http: { label: "Trang phục vụ qua HTTP, không phải HTTPS", severity: "error" },
-  no_favicon_check: { label: "Thiếu favicon", severity: "info" },
   meta_charset_consistency: { label: "Khai báo charset không nhất quán", severity: "warning" },
   frame: { label: "Dùng frame/iframe", severity: "info" },
   flash: { label: "Còn dùng Flash", severity: "error" },
@@ -206,6 +214,10 @@ const NEUTRAL_CHECKS = new Set([
   "links_internal",
   "seo_friendly_url",
   "has_html_doctype",
+  // `canonical` đếm số trang CÓ canonical — một phép đếm KHÔNG MẪU SỐ. Để
+  // trần ở đây thì trang thiếu canonical chỉ làm con số nhỏ đi và không gì so
+  // hai số, nên lỗi thật vô hình. Vẫn giữ trong danh sách trung tính vì bản
+  // thân nó không phải vấn đề — cái thiếu là phép TRỪ, làm ở dưới.
   "canonical",
   "has_meta_refresh_redirect",
   "https_to_http_links",
@@ -240,6 +252,28 @@ export async function fetchOnPageSummary(
     } else if (count > 0) {
       unclassified.push({ key, count });
     }
+  }
+
+  /**
+   * Trang thiếu canonical, dẫn xuất bằng phép trừ.
+   *
+   * DataForSEO không có check "no_canonical"; nó chỉ đếm trang CÓ. Một phép
+   * đếm không mẫu số không bao giờ trông sai, nên lỗi này rơi vào khoảng giữa:
+   * không phải issue nào cả, và cũng không phải thứ ai nhìn thấy.
+   *
+   * Đo được trên atmovingservices 2026-09-10: trang chủ không có thẻ canonical
+   * (kể cả khi gọi kèm ?utm_source=), trong khi 55 trang còn lại đều tự trỏ.
+   * Không mục nào trong danh sách issue nói điều đó.
+   */
+  const canonicalCount = typeof checks.canonical === "number" ? checks.canonical : null;
+  const crawled = Number(result.pages_crawled ?? 0);
+  if (canonicalCount !== null && crawled > 0 && canonicalCount < crawled) {
+    issues.push({
+      key: "no_canonical",
+      label: "Trang thiếu thẻ canonical",
+      severity: "warning",
+      count: crawled - canonicalCount,
+    });
   }
 
   const severityRank = { error: 0, warning: 1, info: 2 } as const;
