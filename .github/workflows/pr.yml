@@ -59,6 +59,20 @@ jobs:
       - name: Prisma client
         run: npx prisma generate
 
+      # Kiểu do Next SINH RA — RouteContext, LayoutProps, PageProps — không có
+      # sẵn sau `npm ci`. Chúng ra đời từ `next dev`, `next build` hoặc
+      # `next typegen` (docs của chính bản Next này: 01-app/01-getting-started/
+      # 03-layouts-and-pages.md). Workflow chính chạy `next build` TRƯỚC tsc,
+      # nên ở đó tsc luôn có chúng.
+      #
+      # Bước này thêm vào sau khi cổng PR đỏ ngay lần chạy đầu, ở đúng chỗ tôi
+      # bỏ `next build` đi: 5 lỗi TS2304 "Cannot find name 'RouteContext'". Code
+      # không sai — cổng thiếu điều kiện tiên quyết mà nó thừa hưởng từ bước nó
+      # vừa bỏ. `typegen` cho lại đúng phần đó mà không cần Postgres, không cần
+      # build.
+      - name: Kiểu do Next sinh ra
+        run: npx next typegen
+
       - name: Kiểu
         run: npx tsc --noEmit
 
