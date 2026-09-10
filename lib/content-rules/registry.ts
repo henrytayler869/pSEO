@@ -145,7 +145,7 @@ const RULES_VERSION = "5";
  * independently. The rest are what separates a site someone stands behind from
  * one that only exists to rank.
  */
-const REQUIRED_PAGES: { id: string; label: string; paths: string[]; why: string }[] = [
+export const REQUIRED_PAGES: { id: string; label: string; paths: string[]; why: string }[] = [
   {
     id: "privacy",
     label: "Chính sách quyền riêng tư",
