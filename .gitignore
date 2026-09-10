@@ -41,6 +41,15 @@ yarn-error.log*
 # other checkouts on this machine) — not shared repo state.
 .claude/settings.local.json
 
+# Cây làm việc của session khác, đặt bên trong repo này.
+#
+# Bốn session cùng sửa một hệ thống, và mỗi session có worktree riêng chính là
+# hàng rào ngăn `git add -A` của người này quét file đang dở của người kia. Nếu
+# thư mục chứa worktree KHÔNG được ignore thì hàng rào đó tự vô hiệu: một
+# `git add -A` sẽ commit nguyên cả cây làm việc của người khác — cùng lỗi đã
+# xảy ra 2026-09-10, chỉ lớn hơn.
+.claude/worktrees/
+
 # vercel
 .vercel
 

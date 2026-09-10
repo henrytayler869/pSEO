@@ -24,6 +24,22 @@ export interface Pattern {
    * never actionable. Warnings that are always on get skimmed, and skimming
    * is how the real one gets missed. */
   verticalSpecific: boolean;
+  /**
+   * True when a hit on RENDERED page text is a "someone should look", not a
+   * violation.
+   *
+   * The pattern is the same either way; what differs is who wrote the sentence.
+   * Model output is untrusted by construction — that is why a validator exists.
+   * Template text was written once by a person and reviewed once, so the same
+   * regex firing there is far likelier to be catching an intentional,
+   * transparent sentence than a fabrication.
+   *
+   * Published as a field instead of left to each scanner because the
+   * alternative is every scanner inventing its own threshold, and a scanner
+   * that reports 32 correct sentences as violations teaches its reader to skim
+   * — which is how the one real hit gets missed.
+   */
+  advisoryOnRendered?: boolean;
   /** Metric prefix a market must actually have for this pattern to have
    * anything to catch, or null when the pattern applies to any prose.
    *
@@ -168,6 +184,24 @@ export function patternsFor(vertical: string): Pattern[] {
       requiresMetricPrefix: "irs_migration",
       verticalSpecific: false,
       why: "Treo bất cứ thứ gì lên số di cư — số đó tả hộ khai thuế trên cả county, không kéo theo lời khuyên hay nhận định nào.",
+      // HIỆU CHỈNH CHO VĂN MODEL SINH. Đọc kết quả của nó trên văn TEMPLATE
+      // đã render là đọc sai bối cảnh.
+      //
+      // Session QC Content đo được: trên 192 trang render, mẫu này bắt 32 câu,
+      // phần lớn là câu GIẢI THÍCH PHƯƠNG PHÁP — "Household migration counts
+      // come from IRS county-level data, so ZIP codes sharing a county share
+      // those figures". Câu đó đúng, minh bạch, và là thứ hợp đồng này muốn
+      // site nói ra chứ không phải giấu đi.
+      //
+      // Khác biệt không nằm ở câu chữ mà ở NGƯỜI VIẾT: model có thể bịa một
+      // nhận định treo lên con số; template thì do người viết một lần và
+      // review một lần. Cùng một regex, hai độ tin cậy khác nhau.
+      //
+      // Nên: dùng trên generation (scan-generated-copy.ts) như một cổng. Dùng
+      // trên render thì đọc như một danh sách CẦN NGƯỜI XEM, không phải danh
+      // sách vi phạm. Trường `advisoryOnRendered` nói điều đó thành dữ liệu để
+      // scanner không phải tự đoán.
+      advisoryOnRendered: true,
       // Deliberately kept narrow to MIGRATION figures, matching what prompt
       // rule 9 actually forbids outright.
       //
