@@ -21,9 +21,36 @@
 //     [--service-account-file /path/to/key.json] \
 //     [--revalidate-secret-file /path/to/secret.txt]
 //
-// The two secret-bearing options take a FILE PATH, never a value. A secret
-// passed as an argument is visible in `ps` output to every user on the machine
-// and lands in the shell history of whoever ran it; a file path is neither.
+// The secret-bearing options take a FILE PATH, never a value. A secret passed
+// as an argument is visible in `ps` output to every user on the machine and
+// lands in the shell history of whoever ran it; a file path is neither.
+//
+// WHERE --wp-app-password-file COMES FROM
+//
+// Not from someone opening wp-admin. The provisioning side mints it, writes it
+// to a file, and passes the path here — so a new publisher arrives with write
+// access already working and nobody types a password anywhere.
+//
+// Measured on the VPS 2026-09-10 by the session that administers it:
+//
+//   `wp` is NOT in the wordpress:6-php8.3-apache image (command -v wp -> empty),
+//   so `docker exec atms-wp wp ...` does not work. The compose file already
+//   carries a `wpcli` service (image wordpress:cli, profiles: ["cli"]), and
+//   that one has WP-CLI 2.12.0 and reads the real WordPress.
+//
+//   docker compose --profile cli run --rm -T wpcli \
+//     user application-password create admin "Head Quarter" --porcelain \
+//     < /dev/null > /run/secrets/wp-app-pw
+//
+// THE `< /dev/null` IS LOAD-BEARING. `docker compose run` reads stdin even
+// with -T, so the first wpcli command in a heredoc or an ssh here-doc swallows
+// the REST OF THE SCRIPT. The commands after it vanish with no error and no
+// bad exit code — the VPS session hit exactly this: four probe lines, only the
+// first printed, three silently gone. Adding `< /dev/null` to every wpcli call
+// fixed it.
+//
+// That failure mode is why this is written down rather than left to be
+// rediscovered: nothing about it looks like a failure while it is happening.
 
 import fs from "node:fs";
 import { prisma } from "../lib/db/prisma";
