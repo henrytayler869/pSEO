@@ -12,7 +12,7 @@ export interface FieldContract {
    * It cannot lie the way `label` can, because nothing produces it except
    * running the thing it describes.
    */
-  hash: string;
+  hash: string | null;
   /** What the hash was computed over, so a consumer can see the shape of the
    * thing being watched rather than trusting an opaque string. */
   coversWhat: string;
@@ -48,6 +48,26 @@ export type FieldContracts = Record<string, FieldContract>;
 
 function digest(parts: unknown): string {
   return createHash("sha256").update(JSON.stringify(parts)).digest("hex").slice(0, 16);
+}
+
+/**
+ * Hash of a VOCABULARY read from the database, or null when there is none.
+ *
+ * null, not `digest([])`. An empty database has no vocabulary to commit to,
+ * and hashing the empty list produces a stable-looking string that means
+ * nothing — and, worse, the SAME string for every empty field, so `unit`,
+ * `sourceName` and `resolvedAtResolution` would all publish one identical
+ * hash and a consumer watching one of them would be watching all three.
+ *
+ * Found by the sensitivity check on the PR gate, which runs against an empty
+ * Postgres: it reported "trùng băm" for exactly those three. The check was
+ * right and the contract was wrong.
+ *
+ * null says the honest thing — "HQ has nothing to promise about this field
+ * yet" — and it is distinguishable from a hash, which `digest([])` is not.
+ */
+function vocabularyDigest(parts: unknown[]): string | null {
+  return parts.length === 0 ? null : digest(parts);
 }
 
 /**
@@ -114,7 +134,7 @@ export async function buildFieldContracts(): Promise<FieldContracts> {
     },
     unit: {
       label: "machine unit string, e.g. \"households/yr\"",
-      hash: digest(units.map((u) => u.unit).sort()),
+      hash: vocabularyDigest(units.map((u) => u.unit).sort()),
       coversWhat: `tập ${units.length} chuỗi đơn vị đang tồn tại`,
     },
     sourceName: {
@@ -123,12 +143,12 @@ export async function buildFieldContracts(): Promise<FieldContracts> {
       // change silently: a wrong number can be checked against the source, a
       // wrong SOURCE NAME leaves nothing to check against. It goes into a
       // credit line on every page and into measurementTechnique in JSON-LD.
-      hash: digest(sources.map((s) => [s.adapterKey, s.name])),
+      hash: vocabularyDigest(sources.map((s) => [s.adapterKey, s.name])),
       coversWhat: `ánh xạ adapterKey -> name của ${sources.length} nguồn`,
     },
     resolvedAtResolution: {
       label: "geography a metric is actually measured at (ZIP / COUNTY / STATE)",
-      hash: digest(resolutions.map((r) => [r.metric, r.resolvedAtResolution])),
+      hash: vocabularyDigest(resolutions.map((r) => [r.metric, r.resolvedAtResolution])),
       coversWhat: `ánh xạ metric -> resolution của ${resolutions.length} cặp`,
     },
   };
@@ -214,7 +234,11 @@ export function proveFieldContractSensitivity(actual: FieldContracts): Sensitivi
   // Every field must have a distinct hash. Two fields sharing one means both
   // are hashed over the same thing, and one of them is watching the wrong
   // value while reading as if it watches its own.
-  const hashes = Object.entries(actual).map(([f, c]) => [f, c.hash] as const);
+  // null bỏ qua ở đây: nhiều trường cùng null KHÔNG phải trùng băm, mà là
+  // nhiều trường cùng chưa có gì để hứa.
+  const hashes = Object.entries(actual)
+    .map(([f, c]) => [f, c.hash] as const)
+    .filter((e): e is readonly [string, string] => e[1] !== null);
   const seen = new Map<string, string>();
   for (const [field, h] of hashes) {
     const prev = seen.get(h);
