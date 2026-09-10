@@ -29,7 +29,7 @@ viết cho máy đọc, và là bề mặt duy nhất không luật nào của d
 | Canonical | thiếu ở **trang chủ**; `/?utm_source=…` trả 200 cũng không có canonical. 55 trang còn lại đều tự trỏ chính mình | lỗi |
 | Trang index được mà không có trong sitemap | `/blog/hello-world`, `/moving-services/dc` (+ `/moving-services/ks`, tìm tay) | cảnh báo |
 | Hub bang không được index `/moving-services` link tới | `dc`, `ks` — 24/26 bang có hub trong danh sách | cảnh báo |
-| `lastmod` | **188/192 URL dùng chung một giá trị** `2026-09-07T12:46:37.067Z`; 4 URL không có | cảnh báo |
+| `lastmod` | **190/194 URL dùng chung một giá trị** `2026-09-07T12:46:37.067Z`; 4 URL không có. KHÔNG phải giờ build — xem §3.4, chỗ này tôi kết luận sai một lần | cảnh báo |
 | Dataset thiếu `license` / `temporalCoverage` | 68 ca (mọi Dataset đo được) | cảnh báo |
 | Favicon | không có `<link rel="icon">`, `/favicon.ico` → 404 | cảnh báo |
 | JSON-LD vắng mặt | `/blog` không có khối nào; bài blog không có `Article`/`BlogPosting` | cảnh báo |
@@ -93,13 +93,36 @@ GSC — gồm cả những trang này. Đúng cái bẫy mà file đó được 
 trước mẫu số sai vì đếm post WordPress; lần này mẫu số thiếu vì sitemap không
 phủ hết trang index được.
 
-### 3.4 `lastmod` là dấu thời gian build
+### 3.4 `lastmod` dùng chung một mốc cho mọi trang
 
-188/192 URL khai **cùng một** `lastmod`. Đó là lúc build, không phải lúc trang
-đổi nội dung. Google nói rõ sẽ bỏ qua `lastmod` khi thấy nó không đáng tin, và
-bỏ theo cả site — kể cả những trang khai đúng. 4 trang tin cậy (`/about`,
-`/contact`, `/privacy`, `/terms`) thì không có `lastmod` nào, tức có hai đường
-sinh sitemap khác nhau.
+**Đính chính, và cách nó được đính chính đáng đọc hơn kết luận.**
+
+Bản đầu của tài liệu này viết "`lastmod` là dấu thời gian build". Sai. Session
+Pubsite lấy ra ba mốc mà tôi chưa từng đặt cạnh nhau:
+
+```
+190 giá trị lastmod, một giá trị duy nhất:  2026-09-07T12:46:37.067Z
+manifest.generatedAt:                       2026-09-07T12:46:37.067Z
+build đang chạy lúc đó:                     2026-09-10T09:26:27Z
+```
+
+Nó là mốc **nội dung**, không phải giờ build — đúng thiết kế, và `app/sitemap.ts`
+nói rõ vì sao không dùng `new Date()`: dưới Cache Components đó là dữ liệu
+lúc-request, sẽ làm cả sitemap thành động.
+
+Tôi suy ra "giờ build" từ mỗi việc *mọi giá trị giống nhau*, và không đo. Đó
+đúng loại kết luận không kèm phép đo mà tài liệu này đi bắt ở chỗ khác. Ghi lại
+thay vì sửa lặng lẽ, vì phần đáng học không phải con số mà là: **một quan sát
+đúng (mọi giá trị giống nhau) cộng một suy luận chưa kiểm (nên nó là giờ build)
+đọc y hệt một phát hiện.**
+
+**Phần còn đúng, hẹp hơn nhiều:** cả 190 trang dùng chung một mốc, nên nội dung
+một trang đổi thì `lastmod` của chính nó không nhúc nhích. Thô, không sai —
+khác hẳn "là giờ build" vốn sẽ là sai. Crawler dùng `lastmod` để chọn ghé lại
+trang nào, nên một dấu thời gian per-market trong manifest là thứ đáng có.
+
+4 trang tin cậy (`/about`, `/contact`, `/privacy`, `/terms`) vẫn không có
+`lastmod` nào.
 
 ### 3.5 Dataset thiếu hai trường quyết định giá trị của nó
 
@@ -221,7 +244,7 @@ endpoint hợp đồng sẽ tạo thêm luật khai báo không bằng chứng.
 |---|---|---|
 | 1 | Canonical tự trỏ trên **mọi** trang, kể cả trang chủ, kể cả khi có query string | thiếu ở trang chủ |
 | 2 | Xoá hoặc `noindex` nội dung giữ chỗ của CMS trước khi mở index | `/blog/hello-world` đang sống |
-| 3 | `lastmod` là ngày trang đổi nội dung, không phải giờ build | 188/192 dùng chung một giá trị |
+| 3 | `lastmod` riêng cho từng trang, để một trang đổi thì mốc của chính nó đổi | 190/194 dùng chung một mốc nội dung (KHÔNG phải giờ build — §3.4) |
 | 4 | Mọi trang trong danh sách phân cấp phải được trang cha link tới | 24/26 hub bang |
 | 5 | `Article`/`BlogPosting` cho bài viết; `Organization` có `logo`, `sameAs`, `contactPoint` | thiếu toàn bộ |
 | 6 | `Dataset` có `license` + `temporalCoverage` | thiếu ở mọi Dataset |
