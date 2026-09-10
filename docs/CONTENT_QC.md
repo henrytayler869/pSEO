@@ -135,6 +135,60 @@ Hai bài học, và cái thứ hai đắt hơn:
 
 ---
 
+## B2. Trang cụm — và câu trả lời cho `aggregate-must-declare-scope`
+
+QC riêng **31/31 trang cụm** (crawl tươi, không dùng lại corpus). Đây là loại
+trang duy nhất gộp dữ liệu qua nhiều địa bàn, tức nơi luật
+`aggregate-must-declare-scope` thật sự có bề mặt — và luật đó là một trong ba
+luật HQ chưa có `provenBy`.
+
+**Phần "gộp" của luật: KHÔNG bị vi phạm, vì site cố ý không gộp.** Trang cụm
+tách riêng từng county thay vì cộng lại — H2 đổi thành "Migration, county by
+county" đúng trên 5 trang đa-county, mỗi county ghi rõ bao nhiêu ZIP thuộc về nó
+("Harris County — 7 of these ZIP codes"), phép tính dẫn xuất in kèm ngay cạnh
+("Calculated: Income arriving with inbound households ÷ Moved in over the year"),
+và trang nói thẳng *"No substitute or county average is shown in its place."*
+Cộng một metric COUNTY theo từng ZIP nhân lên tới 13.07x; site này không làm phép
+cộng đó ở đâu cả.
+
+**Nhưng có một con số dẫn xuất khác, và nó khai sai phạm vi.** Trang cụm in tỷ số
+max/min qua các ZIP: *"a 1.77 × spread across one county"*. Tỷ số đúng. Mệnh đề
+phạm vi thì sai — trang Houston tự khai ở đoạn mở đầu rằng nó trải **ba** county,
+rồi năm dòng dưới nói con số ấy trải "one county".
+
+Đo được: **4 trang, 18 câu** (`tx/houston` 3 county / 5 câu, `ca/lancaster`,
+`nc/charlotte`, `va/virginia-beach` 2 county). `ga/cumming` cũng 2 county nhưng
+không in dòng spread nào nên không dính.
+
+Đây không phải lỗi chính tả. Mệnh đề phạm vi là thứ **duy nhất** cho người đọc
+kiểm được con số: "1.77× across one county" mời hiểu rằng chênh lệch ấy tồn tại
+bên trong một thị trường; "across three counties" nói một điều khác hẳn — rằng nó
+tồn tại giữa ba thị trường bị gộp vào một trang. Cùng một con số, hai kết luận
+trái ngược, và phần quyết định kết luận là phần bị in sai.
+
+Và nó là bug cục bộ chứ không phải thiếu sót thiết kế: logic đa-county ĐÃ tồn tại
+(H2 đổi, câu "They span N counties" đổi) — chỉ riêng chuỗi "across one county" bị
+bỏ sót.
+
+**Luật đề xuất: `cluster-scope-count-mismatch`** — HQ kiểm từ xa mà không cần dữ
+liệu nào bên ngoài, vì **trang tự mâu thuẫn với chính nó**. Nó khai số county ở
+một chỗ và phủ nhận ở chỗ khác; không phép đo nào ngoài trang tham gia vào kết
+luận. Vị ngữ ở `findScopeCountMismatches()`. 5 vector, 2 reject / 3 accept — ba ca
+đầu nguyên văn từ site, **hai ca cuối đánh dấu DỰNG** vì hình dạng đúng (cụm đa
+county khai đúng số) chưa tồn tại trên site, và nếu không dựng thì hai nhánh thu
+hẹp của luật không ca nào ép chạy tới.
+
+Hai phát hiện phụ trên cùng 31 trang:
+
+- **`rendered-supply-side-bridge` không bắt gì trên trang cụm.** Cả 9 template vi
+  phạm đều nằm trên trang ZIP. Một con số zero có nghĩa ở đây, vì luật có bề mặt:
+  trang cụm cũng đầy figure và cũng có connector.
+- **0/31 trang cụm có `Dataset` hoặc `FAQPage`**, trong khi 127/127 trang ZIP có
+  cả hai. JSON-LD của chúng chỉ có `Organization, WebSite, WebPage,
+  BreadcrumbList`. Thuộc vế publisher, ghi ở mục C.
+
+---
+
 ## C. Thuộc checklist publisher, KHÔNG phải hợp đồng HQ
 
 HQ giữ hợp đồng (luật phải giống nhau ở mọi publisher). Ba mục dưới đây là
@@ -158,6 +212,11 @@ trang cụm, và không ai nói gì về việc LINK tới một ZIP đã bị g
 *"Welcome to WordPress. This is your first post. Edit or delete it, then start
 writing!"*. `/blog` chỉ có 40 từ và không có JSON-LD, trong khi mọi trang khác
 đều có. Bài này KHÔNG nằm trong sitemap nhưng được link từ `/blog`.
+
+**C0. Trang cụm thiếu `Dataset` và `FAQPage`.** 0/31, trong khi 127/127 trang ZIP
+có cả hai. Có thể là chủ ý (một trang gộp 23 ZIP không mô tả gọn thành một
+dataset), nhưng nếu vậy thì đó là một quyết định chưa được ghi ở đâu — và
+`audit-technical-seo.ts` có nhánh `dataset-required` sẽ đọc nó như thiếu sót.
 
 **C3. Telemetry SEO in cho người đọc.** `seo_leak` (pattern đã có sẵn của HQ)
 bắt **18 template / 287 câu / 159 trang** khi chạy trên HTML render. Đáng lo
