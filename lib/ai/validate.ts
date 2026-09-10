@@ -296,6 +296,8 @@ function checkUnitWords(text: string, facts: Fact[]): ValidationIssue[] {
     // amount of reading them said so.
     if (matching.length === 0) continue;
 
+    const units = new Set(matching.map((f) => f.unit));
+
     // Genuinely ambiguous — say nothing. A number matching facts with two
     // different units could be either, and choosing would be a guess wearing
     // the costume of a check.
