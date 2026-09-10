@@ -165,7 +165,7 @@ export interface ContentRules {
 // SITE_INTEGRATION_GUIDE.md consumer phải coi nó là optional trong một chu kỳ
 // deploy — đã có một ca thật: consumer cache response, build validate thân cũ,
 // lỗi hàng loạt trong khi API hoàn toàn bình thường.
-const RULES_VERSION = "6";
+const RULES_VERSION = "7";
 
 /**
  * The trust pages. Measured absence on atmovingservices.com 2026-09-09: all
@@ -407,6 +407,40 @@ export async function buildContentRules(): Promise<ContentRules> {
         rule: "Mọi PropertyValue phải khai measurementTechnique theo đúng một trong hai hình dạng, không có hình thứ ba: '<nguồn> (<zip|county|state|metro|cbsa>-level)' cho số thô, hoặc '<phép tính> of <nguồn> across <N> <danh từ phạm vi>' cho số gộp. Từ vựng phép tính cố định. Đây là nửa JSON-LD của aggregate-must-declare-scope, tách ra thành luật riêng vì nó là nửa DUY NHẤT mà HQ kiểm được từ xa.",
         enforcedBy: "lib/content-rules/jsonld-rules.ts — checkAggregateTechnique. HQ kiểm được từ xa: scripts/audit-technical-seo.ts.",
         provenBy: "HQ tự chạy: scripts/verify-technical-rules.ts (2 accept / 4 reject, verdict đo). Đo trên atmovingservices 2026-09-10: 449/449 đạt. Một luật chỉ từng pass không phân biệt được với một luật không kiểm gì — nên đọc kèm bốn ca reject, chúng là thứ chứng minh vị ngữ còn từ chối được.",
+      },
+      /**
+       * Hai luật cho HTML ĐÃ RENDER, nối vào hợp đồng 2026-09-10.
+       *
+       * Chúng tồn tại vì `no-supply-side-bridge` soi nhầm đối tượng: nó sống
+       * trong prompt, nên chỉ ràng buộc được chuỗi model trả về. Session QC
+       * Content đo được 368 câu vi phạm trên site đang chạy, và KHÔNG câu nào
+       * đi qua model — tất cả là văn template, thứ validateGeneratedText()
+       * không bao giờ nhìn thấy.
+       *
+       * Nên đây không phải provenBy cho luật cũ mà là luật RIÊNG: cùng hình
+       * dạng vi phạm, khác đối tượng soi. Một luật soi chuỗi trước khi render
+       * và một luật soi trang sau khi render là hai phép kiểm khác nhau, và
+       * gộp chúng lại sẽ để lại đúng khoảng trống vừa được tìm ra.
+       */
+      {
+        id: "rendered-supply-side-bridge",
+        rule: "Trên HTML đã render: không được nối một đại lượng đo với một khẳng định về phía cung (công ty ở đây làm loại việc gì, bận ra sao, tính giá thế nào) qua connector kiểu so/which means/—. Không nguồn nào trong dataset đo phía cung. Câu chứa lời khuyên hướng người đọc được miễn trừ, vì đó là lối thoát mà luật văn bản đã cho phép.",
+        enforcedBy: "lib/content-rules/rendered-rules.ts — isSupplySideBridge",
+        provenBy: "HQ tự chạy: runVectors() — 10 vector, 5 accept / 5 reject, verdict đo. Ép nhánh chạy thật qua proveSupplyBridgeBranches(): vô hiệu ANTECEDENT làm 1 vector đổi kết quả, vô hiệu READER_ADVICE làm 1 vector đổi. Mọi câu vector là NGUYÊN VĂN từ atmovingservices, không câu nào viết ra để test. Đo trên site: 368 câu vi phạm, 9 template, không câu nào đi qua model.",
+        notAppliedTo: {
+          paths: [],
+          why: "Chưa có ngoại lệ. GIỚI HẠN ĐÃ BIẾT và chưa gỡ được: mới chứng minh cho moving-services. SUPPLY_ASSERTION dùng danh từ công việc chung nên nhiều khả năng chuyển được sang ngành khác, nhưng chưa có trang publish nào của ngành thứ hai để đo — nên ĐỪNG đọc luật này là đã chứng minh cho 13 nghề.",
+        },
+      },
+      {
+        id: "cluster-scope-count-mismatch",
+        rule: "Trên trang cụm: mệnh đề phạm vi đi kèm một con số dẫn xuất phải khớp số county mà chính trang đó tự khai. Trang Houston khai trải BA county ở đoạn mở đầu rồi năm dòng dưới nói tỷ số spread trải 'one county' — cùng con số, hai kết luận trái ngược, và phần quyết định kết luận là phần bị in sai.",
+        enforcedBy: "lib/content-rules/rendered-rules.ts — findScopeCountMismatches",
+        provenBy: "HQ tự chạy: runScopeVectors() — 5 vector, 3 accept / 2 reject, verdict đo. Ép nhánh qua proveScopeBranches(): ép câu tự khai luôn khớp làm 3 vector đổi, đọc lệch 'one' làm 1 vector đổi. Đo trên site: 4 trang, 18 câu. HQ kiểm từ xa được vì trang TỰ MÂU THUẪN với chính nó — không cần dữ liệu nào bên ngoài.",
+        notAppliedTo: {
+          paths: [],
+          why: "Chưa có ngoại lệ. Ghi chú về vector: 2 trong 5 ca do QC Content DỰNG chứ không nguyên văn, vì hình dạng đúng (cụm đa county khai đúng số) chưa tồn tại trên site nào, và không dựng thì hai nhánh thu hẹp không ca nào ép chạy tới. Đọc hai ca đó khác với ba ca nguyên văn.",
+        },
       },
     ],
   };
