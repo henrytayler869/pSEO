@@ -15,7 +15,7 @@
 
 import { prisma } from "../lib/db/prisma";
 import { buildFactSet, type FactSet } from "../lib/ai/facts";
-import { validateGeneratedText } from "../lib/ai/validate";
+import { validateGeneratedText, VALIDATOR_RULES } from "../lib/ai/validate";
 
 /** Every rule validateGeneratedText can raise.
  *
@@ -27,7 +27,11 @@ import { validateGeneratedText } from "../lib/ai/validate";
  *
  * The site session found five of its thirteen rules in exactly that state
  * while reporting a green suite. Same trap, one table over. */
-const RULES = ["unsupported_number", "scope_overclaim", "worded_proportion", "invented_place_name", "wrong_unit"];
+// Đọc từ CHÍNH danh sách validator dùng, không giữ bản song song. Bản song
+// song là thứ đã suýt để wrong_unit đi qua mà không ai chứng minh nó kêu
+// được: suite in "cả 4 luật đều có ca nổ", câu đó ĐÚNG, và nó không nói gì
+// về luật thứ năm.
+const RULES: readonly string[] = VALIDATOR_RULES;
 
 interface Case {
   name: string;

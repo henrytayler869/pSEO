@@ -1,7 +1,32 @@
 import type { FactSet, Fact } from "./facts";
 
+/**
+ * Every rule this validator can emit — the ONE list.
+ *
+ * Not a convenience. The coverage assertion in the test suite used to keep its
+ * own parallel copy, and when wrong_unit was added the suite printed "cả 4
+ * luật đều có ca làm nó kêu" and stayed green. That sentence was TRUE: those
+ * four rules did each have a firing case. It simply said nothing about the
+ * fifth. A false claim can be contradicted; a true claim that does not cover
+ * the new thing offers nothing to contradict.
+ *
+ * With `rule` typed against this union, a new rule cannot be emitted until it
+ * is registered here, and the suite reads the same list — so it cannot be
+ * proven-by-omission again. The list and the check can no longer disagree,
+ * because there is only one of them.
+ */
+export const VALIDATOR_RULES = [
+  "unsupported_number",
+  "wrong_unit",
+  "scope_overclaim",
+  "worded_proportion",
+  "invented_place_name",
+] as const;
+
+export type ValidatorRule = (typeof VALIDATOR_RULES)[number];
+
 export interface ValidationIssue {
-  rule: string;
+  rule: ValidatorRule;
   detail: string;
 }
 
