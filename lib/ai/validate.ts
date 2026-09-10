@@ -282,7 +282,20 @@ function checkUnitWords(text: string, facts: Fact[]): ValidationIssue[] {
     if (!allowedUnits) continue;
 
     const matching = facts.filter((f) => matchesFact(written, [f]) !== null);
-    if (matching.length === 0) continue; // rule 1 owns this
+
+    // Rule 1 owns a number that matches nothing — reporting it here too would
+    // make one problem look like two. It is also the guard for matching[0]
+    // below, which is not obvious from the line and is the reason it says so:
+    // deleting it does not produce a duplicate report, it throws.
+    //
+    // Both facts measured by mutation (2026-09-10). Removing this line: the
+    // suite dies with TypeError at the matching[0] read. Removing the ambiguity
+    // line below: the "4,242 under two units" case flips from pass to fail.
+    // Before the two cases named in test-ai-validator.ts existed, removing
+    // EITHER line left the suite green — the branches were unreached, and no
+    // amount of reading them said so.
+    if (matching.length === 0) continue;
+
     const units = new Set(matching.map((f) => f.unit));
     if (units.size > 1) continue; // genuinely ambiguous — say nothing
 

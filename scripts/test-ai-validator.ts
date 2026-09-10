@@ -41,6 +41,20 @@ interface Case {
    * a missing county name), so those cases validate against that market's
    * real FactSet instead of the default one. */
   zipOverride?: string;
+  /** Replaces the fact set entirely. For branches that real data does not
+   * happen to produce — a value appearing under two different units, say —
+   * where waiting for the collector to deliver one would mean the branch is
+   * never exercised at all. */
+  factsOverride?: (f: FactSet) => FactSet;
+  /**
+   * Khẳng định trên DANH SÁCH LUẬT phát ra, không chỉ trên đạt/chặn.
+   *
+   * Cần cho những nhánh mà kết quả đạt/chặn không phân biệt được. Một con số
+   * không khớp fact nào bị chặn dù có hay không nhánh "nhường luật 1" — cái
+   * đổi là nó bị báo dưới MỘT tên hay HAI, và một vấn đề trông như hai vấn đề
+   * là chính thứ nhánh đó tồn tại để tránh.
+   */
+  expectRules?: string[];
 }
 
 const CASES: Case[] = [
@@ -104,6 +118,47 @@ const CASES: Case[] = [
       return `Last year ${fact.value.toLocaleString()} people moving from elsewhere settled here.`;
     },
     shouldPass: true,
+  },
+  {
+    /**
+     * Ca cho NHÁNH IM, không phải cho kết quả im.
+     *
+     * Dựng riêng để chỉ có nhánh "nhiều fact, khác đơn vị" mới cho ra chấp
+     * nhận: con số khớp CẢ HAI fact, và một trong hai đo bằng people/yr — nên
+     * nếu bỏ nhánh im đi, luật sẽ gắn cờ. Đó là điều kiện kiểm chứng được,
+     * khác với một ca chỉ tình cờ không chạm tới luật.
+     *
+     * Session MovingServices gặp đúng chỗ này và tệ hơn một bậc: nhánh của họ
+     * có ca test và VẪN không thể fail khi được ép. Nên ca này được kiểm bằng
+     * đột biến (xem ghi chú trong commit), không chỉ bằng việc nó xanh.
+     */
+    name: "wrong_unit: con số khớp hai fact khác đơn vị -> IM, vì chọn bên nào cũng là đoán",
+    text: () => "Last year 4,242 households arrived from elsewhere.",
+    factsOverride: (f: FactSet): FactSet => ({
+      ...f,
+      facts: [
+        { key: "a_people", label: "people who moved in", value: 4242, display: "4,242 people", unit: "people/yr", scope: "ZIP", scopeName: null },
+        { key: "b_households", label: "households that moved in", value: 4242, display: "4,242 households", unit: "households/yr", scope: "ZIP", scopeName: null },
+      ],
+    }),
+    shouldPass: true,
+  },
+  {
+    /**
+     * Ca cho nhánh "chưa khớp fact nào thì im".
+     *
+     * Tìm ra bằng đột biến: bỏ nhánh đó đi mà suite vẫn 25/25 xanh — nghĩa là
+     * trước ca này, nhánh chưa từng được chạy qua. Đúng thứ session
+     * MovingServices vừa gặp và cảnh báo: một ca test tồn tại không chứng minh
+     * nhánh được chạm tới.
+     *
+     * Khẳng định trên danh sách luật vì đạt/chặn không phân biệt được: con số
+     * bịa bị chặn ở cả hai phía. Cái đổi là nó bị báo dưới một tên hay hai.
+     */
+    name: "wrong_unit: số KHÔNG khớp fact nào -> chỉ unsupported_number, KHÔNG báo kèm wrong_unit",
+    text: () => "Last year 9,999 households arrived from elsewhere.",
+    shouldPass: false,
+    expectRules: ["unsupported_number"],
   },
   {
     name: "county figure with the county named",
@@ -214,21 +269,28 @@ async function main() {
   const failures: string[] = [];
   const rulesTriggered = new Set<string>();
   for (const c of CASES) {
-    const fs = c.zipOverride ? await buildFactSet(vertical, c.zipOverride) : factSet;
-    if (!fs) {
+    const base = c.zipOverride ? await buildFactSet(vertical, c.zipOverride) : factSet;
+    if (!base) {
       console.log(`— bỏ qua "${c.name}": không dựng được FactSet cho ${c.zipOverride}`);
       continue;
     }
+    const fs = c.factsOverride ? c.factsOverride(base) : base;
     const text = c.text(fs);
     const result = validateGeneratedText(text, fs);
     for (const i of result.issues) rulesTriggered.add(i.rule);
-    const ok = result.passed === c.shouldPass;
+    const rulesOk =
+      c.expectRules === undefined ||
+      JSON.stringify([...new Set(result.issues.map((i) => i.rule))].sort()) === JSON.stringify([...c.expectRules].sort());
+    const ok = result.passed === c.shouldPass && rulesOk;
     if (ok) passed++;
     else failures.push(c.name);
     console.log(`${ok ? "✓" : "✗"} ${c.name}`);
     if (!ok) {
       console.log(`    text : ${text}`);
       console.log(`    được : ${result.passed ? "ĐẠT" : "CHẶN"}, kỳ vọng ${c.shouldPass ? "ĐẠT" : "CHẶN"}`);
+      if (c.expectRules) {
+        console.log(`    luật : [${[...new Set(result.issues.map((i) => i.rule))].join(", ")}], kỳ vọng [${c.expectRules.join(", ")}]`);
+      }
       for (const i of result.issues) console.log(`    [${i.rule}] ${i.detail}`);
     }
   }
