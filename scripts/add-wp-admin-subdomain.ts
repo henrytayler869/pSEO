@@ -138,6 +138,17 @@ async function main() {
     return;
   }
 
+  // Nếu bước dưới trả 403 (Cloudflare code 10000) ngay sau khi bạn vừa sửa
+  // quyền token: ĐỢI, đừng đổi token.
+  //
+  // Đo 2026-09-10: sau khi thêm Zone→DNS→Edit, /dns_records trả 403 bốn lần
+  // liên tiếp trong 45 giây rồi tự OK. Cửa sổ 45 giây đủ để kết luận "không
+  // phải độ trễ lan quyền" một cách tự tin và sai, và kết luận đó dẫn thẳng
+  // tới việc đi đổi sang một token khác vốn không cần đổi.
+  //
+  // Dấu hiệu phân biệt: 403 kèm zones:read vẫn OK nghĩa là token hợp lệ,
+  // chỉ là phạm vi chưa tới. 401 mới là token sai.
+
   const zone = await findCloudflareZoneByName(zoneName, apiToken);
   if (!zone) {
     console.error(`Không tìm thấy zone "${zoneName}" trong tài khoản Cloudflare này.`);
