@@ -122,6 +122,24 @@ function wpConfigExtra(host: string, port: string, publicUrl: string): string {
         // /wp-content/uploads/ (xem mục 3b), nếu không ảnh vẫn 404 — chỉ là
         // 404 ở đúng tên miền.
         //
+        // ĐÁNH ĐỔI ĐÃ BIẾT, không phải chỗ tối: WP_HOME là GỐC domain, nên
+        // WordPress quảng cáo permalink ở gốc. Nếu publisher đặt blog dưới một
+        // đường con (atmovingservices để ở /blog/), permalink WordPress sinh ra
+        // sẽ 404 trên site thật.
+        //
+        // Chấp nhận được ở đây vì đã đo: publisher dựng đường từ post.slug,
+        // sitemap và trang index cũng vậy; không nơi nào đọc "link". Giá trị
+        // sai đó không ai tiêu thụ.
+        //
+        // Phương án đặt WP_HOME kèm hậu tố đường con thì TỆ HƠN: nó đẩy uploads
+        // sang <đường con>/wp-content/, chỗ mà location ở mục 3b không khớp —
+        // gãy đúng thứ thay đổi này sinh ra để sửa.
+        //
+        // Nếu publisher sau này CÓ đọc "link", hoặc blog phải ở đường con và
+        // permalink phải đúng, thì làm cả hai cùng lúc: WP_HOME kèm đường con,
+        // VÀ một location thứ hai cho <đường con>/wp-content/uploads/ với
+        // proxy_pass có đường dẫn để cắt tiền tố. Đừng làm nửa vế.
+        //
         // HAI DẤU ĐÔ-LA ở hai dòng dưới, và đó không phải lỗi đánh máy.
         //
         // Khối này là giá trị trong một file YAML của Docker Compose, mà
