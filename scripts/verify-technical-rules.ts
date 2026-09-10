@@ -20,6 +20,26 @@ import { measureVectors, checkAggregateTechnique, checkDisplayedOnlyValue } from
  * Nhận diện bằng LÝ DO chứ không bằng số dòng: lý do là thứ vị ngữ hứa với
  * người đọc, nên nếu một nhánh đổi lý do thì phép kiểm này phải đổ — nó vừa
  * kiểm nhánh có chạy, vừa kiểm nhánh còn nói đúng điều nó nói.
+ *
+ * NÓ BẮT ĐƯỢC GÌ MÀ MỘT PHÉP ĐỘT BIẾN KHÔNG BẮT ĐƯỢC
+ *
+ * Đo 2026-09-10: giết nhánh "thiếu số lượng địa bàn" trong checkAggregateTechnique
+ * (`if (false && !across)`). Vector rơi xuống nhánh "không khớp hình dạng nào"
+ * và **vẫn ra reject** — verdict KHÔNG đổi. Một phép đột biến đếm "giết nhánh
+ * có làm vector đổi verdict không" mù trước ca đó; phép ở đây bắt được, vì thứ
+ * đổi là LÝ DO chứ không phải verdict. Chọn nhánh GIỮA để giết, không phải nhánh
+ * đầu hay cuối: nhánh giữa là nhánh dễ bị nhánh khác che nhất.
+ *
+ * GIỚI HẠN ĐÃ BIẾT, do session pSEO Control Panel chỉ ra
+ *
+ * Nếu HAI nhánh trong cùng một vị ngữ in ra CÙNG một chuỗi lý do, phép này
+ * không phân biệt được chúng: một vector chạm nhánh thứ nhất là đủ để cả hai
+ * nhãn xanh, và nhánh thứ hai có thể chết mà không ai biết. Chỗ đó cần một phép
+ * đột biến thật (giết từng nhánh, đòi kết quả đổi).
+ *
+ * Hiện chưa có ca nào như vậy — mười lý do dưới đây đôi một khác nhau. Ghi ra
+ * để người thêm nhánh mới biết ràng buộc: **lý do mới phải phân biệt được với
+ * mọi lý do đã có**, nếu không phép kiểm này im lặng yếu đi đúng một nhánh.
  */
 const BRANCHES: { rule: string; marker: string; label: string }[] = [
   { rule: "jsonld-value-displayed-only", marker: "trang có in", label: "accept — có cách in khớp" },
@@ -55,7 +75,25 @@ function main() {
     if (rejects === 0) failures.push(`${rule}: không có ca reject — luật chấp nhận mọi thứ vẫn pass được bộ này`);
   }
 
-  // 2. Mọi nhánh phải có vector chạm tới.
+  // 2a. Lý do phải phân biệt được đôi một.
+  //
+  // Ràng buộc mà chú thích BRANCHES nêu, viết thành phép kiểm chạy được — một
+  // lời dặn trong chú thích không ngăn được ai thêm nhánh thứ mười một trùng
+  // lý do với nhánh thứ ba, và lúc đó phép kiểm bên dưới yếu đi mà vẫn xanh.
+  // Duyệt mỗi CẶP đúng một lần (j bắt đầu từ i+1). Vòng lặp đôi ngây thơ báo
+  // mỗi cặp hai lần dưới hai thứ tự — đúng loại nhiễu dạy người đọc bỏ qua danh
+  // sách, mà chính dự án này đã đặt tên ở lib/dataforseo/on-page.ts.
+  for (let i = 0; i < BRANCHES.length; i++) {
+    for (let j = i + 1; j < BRANCHES.length; j++) {
+      const [a, b] = [BRANCHES[i], BRANCHES[j]];
+      if (a.rule !== b.rule) continue;
+      if (a.marker.includes(b.marker) || b.marker.includes(a.marker)) {
+        failures.push(`hai nhãn nhánh không phân biệt được: "${a.marker}" và "${b.marker}" (${a.rule})`);
+      }
+    }
+  }
+
+  // 2b. Mọi nhánh phải có vector chạm tới.
   console.log("\nĐộ phủ nhánh:");
   for (const branch of BRANCHES) {
     const hit = measured.some((v) => v.rule === branch.rule && v.measuredReason.includes(branch.marker));
