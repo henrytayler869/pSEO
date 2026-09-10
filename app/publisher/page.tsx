@@ -7,9 +7,10 @@ import { ConnectWebsiteForm } from "@/components/connect-website-form";
 import { WpAdminLinkCell } from "@/components/wp-admin-link";
 import { RemoveWebsiteButton } from "@/components/remove-website-button";
 import { getWebsiteOverviewRows } from "@/lib/queries/publisher";
+import { getVerticalsWithMarkets } from "@/lib/queries/verticals";
 
 export default async function PublisherPage() {
-  const rows = await getWebsiteOverviewRows();
+  const [rows, verticals] = await Promise.all([getWebsiteOverviewRows(), getVerticalsWithMarkets()]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -31,7 +32,7 @@ export default async function PublisherPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
-          <ConnectWebsiteForm />
+          <ConnectWebsiteForm verticals={verticals} />
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">Chưa kết nối website nào.</p>
           ) : (

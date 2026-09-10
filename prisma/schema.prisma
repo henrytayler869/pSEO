@@ -541,6 +541,26 @@ model Website {
   url          String
   wpApiBaseUrl String?
 
+  // Which trade this site publishes. NOT NULL on purpose.
+  //
+  // Added 2026-09-10 because its absence was a hard blocker, not an
+  // inconvenience: every content rule that depends on trade vocabulary
+  // (`patternsFor()` in lib/content-rules/copy-patterns.ts) REFUSES to run for
+  // a trade it has no vocabulary for — which is correct — and with no vertical
+  // on the site row there was no way for an automated check to learn which
+  // trade a publisher belongs to. One site can be told by hand; the second
+  // one is where that stops working.
+  //
+  // A nullable column would have moved the problem rather than solved it: the
+  // checker still could not run, and now the reason would be a null instead of
+  // a missing field.
+  //
+  // No foreign key, matching MarketIdentity.vertical: the set of trades lives
+  // in the coverage data, not in a table, and inventing a Vertical table here
+  // would create a second definition of what a trade is. Validated on write
+  // against the trades that actually have markets — see app/publisher/actions.ts.
+  vertical String
+
   // Search Console property identity, e.g. "sc-domain:example.com" or
   // "https://example.com/" (URL-prefix form) — GSC requires the exact
   // registered format, see README once written.

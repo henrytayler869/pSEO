@@ -12,6 +12,7 @@
 //   tsx scripts/connect-website.ts \
 //     --name "AT Moving Services" \
 //     --url https://atmovingservices.com \
+//     --vertical moving-services \
 //     --gsc sc-domain:atmovingservices.com \
 //     --ga4-property 553102895 \
 //     --ga4-measurement G-1TL8MDDEJH \
@@ -29,6 +30,7 @@ import { assertValidGscProperty } from "../lib/google/search-console";
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "../lib/google/analytics-data";
 import { deriveWpApiBaseUrl } from "../lib/wordpress/rest-api";
 import { saveServiceAccountKey, getServiceAccountStatus } from "../lib/google/service-account";
+import { getVerticalsWithMarkets } from "../lib/queries/verticals";
 
 function arg(flag: string): string | null {
   const i = process.argv.indexOf(flag);
@@ -45,6 +47,7 @@ async function main() {
   const name = arg("--name");
   const url = arg("--url");
   const gsc = arg("--gsc");
+  const vertical = arg("--vertical") ?? "";
   const ga4Property = arg("--ga4-property");
   const ga4Measurement = arg("--ga4-measurement");
   const wpApiBase = arg("--wp-api-base");
@@ -52,7 +55,7 @@ async function main() {
   const revalidateSecretFile = arg("--revalidate-secret-file");
 
   if (!name || !url || !gsc || !ga4Property) {
-    console.error("Thiếu tham số. Cần --name, --url, --gsc, --ga4-property. Xem phần Usage ở đầu file.");
+    console.error("Thiếu tham số. Cần --name, --url, --vertical, --gsc, --ga4-property. Xem phần Usage ở đầu file.");
     process.exit(1);
   }
 
@@ -114,11 +117,33 @@ async function main() {
   // Keyed on gscPropertyUrl because that is the column carrying the unique
   // constraint. Upsert rather than create: re-running this after fixing a typo
   // should converge on the right row, not fail or duplicate.
+  /**
+   * Trade is required here for the same reason it is required in the UI: every
+   * content rule keyed on trade vocabulary refuses to run for a trade it does
+   * not know, so a missing or mistyped one produces a site whose content checks
+   * silently do nothing.
+   *
+   * Checked against trades that actually have markets, not against a list typed
+   * into this file — a list here would be the second definition of what a trade
+   * is, and it would drift from the coverage data that is the first.
+   */
+  const known = await getVerticalsWithMarkets();
+  if (!known.includes(vertical)) {
+    console.error(
+      vertical
+        ? `\nNgành "${vertical}" chưa có market nào. Đang có: ${known.join(", ")}`
+        : `\nThiếu --vertical. Đang có: ${known.join(", ")}`
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   const website = await prisma.website.upsert({
     where: { gscPropertyUrl: gsc },
     create: {
       name,
       url,
+      vertical,
       gscPropertyUrl: gsc,
       ga4PropertyId: ga4Property,
       ga4MeasurementId: ga4Measurement || null,
