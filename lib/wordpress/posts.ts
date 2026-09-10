@@ -90,10 +90,19 @@ async function callWp(
     headers: {
       "Content-Type": "application/json",
       ...(creds ? { Authorization: authHeader(creds) } : {}),
-      // Only when there is one. Sending an empty header would be a value the
-      // plugin compares against and rejects, which reads downstream as a wrong
-      // secret rather than as no secret configured.
-      ...(creds?.loopbackSecret ? { "X-Atms-Loopback": creds.loopbackSecret } : {}),
+      // Only when there is a real one, and `.trim()` is doing work here.
+      //
+      // Sending an empty header is not the same as sending none: the plugin
+      // compares it and rejects it, which reads downstream as "wrong secret"
+      // rather than "no secret configured" — two different problems with two
+      // different fixes.
+      //
+      // Whitespace is the case this side nearly missed. The publisher's plugin
+      // guards `hash_equals('', '')`, which returns TRUE — so an unconfigured
+      // pair would have authorised everything, the exact hole this mechanism
+      // closes, reopened by the function chosen to close it. A secret of spaces
+      // is the same shape from this end: truthy, sent, and meaningless.
+      ...(creds?.loopbackSecret?.trim() ? { "X-Atms-Loopback": creds.loopbackSecret.trim() } : {}),
     },
     ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
     cache: "no-store",
