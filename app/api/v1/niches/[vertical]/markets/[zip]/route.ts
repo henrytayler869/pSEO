@@ -1,4 +1,4 @@
-import { formatForPrompt } from "@/lib/ai/facts";
+import { formatForPrompt, formatNumberForPrompt, unitWordFor } from "@/lib/ai/facts";
 import { prisma } from "@/lib/db/prisma";
 import { requireApiKey } from "@/lib/api/auth";
 import { latestPerKeyword } from "@/lib/keywords/latest";
@@ -125,10 +125,30 @@ export async function GET(request: Request, ctx: RouteContext<"/api/v1/niches/[v
      * One site spent four attempts curve-fitting it from observed output and
      * got 15/18 before finding a case that broke every candidate. There is no
      * reason for anyone to guess at a string this process can simply hand over.
+     *
+     * THREE fields, not one, since 2026-09-10:
+     *
+     *   display        number AND unit word — "67,282 households"
+     *   displayNumber  the number alone     — "67,282"
+     *   unitWord       what display appends — "households" ("" = none by design)
+     *
+     * Split after `display` started carrying the unit and silently changed
+     * meaning under a consumer that appended its own word. 126 published pages
+     * rendered "67,282 households households", twelve times each, inside
+     * JSON-LD as well as body text. Nobody had done anything wrong on that
+     * side: one field was answering two questions ("what string do I print"
+     * and "what number do I print"), and a field answering two questions gets
+     * one of them wrong the moment they diverge.
+     *
+     * Append nothing to `display`. Build your own wording from
+     * `displayNumber`. `unitWord` is there so a consumer can check what it is
+     * about to duplicate rather than assume.
      */
     governmentData: governmentData.map((d) => ({
       ...d,
       display: formatForPrompt(d.value, d.unit),
+      displayNumber: formatNumberForPrompt(d.value, d.unit),
+      unitWord: unitWordFor(d.unit),
     })),
     score: latestScore?.score ?? null,
     scoreVersion: latestScore?.version ?? null,

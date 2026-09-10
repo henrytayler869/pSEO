@@ -126,6 +126,43 @@ const UNIT_WORDS: Record<string, string> = {
   "USD/yr": "",
 };
 
+/**
+ * The unit word already baked into `formatForPrompt`'s output, or "" when the
+ * format carries no separate word (a percentage, a dollar amount, a year).
+ *
+ * Exists because consumers need to know what is ALREADY in the string before
+ * they add wording of their own. Published on the API for the same reason.
+ *
+ * Returns null for a unit this file has no word for — distinct from "", which
+ * means "deliberately no word".
+ */
+export function unitWordFor(unit: string): string | null {
+  if (unit === "%" || unit.startsWith("USD") || unit === "year") return "";
+  return UNIT_WORDS[unit] ?? null;
+}
+
+/**
+ * The number exactly as `formatForPrompt` prints it, WITHOUT the unit word.
+ *
+ * Split out on 2026-09-10 after `formatForPrompt` started appending the unit
+ * and quietly changed the meaning of the `display` field on the public API.
+ * The consuming site's template appended its own unit word, as it always had,
+ * and 126 pages rendered "67,282 households households" — twelve times each,
+ * inside JSON-LD as well as body text.
+ *
+ * The lesson is not "don't change formatters". It is that ONE field was being
+ * asked two different questions — "what string do I print" and "what number do
+ * I print" — and a field that answers two questions answers one of them wrong
+ * the moment they diverge. So now there are two fields, and neither has to
+ * guess which question it was asked.
+ */
+export function formatNumberForPrompt(value: number, unit: string): string {
+  const word = unitWordFor(unit);
+  const full = formatForPrompt(value, unit);
+  if (!word) return full;
+  return full.endsWith(` ${word}`) ? full.slice(0, -(word.length + 1)) : full;
+}
+
 export function formatForPrompt(value: number, unit: string): string {
   if (unit === "%") return `${value.toFixed(decimalsWithinTolerance(value))}%`;
   if (unit.startsWith("USD")) {

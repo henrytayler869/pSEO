@@ -2,6 +2,7 @@ import { requireApiKey } from "@/lib/api/auth";
 import { getOrGenerateInterpretation, getCachedInterpretation, fingerprintText } from "@/lib/ai/generate";
 import { SpendCapExceededError, getTotalSpendUsd, getAiConfig } from "@/lib/ai/anthropic";
 import { apiJson } from "@/lib/api/cache-policy";
+import { formatNumberForPrompt, unitWordFor } from "@/lib/ai/facts";
 
 /**
  * GET /api/v1/niches/{vertical}/markets/{zip}/interpretation
@@ -126,7 +127,11 @@ export async function GET(
         key: f.key,
         label: f.label,
         value: f.value,
+        // Carries the unit word since 2026-09-10; see the markets route for
+        // what that broke. Append nothing to it — use displayNumber instead.
         display: f.display,
+        displayNumber: formatNumberForPrompt(f.value, f.unit),
+        unitWord: unitWordFor(f.unit),
         unit: f.unit,
         scope: f.scope,
         scopeName: f.scopeName,
