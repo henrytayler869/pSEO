@@ -194,10 +194,35 @@ function uploadsLocation(publicHost: string, port: string): string {
 # Chỉ /wp-content/uploads/, không phải cả /wp-content/: plugins và themes nằm
 # cùng cây thư mục đó và không có lý do gì để ra ngoài.
 location ^~ /wp-content/uploads/ {
+    # KHÔNG phục vụ .php từ uploads. Đo được 2026-09-10 trên atmovingservices:
+    # một file .php đặt dưới uploads ĐƯỢC THỰC THI qua đường công khai này.
+    # WordPress mặc định chặn upload .php nên chưa có đường vào, nhưng bất kỳ
+    # plugin nào nới điều đó ra sẽ biến khối này thành RCE công khai. Chặn ở
+    # nginx thì nó không phụ thuộc cấu hình của WordPress.
+    location ~ \.php$ {
+        return 403;
+    }
+
     proxy_pass         http://127.0.0.1:${port};
     proxy_http_version 1.1;
     proxy_set_header   Host              $host;
     proxy_set_header   X-Forwarded-Proto $scheme;
+
+    # BỐN dòng dưới là thứ khối này THIẾU ở bản đầu, và cái thiếu không vô hại.
+    #
+    # Không đặt X-Forwarded-For thì PHP thấy header đó VẮNG MẶT trên một request
+    # công khai, không cần xác thực, từ Internet. Trong khi bản đầu của filter
+    # app-password dùng chính "XFF vắng mặt" để kết luận "gọi từ máy này qua
+    # loopback". Đường này chứng minh mệnh đề đó sai bằng một đường đang tồn
+    # tại, không phải bằng giả thuyết.
+    #
+    # Và cắt X-Atms-Loopback: nginx chuyển tiếp header lạ theo mặc định, nên
+    # thiếu dòng này thì một client bên ngoài gửi được nó xuyên qua. Phải có
+    # trên MỌI vhost proxy tới WordPress — sót một cái thì lớp này không tồn
+    # tại, và nó sẽ trông như đang tồn tại vì những cái kia có.
+    proxy_set_header   X-Real-IP         $remote_addr;
+    proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header   X-Atms-Loopback   "";
 
     # Ảnh đã đăng thì không đổi; để trình duyệt và Cloudflare giữ.
     proxy_cache_valid  200 30d;
