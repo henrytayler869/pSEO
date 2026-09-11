@@ -290,9 +290,10 @@ export function WpPostsManager({
         <p className="text-sm text-red-700">
           Không đọc được WordPress: {loadError}
           <span className="block text-xs">
-            HQ gọi WordPress qua loopback của VPS, nên từ máy khác sẽ luôn không tới được. Đây KHÔNG phải
-            &ldquo;WordPress không có bài nào&rdquo; — chưa đọc được thì chưa biết. Trang site đang phục vụ nằm ở thẻ bên
-            dưới, đọc từ nguồn khác.
+            WordPress chỉ nghe 127.0.0.1:8090 trên VPS và đóng với internet. Chạy trên máy khác thì mở đường trước:{" "}
+            <code>npm run wp:tunnel</code> (hoặc <code>npm run dev</code> — bước predev tự mở). Đây KHÔNG phải
+            &ldquo;WordPress không có bài nào&rdquo; — chưa đọc được thì chưa biết. Trang site đang phục vụ nằm ở thẻ
+            bên dưới, đọc từ nguồn khác.
           </span>
         </p>
       )}
