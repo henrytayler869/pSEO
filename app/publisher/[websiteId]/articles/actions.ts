@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { buildCandidate, discoverCandidates, type ArticleCandidate, type Intent } from "@/lib/article-candidates/discover";
+import { fetchSitemapCounts } from "@/lib/sitemap/count";
 import { buildQcContext, writeArticle } from "@/lib/article-qc/write-loop";
 import { createPost, type WpCredentials } from "@/lib/wordpress/posts";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
@@ -213,8 +214,13 @@ export async function startArticleBatchAction(
   formData: FormData
 ): Promise<ArticleActionResult> {
   const websiteId = String(formData.get("websiteId") ?? "");
-  const intent = String(formData.get("intent") ?? "move-underway") as Intent;
-  const limit = Math.max(1, Math.min(50, Number(formData.get("limit") ?? 10)));
+  const intent = String(formData.get("intent") ?? "") as Intent;
+  if (!intent) return { ok: false, message: "Chưa chọn ý định — không chạy lô theo phỏng đoán." };
+
+  // "Tạo tất cả" bỏ trần 50, nhưng KHÔNG bỏ trần ngân sách: lô vẫn dừng khi
+  // chạm trần chi tiêu, và phần chưa viết không bị đánh dấu trượt.
+  const wantsAll = formData.get("all") === "1";
+  const limit = wantsAll ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(50, Number(formData.get("limit") ?? 10)));
 
   try {
     const website = await loadSite(websiteId);
@@ -222,7 +228,17 @@ export async function startArticleBatchAction(
     const running = await prisma.articleJob.findFirst({ where: { websiteId, status: "running" } });
     if (running) return { ok: false, message: "Đang có một lượt chạy chưa xong. Đợi nó kết thúc hoặc dừng nó trước." };
 
-    const all = await discoverCandidates(website.vertical);
+    // servedPaths phải truyền Ở ĐÂY nữa, không chỉ ở trang danh sách.
+    //
+    // Thiếu nó, màn hình hiện 174 ứng viên còn lô lấy từ 256 — chênh 82 nơi
+    // ĐÃ có trang market, tức đúng những bài mà phần loại trừ sinh ra để
+    // tránh. Một danh sách và một hàng đợi đọc hai tập khác nhau là lỗi không
+    // ai thấy cho tới khi bài trùng đã lên site.
+    const servedPaths = await fetchSitemapCounts(website.url).then(
+      (sm) => new Set(sm.urls.map((u) => new URL(u).pathname.replace(/\/+$/, ""))),
+      () => new Set<string>()
+    );
+    const all = await discoverCandidates(website.vertical, { servedPaths });
     const done = await prisma.article.findMany({ where: { websiteId }, select: { candidateId: true } });
     const doneIds = new Set(done.map((d) => d.candidateId));
     const queue = all.filter((c) => c.intent === intent && !doneIds.has(c.id)).slice(0, limit);

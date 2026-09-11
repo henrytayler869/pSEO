@@ -1,9 +1,9 @@
 "use client";
 
-import { useActionState, useEffect } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Play, Square, Send, Check, X } from "lucide-react";
+import { Play, Square, Send, Check, X, ListPlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -165,6 +165,7 @@ export function ArticleWorkbench({
   const [oneState, oneAction, writingOne] = useActionState(writeOneArticleAction, EMPTY);
   const [batchState, batchAction, startingBatch] = useActionState(startArticleBatchAction, EMPTY);
   const [pubState, pubAction, publishing] = useActionState(publishArticleAction, EMPTY);
+  const [confirmAll, setConfirmAll] = useState(false);
 
   const pending = candidates.filter((c) => !c.written);
   const articleCost = articles.reduce((s, a) => s + a.costUsd, 0);
@@ -234,23 +235,56 @@ export function ArticleWorkbench({
 
       {/* Chưa đo được ý định thì KHÔNG cho chạy lô. Viết 174 bài theo một ý
           định đoán bừa là trả tiền thật cho một giả định chưa ai kiểm. */}
-      <form action={batchAction} className="flex flex-wrap items-center gap-2">
+      <form action={batchAction} className="flex flex-col gap-2">
         <input type="hidden" name="websiteId" value={websiteId} />
         <input type="hidden" name="intent" value={intent ?? ""} />
-        <label className="text-sm">
-          Số bài:
-          <input
-            name="limit"
-            type="number"
-            min={1}
-            max={50}
-            defaultValue={Math.min(10, Math.max(1, pending.length))}
-            className="ml-2 w-20 rounded-md border px-2 py-1 text-sm"
-          />
-        </label>
-        <Button type="submit" size="sm" disabled={startingBatch || pending.length === 0 || intent === null}>
-          <Play className="h-3.5 w-3.5" /> Tạo hàng loạt (nền)
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-sm">
+            Số bài:
+            <input
+              name="limit"
+              type="number"
+              min={1}
+              max={50}
+              defaultValue={Math.min(10, Math.max(1, pending.length))}
+              className="ml-2 w-20 rounded-md border px-2 py-1 text-sm"
+            />
+          </label>
+          <Button type="submit" size="sm" disabled={startingBatch || pending.length === 0 || intent === null}>
+            <Play className="h-3.5 w-3.5" /> Tạo hàng loạt (nền)
+          </Button>
+
+          {/* "Tạo tất cả" đi qua một bước xác nhận, không phải vì thao tác khó
+              undo — lô dừng được, và chạm trần thì tự dừng — mà vì CHI PHÍ MỖI
+              BÀI CHƯA AI ĐO. Chưa bài nào được viết bằng model thật, nên con
+              số duy nhất hiện có là ước lượng từ một dạng prompt khác. Một cú
+              bấm nhầm ở đây tiêu hết phần ngân sách còn lại. */}
+          {!confirmAll ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              onClick={() => setConfirmAll(true)}
+              disabled={startingBatch || pending.length === 0 || intent === null}
+            >
+              <ListPlus className="h-3.5 w-3.5" /> Tạo tất cả ({pending.length})
+            </Button>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300 bg-amber-50/60 px-2 py-1.5">
+              <span className="text-xs">
+                Viết <strong>{pending.length}</strong> bài. Chi phí mỗi bài <strong>chưa đo</strong> — chưa bài nào
+                chạy với model thật. Ngân sách còn ${budget.remainingUsd.toFixed(4)}; chạm trần thì lô dừng và phần chưa
+                viết KHÔNG bị đánh dấu trượt.
+              </span>
+              <Button type="submit" name="all" value="1" size="sm" disabled={startingBatch}>
+                Xác nhận viết {pending.length} bài
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setConfirmAll(false)}>
+                Huỷ
+              </Button>
+            </div>
+          )}
+        </div>
         <Result state={batchState} />
       </form>
 
