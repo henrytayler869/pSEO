@@ -10,7 +10,7 @@ import { DEFAULT_TEMPLATES } from "../lib/article-template/defaults";
 import type { ArticleTemplateShape, Block } from "../lib/article-template/render";
 
 function base(): ArticleTemplateShape {
-  return JSON.parse(JSON.stringify(DEFAULT_TEMPLATES["move-underway"]));
+  return JSON.parse(JSON.stringify(DEFAULT_TEMPLATES["commercial"]));
 }
 
 const CASES: { name: string; expect: RegExp | null; make: () => ArticleTemplateShape }[] = [

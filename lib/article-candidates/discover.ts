@@ -58,21 +58,26 @@ export type Intent = string;
  * Không tiêu đề nào hứa điều dataset không đo: không nói gì về hãng vận
  * chuyển, giá cước hay lịch trống.
  */
-function titleFor(intent: Intent, city: string, state: string): string {
-  // Khoá theo lớp ý định DataForSEO đo, không theo ba nhãn tự nghĩ ra. Ý định
-  // ngành không có thì rơi về câu trung tính — một tiêu đề hứa ít hơn thì
-  // thừa, một tiêu đề hứa nhiều hơn dữ liệu thì sai.
+function titleFor(intent: Intent, city: string, state: string, zip: string): string {
+  // Có ZIP trong tiêu đề vì SỐ LIỆU là của ZIP đó.
+  //
+  // Hai lý do, cả hai đều đo được. (1) Duy nhất theo cấu tạo: 48/174 ứng viên
+  // từng chung đúng một tiêu đề "Moving services in New York, NY" — 47 bài sẽ
+  // trượt not-duplicate-title, mỗi bài sau ba lần gọi API mà model không sửa
+  // được vì tiêu đề do template sinh. (2) Trung thực về phạm vi: bảng bên
+  // dưới ghi "ZIP 10002", nên tiêu đề nói "New York, NY" là hứa rộng hơn thứ
+  // trang thật sự đo — cùng lỗi scope_overclaim, chỉ chuyển lên tiêu đề.
   switch (intent) {
     case "commercial":
-      return `Moving services in ${city}, ${state}: the local figures before you compare quotes`;
+      return `Moving services in ${city}, ${state} ${zip}`;
     case "transactional":
-      return `Booking a move in ${city}, ${state}? What the local figures show`;
+      return `Book your move in ${city}, ${state} ${zip}`;
     case "informational":
-      return `Moving in ${city}, ${state}: what the published figures say`;
+      return `Moving in ${city}, ${state} ${zip}: the published figures`;
     case "navigational":
-      return `${city}, ${state} moving figures`;
+      return `${city}, ${state} ${zip}: moving and housing figures`;
     default:
-      return `${city}, ${state} by the numbers`;
+      return `${city}, ${state} ${zip}: moving and housing figures`;
   }
 }
 
@@ -249,7 +254,7 @@ export async function discoverCandidates(
       city: loc.city,
       state: loc.state,
       county: loc.county,
-      title: titleFor(marketIntent ?? "", loc.city, loc.state),
+      title: titleFor(marketIntent ?? "", loc.city, loc.state, loc.zip),
       why:
         `${n} chỉ số đo được ở ${loc.city}, ${loc.state} (ZIP ${loc.zip})` +
         (marketIntent ? `, từ khoá ở đây là ý định "${marketIntent}".` : ", CHƯA đo ý định từ khoá."),
@@ -286,7 +291,7 @@ export async function buildCandidate(
     city: loc.city,
     state: loc.state,
     county: loc.county,
-    title: titleFor(intent, loc.city, loc.state),
+    title: titleFor(intent, loc.city, loc.state, zip),
     why: `${facts.length} chỉ số đo được ở ${loc.city}, ${loc.state}.`,
     intent,
     scope: { kind: "ZIP", name: `${loc.city}, ${loc.state}` },
