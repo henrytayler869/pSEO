@@ -46,6 +46,31 @@ wp_answers() {
     "http://127.0.0.1:$LOCAL_PORT/wp-json/wp/v2/posts?per_page=1" 2>/dev/null | grep -q "^2"
 }
 
+PID_FILE="${TMPDIR:-/tmp}/pseo-wp-tunnel.pid"
+LOG_FILE="${TMPDIR:-/tmp}/pseo-wp-tunnel.log"
+
+# Vòng lặp nối lại. `|| code=$?` chứ KHÔNG phải gán ở dòng sau: với set -e, một
+# lệnh thất bại sẽ giết cả script trước khi kịp đọc mã thoát, và vòng lặp thử
+# lại chết lặng lẽ — đúng lỗi đã đo được ở db-tunnel.sh.
+connect_loop() {
+  while true; do
+    code=0
+    ssh -N \
+      -o BatchMode=yes \
+      -o ConnectTimeout=10 \
+      -o ExitOnForwardFailure=yes \
+      -o ServerAliveInterval=30 \
+      -o ServerAliveCountMax=3 \
+      -i "$SSH_KEY" \
+      -L "$LOCAL_PORT:127.0.0.1:$REMOTE_PORT" \
+      "$VPS_USER@$VPS_HOST" || code=$?
+
+    [[ $code -eq 0 ]] && { echo "Tunnel đóng."; break; }
+    echo "Tunnel đứt (mã $code) — nối lại sau 4 giây..."
+    sleep 4
+  done
+}
+
 if [[ "${1:-}" == "--ensure" ]]; then
   if tunnel_alive; then
     # Cổng mở CHƯA CHẮC là tunnel còn sống: ssh có thể đã chết mà cổng vẫn bị
@@ -58,40 +83,25 @@ if [[ "${1:-}" == "--ensure" ]]; then
     echo "Kiểm: lsof -ti:$LOCAL_PORT"
     exit 1
   fi
-  ssh -f -N \
-    -o BatchMode=yes \
-    -o ConnectTimeout=10 \
-    -o ExitOnForwardFailure=yes \
-    -o ServerAliveInterval=30 \
-    -i "$SSH_KEY" \
-    -L "$LOCAL_PORT:127.0.0.1:$REMOTE_PORT" \
-    "$VPS_USER@$VPS_HOST"
-  for _ in $(seq 1 10); do
-    wp_answers && { echo "Tunnel WordPress đã mở ở cổng $LOCAL_PORT."; exit 0; }
+
+  # Dựng VÒNG LẶP ở nền, không phải một `ssh -f` trần.
+  #
+  # Đo 11/9/2026: bản trước dùng `ssh -f -N`, giết tiến trình ssh thì cổng
+  # đóng và KHÔNG ai mở lại — nghĩa là máy ngủ dậy một lần là hỏng tới khi có
+  # người gõ lệnh. db-tunnel.sh đã làm đúng từ trước; wp-tunnel.sh thì không,
+  # và hai script cạnh nhau hành xử khác nhau là thứ không ai đoán ra.
+  connect_loop >>"$LOG_FILE" 2>&1 &
+  echo $! > "$PID_FILE"
+
+  for _ in $(seq 1 15); do
+    wp_answers && { echo "Tunnel WordPress đã mở ở cổng $LOCAL_PORT (tự nối lại khi đứt)."; exit 0; }
     sleep 1
   done
-  echo "Mở tunnel rồi nhưng WordPress không trả lời trong 10 giây." >&2
+  echo "Mở tunnel rồi nhưng WordPress không trả lời trong 15 giây. Log: $LOG_FILE" >&2
   exit 1
 fi
 
 echo "127.0.0.1:$LOCAL_PORT  ->  $VPS_USER@$VPS_HOST  ->  127.0.0.1:$REMOTE_PORT"
 echo "Ctrl-C để đóng."
 
-# Vòng lặp nối lại. `|| code=$?` chứ KHÔNG phải gán ở dòng sau: với set -e, một
-# lệnh thất bại sẽ giết cả script trước khi kịp đọc mã thoát, và vòng lặp thử
-# lại chết lặng lẽ — đúng lỗi đã đo được ở db-tunnel.sh.
-while true; do
-  code=0
-  ssh -N \
-    -o BatchMode=yes \
-    -o ConnectTimeout=10 \
-    -o ExitOnForwardFailure=yes \
-    -o ServerAliveInterval=30 \
-    -i "$SSH_KEY" \
-    -L "$LOCAL_PORT:127.0.0.1:$REMOTE_PORT" \
-    "$VPS_USER@$VPS_HOST" || code=$?
-
-  [[ $code -eq 0 ]] && { echo "Tunnel đóng."; break; }
-  echo "Tunnel đứt (mã $code) — nối lại sau 4 giây..."
-  sleep 4
-done
+connect_loop
