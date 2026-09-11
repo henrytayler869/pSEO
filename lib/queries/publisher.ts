@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { logDependencyFailure } from "@/lib/observability/dependency-log";
 import { fetchPublishedPostCount, deriveWpApiBaseUrl, deriveWpAdminUrl, type WpAdminLink } from "@/lib/wordpress/rest-api";
 import { fetchSitemapCounts, type SitemapCount } from "@/lib/sitemap/count";
 import { normalizeHost } from "@/lib/publisher/link-domain";
@@ -124,27 +125,45 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
       .then((rules) => checkRequiredPages(website.url, rules.requiredPages))
       .then(
         (v) => ({ ok: true as const, value: v }),
-        (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
+        (err) => {
+        logDependencyFailure("required-pages", err, { websiteId, site: website.url });
+        return { ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." };
+      }
       ),
     listSitemaps(website.gscPropertyUrl).then(
       (v) => ({ ok: true as const, value: v }),
-      (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
+      (err) => {
+        logDependencyFailure("gsc-sitemaps", err, { websiteId, site: website.url });
+        return { ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." };
+      }
     ),
     fetchSitemapCounts(website.url).then(
       (v) => ({ ok: true as const, value: v }),
-      (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
+      (err) => {
+        logDependencyFailure("sitemap", err, { websiteId, site: website.url });
+        return { ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." };
+      }
     ),
     fetchPublishedPostCount(wpApiBaseUrl).then(
       (v) => ({ ok: true as const, value: v }),
-      (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
+      (err) => {
+        logDependencyFailure("wordpress-posts", err, { websiteId, site: website.url });
+        return { ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." };
+      }
     ),
     Promise.all([fetchSiteSearchTotals(website.gscPropertyUrl, days), fetchTopPages(website.gscPropertyUrl, days)]).then(
       ([search, topPages]) => ({ ok: true as const, value: { search, topPages } }),
-      (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
+      (err) => {
+        logDependencyFailure("gsc-search", err, { websiteId, site: website.url });
+        return { ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." };
+      }
     ),
     Promise.all([fetchSiteTrafficTotals(website.ga4PropertyId, days), fetchTrafficBySource(website.ga4PropertyId, days)]).then(
       ([traffic, trafficBySource]) => ({ ok: true as const, value: { traffic, trafficBySource } }),
-      (err) => ({ ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." })
+      (err) => {
+        logDependencyFailure("ga4-traffic", err, { websiteId, site: website.url });
+        return { ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." };
+      }
     ),
   ]);
 

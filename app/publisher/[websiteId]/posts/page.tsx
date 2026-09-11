@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db/prisma";
 import { listPosts } from "@/lib/wordpress/posts";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
+import { logDependencyFailure } from "@/lib/observability/dependency-log";
 import { WpPostsManager, type PostRow } from "@/components/wp-posts-manager";
 import { SitePages, type SitePageRow } from "@/components/site-pages";
 import { fetchSitemapCounts, classifySitemapUrl } from "@/lib/sitemap/count";
@@ -36,6 +37,11 @@ export default async function PostsPage({ params }: { params: Promise<{ websiteI
     // Rendered, not thrown. A WordPress that is down or behind a tunnel is a
     // normal state for this setup, and a Next.js error page would hide the
     // credential form — which is the one thing that might fix it.
+    //
+    // Nhưng vẽ vào trang KHÔNG đủ: trang chỉ tồn tại khi có người mở nó, nên
+    // một sự cố lúc 3 giờ sáng không để lại dấu vết nào. Ghi thêm một dòng
+    // vào stderr để production có bản ghi.
+    logDependencyFailure("wordpress-posts", err, { websiteId, base });
     loadError = err instanceof Error ? err.message : "Không đọc được danh sách bài.";
   }
 
@@ -88,6 +94,7 @@ export default async function PostsPage({ params }: { params: Promise<{ websiteI
       };
     });
   } catch (err) {
+    logDependencyFailure("sitemap", err, { websiteId, site: website.url });
     sitemapError = err instanceof Error ? err.message : "Không đọc được sitemap.";
   }
 
