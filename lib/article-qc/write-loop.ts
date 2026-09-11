@@ -40,8 +40,11 @@ HARD RULES — a violation means the whole draft is rejected:
 3. A figure measured at county or state level must say so in the same sentence that contains it.
 4. Do not mention keywords, search volume, SEO, or ranking.
 5. Do not repeat the table. Say what the figures MEAN for someone reading them.
+6. You MAY place two figures side by side when that tells the reader something neither tells alone — what homes cost against what households earn, arrivals against departures. That is the point of having every figure for one place on one page.
+   What you may NOT do is claim one figure CAUSED the other. "Median income is $72,727 and median home value is $414,200" is allowed. "Incomes are high, which drives home values up" is not — nothing here measures cause, only what was counted.
+   Never write a causal word (so, therefore, because, drives, leads to, results in, which means) between two figures.
 
-Output the paragraph as PLAIN TEXT. No HTML, no markdown, no quotes around it. Two to four sentences.`;
+Output the paragraph as PLAIN TEXT. No HTML, no markdown, no quotes around it. Four to six sentences — this page carries every figure measured for one place, and two sentences cannot be about more than two of them.`;
 
 function factsBlock(facts: FactSet["facts"]): string {
   return facts

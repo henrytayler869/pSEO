@@ -45,18 +45,26 @@ export interface ArticleTemplateShape {
  * instead of a gap nobody can attribute.
  */
 export function placeholders(c: ArticleCandidate): Record<string, string> {
-  const sorted = [...c.facts].sort((a, b) => b.value - a.value);
-  const top = sorted[0];
-  const bottom = sorted[sorted.length - 1];
+  // KHÔNG có {topValue}/{bottomValue} nữa.
+  //
+  // Bản trước lấy fact có value lớn nhất, đúng khi các fact là cùng một chỉ số
+  // ở nhiều nơi. Giờ chúng là nhiều chỉ số của một nơi, nên "lớn nhất" là so
+  // $588,500 với 42.6% — một con số vô nghĩa mà template vẫn in ra được, và
+  // không phép kiểm nào bắt được vì nó là số thật lấy từ fact thật.
+  //
+  // Thay bằng {leadName}/{leadValue}: fact ĐẦU TIÊN sau khi sắp theo intent,
+  // tức một chỉ số cụ thể, so với chính nó thì mới có nghĩa.
+  const lead = c.facts[0];
   return {
+    city: c.city,
+    state: c.state,
+    zip: c.zip,
+    county: c.county ?? `the county containing ZIP ${c.zip}`,
     scopeName: c.scope.name,
-    scopeKind: c.scope.kind === "COUNTY" ? "county" : "state",
     count: String(c.facts.length),
-    topName: top?.label.split("—").pop()?.trim() ?? "",
-    topValue: top ? formatForPrompt(top.value, top.unit) : "",
-    bottomName: bottom?.label.split("—").pop()?.trim() ?? "",
-    bottomValue: bottom ? formatForPrompt(bottom.value, bottom.unit) : "",
-    measuredAt: top?.scope ?? "",
+    leadName: lead?.label ?? "",
+    leadValue: lead ? formatForPrompt(lead.value, lead.unit) : "",
+    measuredAt: lead?.scope ?? "",
   };
 }
 
@@ -106,15 +114,32 @@ export function renderArticle(params: {
         parts.push(`<p>${esc(fill(b.text, vars))}</p>`);
         break;
       case "data-table": {
-        const rows = [...params.candidate.facts]
-          .sort((a, b2) => b2.value - a.value)
+        // KHÔNG sắp theo giá trị.
+        //
+        // Bản trước sort giảm dần theo value, đúng khi mọi hàng là cùng một
+        // chỉ số ở nhiều nơi. Giờ mỗi hàng là một chỉ số khác nhau của cùng
+        // một nơi, nên sắp theo value là xếp $1.22 tỷ, 12,438 hộ, 1955 (một
+        // năm) và 12.9% vào cùng một thang. Giữ nguyên thứ tự fact, tức thứ
+        // tự theo intent: chỉ số phục vụ việc người đọc đang làm lên trước.
+        //
+        // Cột thứ ba là VÙNG ĐO. Bốn trong mười ba chỉ số ở đây đo cấp county;
+        // in chúng cạnh số liệu ZIP mà không nói gì là biến một con số county
+        // thành một khẳng định về ZIP — đúng lỗi scope_overclaim mà lớp trang
+        // market đã phải chặn ở prompt.
+        const rows = params.candidate.facts
           .map(
             (f) =>
-              `<tr><td>${esc(f.label.split("—").pop()?.trim() ?? f.label)}</td><td>${esc(f.display)}</td></tr>`
+              `<tr><td>${esc(f.label)}</td><td>${esc(f.display)}</td><td>${esc(
+                f.scope === "ZIP"
+                  ? `ZIP ${params.candidate.zip}`
+                  : f.scopeName ?? (f.scope === "COUNTY" ? "county" : "state")
+              )}</td></tr>`
           )
           .join("");
         parts.push(
-          `<table>${b.caption ? `<caption>${esc(fill(b.caption, vars))}</caption>` : ""}<tbody>${rows}</tbody></table>`
+          `<table>${b.caption ? `<caption>${esc(fill(b.caption, vars))}</caption>` : ""}` +
+            `<thead><tr><th>Figure</th><th>Value</th><th>Area measured</th></tr></thead>` +
+            `<tbody>${rows}</tbody></table>`
         );
         break;
       }
@@ -141,11 +166,19 @@ export function renderArticle(params: {
       case "cta":
         parts.push(`${b.heading ? `<h2>${esc(b.heading)}</h2>` : ""}${b.html}`);
         break;
-      case "source-note":
+      case "source-note": {
+        // Không tuyên bố MỘT cấp đo cho cả trang. Trang này trộn chỉ số ZIP và
+        // chỉ số county, nên một câu "measured at ZIP level" sẽ sai với bốn
+        // hàng — và sai theo hướng phóng đại độ cụ thể, hướng nguy hiểm hơn.
+        const levels = [...new Set(params.candidate.facts.map((f) => f.scope))];
         parts.push(
-          `<p><em>Source: ${esc(params.sourceNames.join(", "))}. Figures are measured at ${esc(vars.measuredAt)} level.</em></p>`
+          `<p><em>Source: ${esc(params.sourceNames.join(", "))}. ` +
+            `Each figure is labelled with the area it was measured for` +
+            (levels.length > 1 ? ` — this page mixes ${esc(levels.join(" and "))}-level figures.` : `.`) +
+            `</em></p>`
         );
         break;
+      }
     }
   }
 

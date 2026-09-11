@@ -13,13 +13,13 @@ import type { ArticleTemplateShape } from "./render";
  */
 export const DEFAULT_TEMPLATES: Record<string, ArticleTemplateShape> = {
   "move-underway": {
-    titlePattern: "Moving to {scopeName}? Where people are actually going",
+    titlePattern: "Moving to {city}, {state}? What the local figures show",
     metaPattern:
-      "Federal figures for {scopeName}, with what they do and do not tell you when you are planning a move.",
+      "Census and IRS figures for {city}, {state} — {count} measured indicators, each with the area it describes.",
     blocks: [
-      { type: "paragraph", text: "If you are moving to {scopeName}, the first useful question is where other people are going — and federal records answer it directly." },
-      { type: "heading", level: 2, text: "The figures for {scopeName}" },
-      { type: "data-table", caption: "Measured at {measuredAt} level" },
+      { type: "paragraph", text: "If you are moving to {city}, published federal figures already describe the area — how much people earn, what homes cost, who owns and how many households arrive each year. They are below, each labelled with the area it was measured for." },
+      { type: "heading", level: 2, text: "The figures for {city}, {state}" },
+      { type: "data-table", caption: "Each figure is labelled with the area it was measured for" },
       { type: "ai-interpretation" },
       { type: "heading", level: 2, text: "What to ask before you book" },
       {
@@ -32,13 +32,13 @@ export const DEFAULT_TEMPLATES: Record<string, ArticleTemplateShape> = {
   },
 
   "choosing-place": {
-    titlePattern: "Choosing where to live in {scopeName}: the numbers compared",
+    titlePattern: "Living in {city}, {state}: homes, income and who owns",
     metaPattern:
-      "How {count} places in {scopeName} compare on the federal housing and income figures, and what each one leaves out.",
+      "{count} federal figures for {city}, {state} — home values, household income, ownership and how many people move each year.",
     blocks: [
-      { type: "paragraph", text: "Comparing places in {scopeName} usually starts with price. These are the published figures, side by side." },
-      { type: "heading", level: 2, text: "{scopeName} compared" },
-      { type: "data-table", caption: "Measured at {measuredAt} level" },
+      { type: "paragraph", text: "Deciding on {city} usually starts with what a home costs and what households earn. Both are published figures, and both are below alongside everything else measured for this area." },
+      { type: "heading", level: 2, text: "What is measured for {city}, {state}" },
+      { type: "data-table", caption: "Each figure is labelled with the area it was measured for" },
       { type: "ai-interpretation" },
       { type: "heading", level: 2, text: "What these figures do not cover" },
       {
@@ -51,11 +51,11 @@ export const DEFAULT_TEMPLATES: Record<string, ArticleTemplateShape> = {
   },
 
   "market-context": {
-    titlePattern: "{scopeName} by the numbers: {count} places ranked",
-    metaPattern: "Published federal figures for {count} places in {scopeName}, ranked, with the measurement level stated.",
+    titlePattern: "{city}, {state} by the numbers",
+    metaPattern: "Published federal figures for {city}, {state}: {count} indicators, each with the area it was measured for.",
     blocks: [
-      { type: "heading", level: 2, text: "{scopeName} ranked" },
-      { type: "data-table", caption: "Measured at {measuredAt} level" },
+      { type: "heading", level: 2, text: "{city}, {state}: the measured figures" },
+      { type: "data-table", caption: "Each figure is labelled with the area it was measured for" },
       { type: "ai-interpretation" },
       { type: "heading", level: 2, text: "How to read this" },
       {

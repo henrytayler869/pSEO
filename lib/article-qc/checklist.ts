@@ -114,6 +114,33 @@ const META_MAX = 160;
 const MIN_H2 = 2;
 const MIN_SEMANTIC = 2;
 
+/**
+ * Câu có bắc cầu NHÂN QUẢ giữa hai con số hay không.
+ *
+ * Nhận diện bằng hình dạng, không bằng ngữ nghĩa: một câu chứa HAI con số trở
+ * lên và một liên từ nhân quả nằm GIỮA chúng. Đặt cạnh nhau ("thu nhập
+ * $72,727 và giá nhà $414,200") không khớp vì thiếu liên từ; "và vì thế",
+ * "nên", "dẫn tới" thì khớp.
+ *
+ * Cố ý thô. Nó bỏ sót câu nhân quả không có liên từ ("Thu nhập cao kéo giá
+ * nhà lên"), và điều đó được ghi ra đây thay vì giấu đi: phép kiểm này thu
+ * hẹp bề mặt lỗi, không đóng được nó. Bỏ sót kiểu đó cần người đọc, và nói
+ * thẳng là nó tồn tại thì người đọc mới biết mình còn phải đọc.
+ */
+const CAUSAL_WORDS =
+  /\b(so|therefore|thus|hence|because|since|as a result|which (?:means|is why|explains)|drives?|drove|causes?|caused|leads? to|led to|pushes?|pushed|result(?:s|ed)? in|owing to|due to)\b/i;
+
+export function isCausalBetweenMetrics(sentence: string): boolean {
+  const numbers = [...sentence.matchAll(/\$?\d[\d,.]*\s*(?:%|billion|million|thousand)?/gi)].filter(
+    (m) => m[0].replace(/[^\d]/g, "").length > 0
+  );
+  if (numbers.length < 2) return false;
+  const first = numbers[0];
+  const last = numbers[numbers.length - 1];
+  const between = sentence.slice((first.index ?? 0) + first[0].length, last.index ?? sentence.length);
+  return CAUSAL_WORDS.test(between);
+}
+
 export function runQc(draft: ArticleDraft, ctx: QcContext): QcReport {
   const text = textOf(draft.html);
   const checks: QcCheck[] = [];
@@ -153,6 +180,31 @@ export function runQc(draft: ArticleDraft, ctx: QcContext): QcReport {
 
   // 3. Semantic coverage.
   const hit = ctx.semanticKeywords.filter((k) => text.toLowerCase().includes(k.toLowerCase()));
+  // 3. Nhân quả giữa hai chỉ số.
+  //
+  //    Ráp nhiều chỉ số của một nơi vào một trang mở ra đúng thứ trang một
+  //    chỉ số không có: chỗ để bắc cầu. Bắc cầu là việc CẦN — "thu nhập
+  //    $72,727, giá nhà $414,200" nói được điều mà từng con số riêng không
+  //    nói. Nhưng nó cũng là chỗ tương quan dễ thành nhân quả nhất, và
+  //    no-supply-side-claim không chặn: nó chỉ canh khẳng định về nhà cung
+  //    cấp, còn "thu nhập cao NÊN người ta chuyển tới" thì nói về người dân,
+  //    hoàn toàn lọt.
+  //
+  //    Đặt cạnh nhau thì được. Nói cái này GÂY RA cái kia thì không — dataset
+  //    đo trạng thái, không đo nguyên nhân.
+  const causal = text.split(/(?<=[.!?])\s+/).filter((sentence) => isCausalBetweenMetrics(sentence));
+  if (on("no-metric-causation")) {
+    checks.push({
+      id: "no-metric-causation",
+      label: "Không suy nhân quả giữa hai chỉ số",
+      passed: causal.length === 0,
+      detail:
+        causal.length === 0
+          ? "Không câu nào nói một chỉ số gây ra chỉ số khác."
+          : causal.map((c) => `"${c.trim().slice(0, 120)}"`).join(" | "),
+    });
+  }
+
   if (on("semantic-coverage")) {
     checks.push({
       id: "semantic-coverage",

@@ -111,6 +111,30 @@ const CASES: Case[] = [
     },
   },
   {
+    name: "nói chỉ số này gây ra chỉ số kia -> no-metric-causation",
+    expectFail: "no-metric-causation",
+    draft: () => {
+      const d = goodDraft();
+      d.html = d.html.replace(
+        "<h2>What the figures cover</h2>",
+        "<p>52,675 households moved in, which drives the 56,502 that moved out.</p><h2>What the figures cover</h2>"
+      );
+      return d;
+    },
+  },
+  {
+    name: "đặt hai chỉ số cạnh nhau, KHÔNG nhân quả -> không mục nào trượt",
+    expectFail: null,
+    draft: () => {
+      const d = goodDraft();
+      d.html = d.html.replace(
+        "<h2>What the figures cover</h2>",
+        "<p>Records show 52,675 households moving in and 56,502 moving out across Orange County.</p><h2>What the figures cover</h2>"
+      );
+      return d;
+    },
+  },
+  {
     name: "chỉ 1 từ khoá ngữ nghĩa -> semantic-coverage",
     expectFail: "semantic-coverage",
     draft: () => {

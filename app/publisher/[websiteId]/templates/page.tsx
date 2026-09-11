@@ -4,7 +4,7 @@ import { ArrowLeft, Globe } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db/prisma";
-import { discoverCandidates } from "@/lib/article-candidates/discover";
+import { discoverCandidates, buildCandidate, isIntent } from "@/lib/article-candidates/discover";
 import { renderArticle } from "@/lib/article-template/render";
 import { TemplateEditor } from "@/components/template-editor";
 import { listTemplates } from "./actions";
@@ -36,9 +36,13 @@ export default async function TemplatesPage({ params }: { params: Promise<{ webs
   // bản xem trước không ai bấm. Hệ quả là khối link nội bộ KHÔNG hiện ở đây —
   // ghi rõ bên dưới, vì một khối vắng mặt không giải thích sẽ bị đọc là "tôi
   // đã xoá nó".
+  // Một ứng viên thật cho mỗi intent, dựng fact đầy đủ. Chỉ dựng cho ứng viên
+  // ĐẦU TIÊN của mỗi intent: buildFactSet mất vài giây một ZIP, và bản xem
+  // trước cần một trang thật, không cần 218 trang thật.
   const previews: Record<string, string | null> = {};
   for (const r of rows) {
-    const c = candidates.find((x) => x.intent === r.intent);
+    const summary = candidates[0];
+    const c = summary && isIntent(r.intent) ? await buildCandidate(website.vertical, summary.zip, r.intent) : null;
     if (!c) {
       previews[r.intent] = null;
       continue;

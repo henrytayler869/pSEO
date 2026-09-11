@@ -1,26 +1,23 @@
 import { prisma } from "@/lib/db/prisma";
-import { formatForPrompt } from "@/lib/ai/facts";
+import { buildFactSet } from "@/lib/ai/facts";
 import type { Fact } from "@/lib/ai/facts";
 
 /**
- * Editorial article candidates, derived from collected data.
+ * Ứng viên bài viết: MỘT ĐỊA ĐIỂM, toàn bộ chỉ số đo được ở đó.
  *
- * CROSS-market on purpose. The publisher already renders one page per market
- * from this same dataset, so a per-market article would say the same thing
- * about the same ZIP on the same domain — the near-duplicate shape this
- * project built a differentiation gate to prevent.
+ * Bản trước cắt kho dữ liệu theo CHỈ SỐ — "5 county xếp theo thu nhập" — nên
+ * mỗi bài chỉ còn một con số, và không bài nào nói được hai chỉ số của cùng
+ * một nơi liên hệ với nhau ra sao. Đo 11/9/2026: cả 228/228 ứng viên có đúng
+ * một chỉ số. Đó là listicle biên tập, không phải programmatic SEO, và nó
+ * không phải thứ dataset này dựng ra để phục vụ.
  *
- * What a market page CANNOT say is how markets relate to each other: which
- * ZIP leads a state, how far apart the ends of a county are, which county
- * gained households while its neighbours lost them. That relation is the
- * subject here, and it exists only across rows.
+ * Cắt theo địa điểm thì 13–21 chỉ số của nơi đó cùng nằm trên một trang, và
+ * lớp diễn giải AI mới có đủ thứ để ráp thành một bài hoàn chỉnh.
  *
- * Every candidate carries the exact facts it is allowed to use. Nothing else
- * reaches the prompt, so `validateGeneratedText` applies unchanged — a
- * cross-market article is validated by the same rules as a market page.
+ * Fact dựng bằng buildFactSet — chính hàm trang market đang dùng. Dùng lại
+ * chứ không viết lần hai: nhãn, phạm vi đo và fingerprint phải giống hệt, nếu
+ * không thì cùng một ZIP sẽ có hai định nghĩa "sự thật" trong một hệ thống.
  */
-
-export type CandidateAngle = "zip-ranking" | "county-ranking" | "zip-spread-in-county";
 
 /**
  * What the reader is trying to do when they land on the article.
@@ -79,420 +76,224 @@ const INTENT_BY_METRIC: Record<string, Record<string, Intent>> = {
   },
 };
 
+export function isIntent(v: string | undefined): v is Intent {
+  return v === "move-underway" || v === "choosing-place" || v === "market-context";
+}
+
 export function intentOf(vertical: string, metric: string): Intent {
   return INTENT_BY_METRIC[vertical]?.[metric] ?? "market-context";
 }
 
-/**
- * What a metric is called in a sentence a reader would read.
+/* Bộ từ vựng nhãn chỉ số ĐÃ BỎ khỏi file này.
  *
- * `irs_migration_inflow_households` is a column name. A title carrying it
- * announces that a machine assembled the page, which is the same failure the
- * `seo_leak` content rule catches when copy prints keyword volumes.
- *
- * Unlisted metrics keep their raw name ON PURPOSE rather than being
- * prettified by a rule: a metric nobody has written a phrase for is a metric
- * nobody has decided how to talk about, and that should be visible in the
- * candidate list rather than hidden behind an automatic transformation.
+ * Nó từng có một bảng METRIC_PHRASE riêng, trong khi lib/ai/facts.ts đã có
+ * METRIC_LABELS cho đúng việc đó. Hai bộ từ vựng song song cho cùng một tập
+ * chỉ số chỉ trùng nhau tới lần đầu có người sửa một bên.
  */
-const METRIC_PHRASE: Record<string, string> = {
-  census_moved_from_different_state: "arrivals from another state",
-  census_moved_from_different_county: "arrivals from another county",
-  census_moved_within_county: "moves within the county",
-  census_moved_from_abroad: "arrivals from abroad",
-  census_mobility_rate_pct: "share of residents who moved in the last year",
-  irs_migration_inflow_households: "households moving in",
-  irs_migration_outflow_households: "households moving out",
-  irs_migration_net_households: "net household change",
-  irs_migration_inflow_agi_usd: "income arriving with new households",
-  census_median_home_value_usd: "median home value",
-  census_median_household_income_usd: "median household income",
-  census_homeownership_rate_pct: "homeownership rate",
-  census_median_year_built: "median year built",
-};
 
-function phrase(metric: string): string {
-  return METRIC_PHRASE[metric] ?? metric;
-}
+
+
 
 /**
- * The suggested post title, shaped by what the reader came to do.
+ * Tiêu đề bài, theo việc người đọc đang làm.
  *
- * ENGLISH, because it becomes the WordPress post title on an English site —
- * unlike `why`, which is written for the operator reading this list.
+ * TIẾNG ANH, vì nó thành tiêu đề bài WordPress trên site tiếng Anh — khác với
+ * `why`, viết cho người vận hành đọc danh sách này.
  *
- * The first batch of candidates titled everything the same way, "N places
- * lead on <column name>", and that framing serves a reader who is curious
- * about data. Someone who needs a mover is not. Same figures, same rules,
- * different question answered first.
- *
- * What the framing must NOT do is promise something the dataset cannot
- * support. None of these titles say anything about movers, prices or
- * availability, because nothing here measures those.
+ * Không tiêu đề nào hứa điều dataset không đo: không nói gì về hãng vận
+ * chuyển, giá cước hay lịch trống.
  */
-function titleFor(
-  intent: Intent,
-  angle: CandidateAngle,
-  metric: string,
-  scopeName: string,
-  count: number
-): string {
-  const p = phrase(metric);
-  if (angle === "zip-spread-in-county") {
-    return intent === "move-underway"
-      ? `Moving inside ${scopeName}? ${p} is not the same across it`
-      : `How far apart ${scopeName} ZIP codes are on ${p}`;
-  }
-  const unit = angle === "county-ranking" ? "counties" : "ZIP codes";
+function titleFor(intent: Intent, city: string, state: string): string {
   switch (intent) {
     case "move-underway":
-      return `Moving to ${scopeName}? The ${count} ${unit} taking in the most people`;
+      return `Moving to ${city}, ${state}? What the local figures show`;
     case "choosing-place":
-      return `Choosing where to live in ${scopeName}: ${count} ${unit} compared on ${p}`;
+      return `Living in ${city}, ${state}: homes, income and who owns`;
     default:
-      return `${count} ${unit} in ${scopeName} ranked by ${p}`;
+      return `${city}, ${state} by the numbers`;
   }
 }
 
 export interface ArticleCandidate {
-  /** Stable across runs for the same data, so a candidate already turned into
-   * a post can be recognised rather than offered again. */
+  /** Ổn định giữa các lần chạy cho cùng một nơi, để bài đã viết nhận ra được
+   * mà không bị mời viết lại. */
   id: string;
   vertical: string;
-  angle: CandidateAngle;
-  /** Suggested title. The writer may change it; it exists so a list of
-   * candidates is readable rather than a list of metric names. */
+  zip: string;
+  city: string;
+  state: string;
+  county: string | null;
+  /** Gợi ý tiêu đề, dựng theo intent đang chọn. */
   title: string;
-  /** What makes this one worth writing, stated as the measured fact that
-   * makes it true. Not a sales pitch — if the reason is thin, the candidate
-   * should be skipped, and a reader can only judge that from the number. */
+  /** Vì sao nơi này đáng viết, nói bằng chính con số làm nó đúng. */
   why: string;
-  metric: string;
   intent: Intent;
-  scope: { kind: "STATE" | "COUNTY"; name: string };
-  /** The ONLY numbers this article may contain. */
+  scope: { kind: "ZIP"; name: string };
+  /** TOÀN BỘ số bài này được phép dùng — mọi chỉ số đo được ở nơi này. */
   facts: Fact[];
+  /** Fingerprint của fact set, để dùng lại đoạn AI đã sinh cho cùng dữ liệu
+   * thay vì trả tiền lần nữa. */
+  fingerprint: string;
+}
+
+function slug(s: string): string {
+  return s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
 /**
- * A metric can only rank the geography it is MEASURED at.
+ * Sắp fact theo intent: chỉ số phục vụ ý định đang chọn lên trước.
  *
- * This is the invariant of this whole file. Ranking ZIPs by a COUNTY-level
- * metric produces a list where every ZIP in a county holds the identical
- * value — a "top 5" that is really a tie, presented as a ranking. It would
- * read as a finding and be an artefact of the join.
- *
- * It matters most for exactly the metrics an editor would reach for first:
- * every `irs_migration_*` figure is COUNTY-resolution, and for a moving
- * company those are the interesting ones. So the rule removes the obvious
- * ideas, which is the point — they were obvious because nobody had checked
- * where the numbers are measured.
- *
- * Read from the data rather than declared, same as `metricResolutions` on the
- * contract endpoint: a hard-coded list here would be a second definition that
- * drifts the first time an adapter changes resolution.
+ * Intent KHÔNG lọc bớt fact. Bỏ đi những con số khác chính là quay lại lỗi
+ * một-chỉ-số-một-bài; thứ intent quyết định là bài MỞ ĐẦU bằng gì, không phải
+ * bài được biết những gì.
  */
-async function resolutionOf(metric: string): Promise<string | null> {
-  const rows = await prisma.dataPoint.findMany({
-    where: { metric },
-    select: { resolvedAtResolution: true },
-    distinct: ["resolvedAtResolution"],
-  });
-  // More than one resolution for a metric means the data disagrees with
-  // itself; ranking anything by it would be ranking two different things.
-  return rows.length === 1 ? rows[0].resolvedAtResolution : null;
+export function orderFactsForIntent(vertical: string, intent: Intent, facts: Fact[]): Fact[] {
+  const rank = (f: Fact) => (intentOf(vertical, f.key) === intent ? 0 : 1);
+  return [...facts].sort((a, b) => rank(a) - rank(b));
 }
 
-function factFrom(row: {
-  metric: string;
-  value: number;
-  unit: string;
-  resolvedAtResolution: string;
+/**
+ * Mọi địa điểm có dữ liệu cho ngành này, trừ những nơi site ĐÃ phục vụ.
+ *
+ * `servedPaths` là đường dẫn thật lấy từ sitemap của publisher. Viết thêm một
+ * bài WordPress về đúng ZIP đã có trang market là tự dựng hai trang cạnh tranh
+ * nhau trên cùng domain — đúng hình dạng near-duplicate mà cổng khác biệt hoá
+ * của dự án này sinh ra để chặn. Đo 11/9/2026: 300 địa điểm có dữ liệu, 82
+ * trong số đó đã có trang, còn 218 nơi chưa.
+ *
+ * Bỏ trống `servedPaths` thì KHÔNG loại trừ gì — và đó là lựa chọn ồn: thà
+ * mời viết trùng rồi thấy rõ, còn hơn im lặng bỏ qua nơi lẽ ra nên viết vì
+ * một lần gọi sitemap hỏng.
+ */
+/**
+ * Danh sách ứng viên — MỘT truy vấn gộp, không dựng fact set.
+ *
+ * Đo 11/9/2026: buildFactSet mất 2.6–5.3 giây một ZIP qua tunnel. Dựng sẵn
+ * cho 218 nơi là ~10 phút cho một trang danh sách. Fact chỉ cần lúc VIẾT, nên
+ * nó dựng lúc viết — một lần gọi API tốn nhiều hơn thế nhiều lần.
+ *
+ * `metricCount` đếm số chỉ số KHÁC NHAU từ snapshot OK, nên nó không phụ
+ * thuộc vào việc dedup snapshot: một chỉ số thu 13 lần vẫn là một chỉ số.
+ */
+export interface CandidateSummary {
+  id: string;
+  vertical: string;
   zip: string;
-  city: string | null;
+  city: string;
   state: string;
   county: string | null;
-}): Fact {
-  return {
-    key: `${row.metric}__${row.zip}`,
-    label: `${row.metric} — ${row.city ?? row.zip}, ${row.state}`,
-    value: row.value,
-    display: formatForPrompt(row.value, row.unit),
-    unit: row.unit,
-    scope: row.resolvedAtResolution as Fact["scope"],
-    scopeName: row.resolvedAtResolution === "COUNTY" ? row.county : null,
-  };
+  title: string;
+  why: string;
+  intent: Intent;
+  metricCount: number;
 }
 
-interface Row {
-  metric: string;
-  value: number;
-  unit: string;
-  resolvedAtResolution: string;
-  zip: string;
-  city: string | null;
-  state: string;
-  county: string | null;
-  countyFips: string | null;
-}
+export async function discoverCandidates(
+  vertical: string,
+  opts: { intent?: Intent; servedPaths?: Set<string> } = {}
+): Promise<CandidateSummary[]> {
+  const intent = opts.intent ?? "move-underway";
 
-async function rowsFor(vertical: string, metric: string): Promise<Row[]> {
-  const identities = await prisma.marketIdentity.findMany({
-    where: { vertical },
-    select: { zip: true },
-  });
-  const zips = identities.map((i) => i.zip);
-  if (zips.length === 0) return [];
+  /**
+   * Chỉ những ZIP mà buildFactSet THẬT SỰ dựng được.
+   *
+   * buildFactSet trả null khi thiếu MarketIdentity hoặc khi tổng search volume
+   * bằng 0, nên chỉ đếm DataPoint là chưa đủ: đo 11/9/2026, danh sách mời 218
+   * nơi mà nơi đầu tiên (ZIP 00725) viết không được. Một danh sách mời việc
+   * không làm được thì mỗi lần bấm là một lần thất bại, và lỗi hiện ra ở màn
+   * hình viết bài chứ không ở chỗ sinh ra nó.
+   *
+   * Điều kiện ở đây phải khớp điều kiện trong buildFactSet. Chúng ở hai file,
+   * nên scripts/test-candidates.ts khẳng định mọi ứng viên được liệt kê đều
+   * dựng được — nếu một bên đổi, bộ test đổ.
+   */
+  const identities = (
+    await prisma.marketIdentity.findMany({
+      where: { vertical },
+      select: { zip: true, keywordMetrics: { select: { searchVolume: true } } },
+    })
+  ).filter((i) => i.keywordMetrics.some((k) => k.searchVolume > 0));
+  if (identities.length === 0) return [];
 
   const locations = await prisma.location.findMany({
-    where: { zip: { in: zips } },
-    select: { id: true, zip: true, city: true, state: true, county: true, countyFips: true },
-  });
-  const byId = new Map(locations.map((l) => [l.id, l]));
-
-  /**
-   * ONE point per location — the newest OK snapshot, nothing older.
-   *
-   * Without this the same ZIP appears once per collection run and a "top 5"
-   * becomes the same ZIP five times. Measured before the fix: 13 snapshots per
-   * (metric, location), and every single ZIP ranking was one ZIP repeated,
-   * printed as five rows with identical values.
-   *
-   * What made it dangerous is that it looked RIGHT: five rows, sorted, a real
-   * number in each. Nothing about the output said "this is one row copied".
-   *
-   * OK only, same as the dataset API: a SUSPECT snapshot is the collector
-   * saying do not trust what this source just returned, and a ranking is
-   * exactly where an untrusted figure becomes a claim about who leads.
-   */
-  const snapshots = await prisma.dataSnapshot.findMany({
-    where: { status: "OK" },
-    select: { id: true, version: true },
-    orderBy: { version: "desc" },
-  });
-  const versionOf = new Map(snapshots.map((s) => [s.id, s.version]));
-
-  const points = await prisma.dataPoint.findMany({
-    where: { metric, locationId: { in: locations.map((l) => l.id) }, snapshotId: { in: snapshots.map((s) => s.id) } },
-    select: { metric: true, value: true, unit: true, resolvedAtResolution: true, locationId: true, snapshotId: true },
+    where: { zip: { in: identities.map((i) => i.zip) } },
+    select: { id: true, zip: true, city: true, state: true, county: true },
+    orderBy: { zip: "asc" },
   });
 
-  const newest = new Map<string, (typeof points)[number]>();
-  for (const p of points) {
-    const seen = newest.get(p.locationId);
-    if (!seen || (versionOf.get(p.snapshotId) ?? -1) > (versionOf.get(seen.snapshotId) ?? -1)) {
-      newest.set(p.locationId, p);
-    }
-  }
-
-  return [...newest.values()].flatMap((p) => {
-    const loc = byId.get(p.locationId);
-    if (!loc) return [];
-    return [
-      {
-        metric: p.metric,
-        value: p.value,
-        unit: p.unit,
-        resolvedAtResolution: p.resolvedAtResolution,
-        zip: loc.zip,
-        city: loc.city,
-        state: loc.state,
-        county: loc.county,
-        countyFips: loc.countyFips,
-      },
-    ];
-  });
-}
-
-/** How many entries a ranking article lists. Five is the smallest number that
- * still shows a shape rather than a winner; a "top 3" reads as an anecdote. */
-const RANK_SIZE = 5;
-
-/**
- * Rankings of ZIPs within a state, for ZIP-measured metrics only.
- *
- * Skipped entirely when the metric is not ZIP-resolution — see `resolutionOf`.
- */
-async function zipRankings(vertical: string, metric: string): Promise<ArticleCandidate[]> {
-  if ((await resolutionOf(metric)) !== "ZIP") return [];
-
-  const rows = await rowsFor(vertical, metric);
-  const byState = new Map<string, Row[]>();
-  for (const r of rows) {
-    const list = byState.get(r.state) ?? [];
-    list.push(r);
-    byState.set(r.state, list);
-  }
-
-  const out: ArticleCandidate[] = [];
-  for (const [state, list] of byState) {
-    // Fewer than RANK_SIZE+1 leaves nothing to rank against — a "top 5 of 5"
-    // is a list, not a ranking, and the article would be describing the whole
-    // set while implying a selection was made.
-    if (list.length <= RANK_SIZE) continue;
-
-    const sorted = [...list].sort((a, b) => b.value - a.value);
-    const top = sorted.slice(0, RANK_SIZE);
-    const spread = top[0].value / (sorted[sorted.length - 1].value || 1);
-
-    out.push({
-      id: `${vertical}:zip-ranking:${metric}:${state}`,
-      vertical,
-      angle: "zip-ranking",
-      title: titleFor(intentOf(vertical, metric), "zip-ranking", metric, state, RANK_SIZE),
-      why:
-        `${phrase(metric)} — ${list.length} ZIP có số liệu; cao nhất ` +
-        `${formatForPrompt(top[0].value, top[0].unit)} (${top[0].city ?? top[0].zip}), ` +
-        `gấp ${spread.toFixed(1)} lần thấp nhất.`,
-      metric,
-      intent: intentOf(vertical, metric),
-      scope: { kind: "STATE", name: state },
-      facts: top.map(factFrom),
-    });
-  }
-  return out;
-}
-
-/**
- * Rankings of COUNTIES by a COUNTY-measured metric.
- *
- * The mirror of the rule above, and the reason the interesting metrics are
- * not lost: `irs_migration_net_households` cannot rank ZIPs, but it ranks
- * counties correctly, because that is where it is measured.
- *
- * One row per county, not per ZIP. Taking the county figure from every ZIP in
- * it and summing would multiply it by the number of ZIPs — the 13.07x error
- * the contract endpoint warns about.
- */
-async function countyRankings(vertical: string, metric: string): Promise<ArticleCandidate[]> {
-  if ((await resolutionOf(metric)) !== "COUNTY") return [];
-
-  const rows = await rowsFor(vertical, metric);
-  const perCounty = new Map<string, Row>();
-  for (const r of rows) {
-    if (!r.countyFips || !r.county) continue;
-    if (!perCounty.has(r.countyFips)) perCounty.set(r.countyFips, r);
-  }
-
-  const byState = new Map<string, Row[]>();
-  for (const r of perCounty.values()) {
-    const list = byState.get(r.state) ?? [];
-    list.push(r);
-    byState.set(r.state, list);
-  }
-
-  const out: ArticleCandidate[] = [];
-  for (const [state, list] of byState) {
-    if (list.length <= RANK_SIZE) continue;
-    const sorted = [...list].sort((a, b) => b.value - a.value);
-    const top = sorted.slice(0, RANK_SIZE);
-
-    out.push({
-      id: `${vertical}:county-ranking:${metric}:${state}`,
-      vertical,
-      angle: "county-ranking",
-      title: titleFor(intentOf(vertical, metric), "county-ranking", metric, state, RANK_SIZE),
-      why:
-        `${phrase(metric)} — ${list.length} county có số liệu; cao nhất ` +
-        `${formatForPrompt(top[0].value, top[0].unit)} (${top[0].county}). ` +
-        `Đo ở cấp COUNTY nên xếp hạng county là đúng đơn vị.`,
-      metric,
-      intent: intentOf(vertical, metric),
-      scope: { kind: "STATE", name: state },
-      facts: top.map((r) => ({ ...factFrom(r), label: `${metric} — ${r.county}, ${r.state}` })),
-    });
-  }
-  return out;
-}
-
-/**
- * How far apart the ends of a single county are, on a ZIP-measured metric.
- *
- * Only meaningful for ZIP metrics: on a COUNTY metric every ZIP in the county
- * holds the same number and the spread is exactly 1.0 by construction — an
- * article reporting "no variation" about a figure that cannot vary.
- */
-async function zipSpreadInCounty(vertical: string, metric: string): Promise<ArticleCandidate[]> {
-  if ((await resolutionOf(metric)) !== "ZIP") return [];
-
-  const rows = await rowsFor(vertical, metric);
-  const byCounty = new Map<string, Row[]>();
-  for (const r of rows) {
-    if (!r.countyFips) continue;
-    const list = byCounty.get(r.countyFips) ?? [];
-    list.push(r);
-    byCounty.set(r.countyFips, list);
-  }
-
-  const out: ArticleCandidate[] = [];
-  for (const list of byCounty.values()) {
-    if (list.length < 4) continue;
-    const sorted = [...list].sort((a, b) => b.value - a.value);
-    const hi = sorted[0];
-    const lo = sorted[sorted.length - 1];
-    if (lo.value <= 0) continue;
-    const ratio = hi.value / lo.value;
-    // Under 1.5x there is no story: the article would be "these places are
-    // similar", which is true of most places and therefore not news.
-    if (ratio < 1.5) continue;
-
-    out.push({
-      id: `${vertical}:zip-spread:${metric}:${hi.countyFips}`,
-      vertical,
-      angle: "zip-spread-in-county",
-      title: titleFor(intentOf(vertical, metric), "zip-spread-in-county", metric, hi.county ?? hi.countyFips!, list.length),
-      why:
-        `${list.length} ZIP trong cùng một county, cao nhất ${formatForPrompt(hi.value, hi.unit)} ` +
-        `(${hi.city ?? hi.zip}) so với ${formatForPrompt(lo.value, lo.unit)} (${lo.city ?? lo.zip}).`,
-      metric,
-      intent: intentOf(vertical, metric),
-      scope: { kind: "COUNTY", name: hi.county ?? hi.countyFips! },
-      facts: [hi, lo].map(factFrom),
-    });
-  }
-  return out;
-}
-
-export async function discoverCandidates(vertical: string): Promise<ArticleCandidate[]> {
-  /**
-   * Only metrics from sources tagged for this trade.
-   *
-   * The tag already existed on DataSource and this file ignored it, so the
-   * first batch offered a moving company 24 candidates about solar radiation,
-   * 12 about heating degree days and 4 about disaster declarations. Those are
-   * real numbers measured at real ZIPs — and nothing a person hiring a mover
-   * would read.
-   *
-   * Read from `relevantVerticals` rather than a list here: the tag is where
-   * that decision already lives, and a second copy would drift the first time
-   * a source is retagged.
-   */
+  // Chỉ nguồn đã gắn cho ngành này. Không có bước lọc này thì một công ty
+  // chuyển nhà nhận được ứng viên đầy số liệu bức xạ mặt trời — lỗi đã xảy ra
+  // một lần với lớp ứng viên trước.
   const sources = await prisma.dataSource.findMany({
     where: { isActive: true, relevantVerticals: { has: vertical } },
     select: { id: true },
   });
-  if (sources.length === 0) return [];
-
-  const snapshotIds = (
-    await prisma.dataSnapshot.findMany({
-      where: { sourceId: { in: sources.map((s) => s.id) }, status: "OK" },
-      select: { id: true },
-    })
-  ).map((s) => s.id);
-  if (snapshotIds.length === 0) return [];
-
-  const metrics = await prisma.dataPoint.findMany({
-    where: { snapshotId: { in: snapshotIds } },
-    select: { metric: true },
-    distinct: ["metric"],
-    orderBy: { metric: "asc" },
+  const snapshots = await prisma.dataSnapshot.findMany({
+    where: { sourceId: { in: sources.map((s) => s.id) }, status: "OK" },
+    select: { id: true },
   });
 
-  const all: ArticleCandidate[] = [];
-  for (const { metric } of metrics) {
-    all.push(...(await zipRankings(vertical, metric)));
-    all.push(...(await countyRankings(vertical, metric)));
-    all.push(...(await zipSpreadInCounty(vertical, metric)));
+  const points = await prisma.dataPoint.findMany({
+    where: { locationId: { in: locations.map((l) => l.id) }, snapshotId: { in: snapshots.map((s) => s.id) } },
+    select: { locationId: true, metric: true },
+    distinct: ["locationId", "metric"],
+  });
+  const countByLocation = new Map<string, number>();
+  for (const p of points) countByLocation.set(p.locationId, (countByLocation.get(p.locationId) ?? 0) + 1);
+
+  const out: CandidateSummary[] = [];
+  for (const loc of locations) {
+    if (!loc.city) continue;
+    if (opts.servedPaths?.has(`/${vertical}/${loc.state.toLowerCase()}/${slug(loc.city)}`)) continue;
+    const n = countByLocation.get(loc.id) ?? 0;
+    if (n === 0) continue;
+    out.push({
+      id: `${vertical}:${loc.zip}`,
+      vertical,
+      zip: loc.zip,
+      city: loc.city,
+      state: loc.state,
+      county: loc.county,
+      title: titleFor(intent, loc.city, loc.state),
+      why: `${n} chỉ số đo được ở ${loc.city}, ${loc.state} (ZIP ${loc.zip}).`,
+      intent,
+      metricCount: n,
+    });
   }
-  return all.sort((a, b) => a.id.localeCompare(b.id));
+  return out;
+}
+
+/**
+ * Ứng viên đầy đủ, dựng lúc viết. Trả null khi ZIP đó không dựng được fact
+ * set — im lặng bỏ qua ở đây thì bài sẽ được viết với 0 con số.
+ */
+export async function buildCandidate(
+  vertical: string,
+  zip: string,
+  intent: Intent
+): Promise<ArticleCandidate | null> {
+  const loc = await prisma.location.findFirst({
+    where: { zip },
+    select: { zip: true, city: true, state: true, county: true },
+  });
+  if (!loc?.city) return null;
+
+  const set = await buildFactSet(vertical, zip);
+  if (!set || set.facts.length === 0) return null;
+
+  const facts = orderFactsForIntent(vertical, intent, set.facts);
+  return {
+    id: `${vertical}:${zip}`,
+    vertical,
+    zip,
+    city: loc.city,
+    state: loc.state,
+    county: loc.county,
+    title: titleFor(intent, loc.city, loc.state),
+    why: `${facts.length} chỉ số đo được ở ${loc.city}, ${loc.state}.`,
+    intent,
+    scope: { kind: "ZIP", name: `${loc.city}, ${loc.state}` },
+    facts,
+    fingerprint: set.fingerprint,
+  };
 }
