@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "db:tunnel": "./scripts/db-tunnel.sh",
-    "db:which": "tsx scripts/db-which.ts"
+    "db:which": "tsx scripts/db-which.ts",
+    "predev": "./scripts/db-tunnel.sh --ensure || true",
+    "db:tunnel:stop": "kill $(cat ${TMPDIR:-/tmp}/pseo-db-tunnel.pid 2>/dev/null) 2>/dev/null; pkill -f '55433:127.0.0.1:5433' || true"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
