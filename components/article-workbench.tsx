@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Play, Square, Send, Check, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,7 +21,6 @@ export interface CandidateRow {
   title: string;
   why: string;
   intent: string;
-  angle: string;
   factCount: number;
   written: boolean;
 }
@@ -134,6 +134,7 @@ function QcChecks({ report }: { report: ArticleRow["qcReport"] }) {
 
 export function ArticleWorkbench({
   websiteId,
+  intent,
   candidates,
   articles,
   job,
@@ -141,19 +142,18 @@ export function ArticleWorkbench({
   budget,
 }: {
   websiteId: string;
+  intent: string;
   candidates: CandidateRow[];
   articles: ArticleRow[];
   job: JobRow | null;
   totalSpendUsd: number;
   budget: { capUsd: number; spentUsd: number; remainingUsd: number };
 }) {
-  const [intent, setIntent] = useState("move-underway");
   const [oneState, oneAction, writingOne] = useActionState(writeOneArticleAction, EMPTY);
   const [batchState, batchAction, startingBatch] = useActionState(startArticleBatchAction, EMPTY);
   const [pubState, pubAction, publishing] = useActionState(publishArticleAction, EMPTY);
 
-  const shown = candidates.filter((c) => c.intent === intent);
-  const pending = shown.filter((c) => !c.written);
+  const pending = candidates.filter((c) => !c.written);
   const articleCost = articles.reduce((s, a) => s + a.costUsd, 0);
 
   return (
@@ -164,22 +164,18 @@ export function ArticleWorkbench({
       <div className="flex flex-col gap-2">
         <span className="text-xs font-medium">Ý định người đọc</span>
         <div className="flex flex-wrap gap-2">
-          {INTENTS.map((i) => {
-            const n = candidates.filter((c) => c.intent === i.id && !c.written).length;
-            return (
-              <button
-                key={i.id}
-                type="button"
-                onClick={() => setIntent(i.id)}
-                title={i.hint}
-                className={`rounded-md border px-3 py-1.5 text-left text-sm ${
-                  intent === i.id ? "border-foreground bg-muted" : "hover:bg-muted/50"
-                }`}
-              >
-                {i.label} <span className="text-muted-foreground">({n})</span>
-              </button>
-            );
-          })}
+          {INTENTS.map((i) => (
+            <Link
+              key={i.id}
+              href={`/publisher/${websiteId}/articles?intent=${i.id}`}
+              title={i.hint}
+              className={`rounded-md border px-3 py-1.5 text-left text-sm ${
+                intent === i.id ? "border-foreground bg-muted" : "hover:bg-muted/50"
+              }`}
+            >
+              {i.label}
+            </Link>
+          ))}
         </div>
         <p className="text-xs text-muted-foreground">{INTENTS.find((i) => i.id === intent)?.hint}</p>
       </div>
@@ -234,9 +230,7 @@ export function ArticleWorkbench({
             <div className="min-w-0 flex-1">
               <div className="text-sm font-medium">{c.title}</div>
               <div className="text-xs text-muted-foreground">{c.why}</div>
-              <div className="pt-1 text-xs text-muted-foreground">
-                {c.angle} · {c.factCount} fact được phép dùng
-              </div>
+              <div className="pt-1 text-xs text-muted-foreground">{c.factCount} chỉ số được phép dùng</div>
             </div>
             <form action={oneAction}>
               <input type="hidden" name="websiteId" value={websiteId} />

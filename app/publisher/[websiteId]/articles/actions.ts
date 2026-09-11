@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
-import { discoverCandidates, type ArticleCandidate, type Intent } from "@/lib/article-candidates/discover";
+import { buildCandidate, discoverCandidates, type ArticleCandidate, type Intent } from "@/lib/article-candidates/discover";
 import { buildQcContext, writeArticle } from "@/lib/article-qc/write-loop";
 import { createPost, type WpCredentials } from "@/lib/wordpress/posts";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
@@ -16,16 +16,19 @@ export interface ArticleActionResult {
   message: string;
 }
 
+/** FactSet cho bộ kiểm chống bịa số. Lấy thẳng danh tính nơi đó từ ứng viên —
+ * bản trước để zip rỗng và nhét tên phạm vi vào state, nên mọi phép kiểm dựa
+ * vào ZIP đều so với chuỗi rỗng. */
 function factSetFor(c: ArticleCandidate): FactSet {
   return {
     vertical: c.vertical,
-    zip: "",
-    city: null,
-    state: c.scope.kind === "STATE" ? c.scope.name : "",
-    county: c.scope.kind === "COUNTY" ? c.scope.name : null,
+    zip: c.zip,
+    city: c.city,
+    state: c.state,
+    county: c.county,
     mainKeyword: null,
     countyKeyword: null,
-    fingerprint: c.id,
+    fingerprint: c.fingerprint,
     facts: c.facts,
   };
 }
@@ -93,7 +96,11 @@ async function writeOne(
       candidateId: candidate.id,
       vertical: candidate.vertical,
       intent: candidate.intent,
-      angle: candidate.angle,
+      // Cột angle vẫn bắt buộc trong schema và giờ chỉ còn một giá trị. Giữ
+      // nguyên cột thay vì migrate: nó ghi lại HÌNH DẠNG bài, và những bài
+      // viết bằng lớp ứng viên cũ vẫn mang nhãn cũ của chúng — xoá cột là xoá
+      // câu trả lời cho "bài này được dựng kiểu gì".
+      angle: "location-profile",
       title: candidate.title,
       content: "",
       qcReport: { passed: false, checks: [] },
@@ -162,12 +169,19 @@ export async function writeOneArticleAction(
     const candidate = candidates.find((c) => c.id === candidateId);
     if (!candidate) return { ok: false, message: "Ứng viên không còn trong danh sách — dữ liệu có thể đã đổi." };
 
+    // Fact dựng ở ĐÂY, không dựng khi liệt kê: 2.6–5.3 giây một ZIP, và một
+    // trang danh sách không được phép trả giá đó cho 218 nơi.
+    const full = await buildCandidate(website.vertical, candidate.zip, candidate.intent);
+    if (!full) {
+      return { ok: false, message: `Không dựng được bộ số liệu cho ZIP ${candidate.zip} — thiếu dữ liệu, không viết bài rỗng.` };
+    }
+
     const [ctx, template, sourceNames] = await Promise.all([
       buildQcContext(websiteId, website.vertical, website.url),
       templateFor(websiteId, candidate.intent),
       sourceNamesFor(website.vertical),
     ]);
-    const r = await writeOne(websiteId, candidate, ctx, new Map([[candidate.intent, template]]), sourceNames);
+    const r = await writeOne(websiteId, full, ctx, new Map([[full.intent, template]]), sourceNames);
     revalidatePath(`/publisher/${websiteId}/articles`);
     return { ok: r.ok, message: `${r.title} — ${r.detail}` };
   } catch (err) {
@@ -226,7 +240,16 @@ export async function startArticleBatchAction(
           if (fresh?.status !== "running") return; // dừng bởi người dùng
           await prisma.articleJob.update({ where: { id: job.id }, data: { currentTitle: candidate.title } });
 
-          const r = await writeOne(websiteId, candidate, ctx, templates, sourceNames);
+          const full = await buildCandidate(website.vertical, candidate.zip, intent);
+          if (!full) {
+            // Thiếu dữ liệu cho ZIP này thì BỎ QUA và đếm là trượt, không
+            // dừng cả lô: một nơi thiếu số liệu không nói gì về 200 nơi còn
+            // lại, và dừng hết vì một nơi là biến một lỗ hổng dữ liệu thành
+            // một lô hỏng.
+            await prisma.articleJob.update({ where: { id: job.id }, data: { failed: { increment: 1 } } });
+            continue;
+          }
+          const r = await writeOne(websiteId, full, ctx, templates, sourceNames);
           if (r.capReached) {
             // Trần ngân sách DỪNG cả lô, không đánh dấu phần còn lại là
             // "trượt". Hai chuyện khác nhau: một bài trượt QC là bài viết
