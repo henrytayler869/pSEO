@@ -25,11 +25,11 @@
 
 set -euo pipefail
 
-VPS_HOST="${VPS_HOST:-46.225.145.196}"
-VPS_USER="${VPS_USER:-deploy}"
-LOCAL_PORT="${LOCAL_PORT:-55433}"
-REMOTE_PORT="${REMOTE_PORT:-5433}"
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+# shellcheck source=scripts/tunnel-config.sh
+source "$(dirname "${BASH_SOURCE[0]}")/tunnel-config.sh"
+VPS_USER="$DB_SSH_USER"
+LOCAL_PORT="$DB_LOCAL_PORT"
+REMOTE_PORT="$DB_REMOTE_PORT"
 
 # --ensure: dùng cho predev. Idempotent — tunnel đang sống thì không làm gì,
 # chưa sống thì dựng ở nền rồi trả về. Chế độ mặc định (không cờ) vẫn chạy
@@ -42,6 +42,26 @@ PID_FILE="${TMPDIR:-/tmp}/pseo-db-tunnel.pid"
 tunnel_alive() {
   lsof -ti:"$LOCAL_PORT" >/dev/null 2>&1
 }
+
+# --agent: chế độ dành cho launchd.
+#
+# Khác chế độ tiền cảnh ở một điểm quyết định: nó KHÔNG tranh cổng. Nếu đã có
+# tunnel khác đang phục vụ (thường là cái predev mở), nó đứng chờ và kiểm lại
+# mỗi 15 giây. Không có bước này thì ssh gặp ExitOnForwardFailure sẽ thoát
+# ngay, KeepAlive dựng lại sau 10 giây, và hai bên quay vòng vô ích suốt thời
+# gian máy bật — một "tự động" tốn pin mà không làm gì.
+#
+# Khi tunnel kia biến mất, vòng lặp này tiếp quản trong vòng 15 giây.
+if [[ "${1:-}" == "--agent" ]]; then
+  while true; do
+    if db_answers; then
+      sleep 15
+      continue
+    fi
+    connect_loop
+    sleep 4
+  done
+fi
 
 if tunnel_alive; then
   if [ "$ENSURE" = "yes" ]; then
@@ -92,6 +112,12 @@ echo
 # Vòng lặp dừng hẳn khi ssh thoát 0 (người dùng Ctrl-C) và chỉ nối lại khi ssh
 # chết vì lý do khác. Nối lại vô điều kiện sẽ biến "khoá SSH sai" thành một
 # vòng lặp vô hạn nói cùng một lỗi mãi mãi.
+# Hỏi thẳng Postgres, không tin vào việc cổng đang mở: cổng mở chưa chắc
+# tunnel còn sống — ssh có thể đã chết mà một tiến trình khác giữ cổng.
+db_answers() {
+  nc -z -G 2 127.0.0.1 "$LOCAL_PORT" >/dev/null 2>&1
+}
+
 connect_loop() {
   local delay=2
   while true; do

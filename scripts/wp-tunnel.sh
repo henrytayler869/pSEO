@@ -31,11 +31,11 @@
 
 set -euo pipefail
 
-VPS_HOST="${VPS_HOST:-46.225.145.196}"
-VPS_USER="${VPS_USER:-root}"
-LOCAL_PORT="${LOCAL_PORT:-8090}"
-REMOTE_PORT="${REMOTE_PORT:-8090}"
-SSH_KEY="${SSH_KEY:-$HOME/.ssh/id_ed25519}"
+# shellcheck source=scripts/tunnel-config.sh
+source "$(dirname "${BASH_SOURCE[0]}")/tunnel-config.sh"
+VPS_USER="$WP_SSH_USER"
+LOCAL_PORT="$WP_LOCAL_PORT"
+REMOTE_PORT="$WP_REMOTE_PORT"
 
 tunnel_alive() {
   lsof -ti:"$LOCAL_PORT" >/dev/null 2>&1
@@ -70,6 +70,26 @@ connect_loop() {
     sleep 4
   done
 }
+
+# --agent: chế độ dành cho launchd.
+#
+# Khác chế độ tiền cảnh ở một điểm quyết định: nó KHÔNG tranh cổng. Nếu đã có
+# tunnel khác đang phục vụ (thường là cái predev mở), nó đứng chờ và kiểm lại
+# mỗi 15 giây. Không có bước này thì ssh gặp ExitOnForwardFailure sẽ thoát
+# ngay, KeepAlive dựng lại sau 10 giây, và hai bên quay vòng vô ích suốt thời
+# gian máy bật — một "tự động" tốn pin mà không làm gì.
+#
+# Khi tunnel kia biến mất, vòng lặp này tiếp quản trong vòng 15 giây.
+if [[ "${1:-}" == "--agent" ]]; then
+  while true; do
+    if wp_answers; then
+      sleep 15
+      continue
+    fi
+    connect_loop
+    sleep 4
+  done
+fi
 
 if [[ "${1:-}" == "--ensure" ]]; then
   if tunnel_alive; then
