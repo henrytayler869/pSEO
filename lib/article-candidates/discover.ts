@@ -152,7 +152,8 @@ export interface CandidateSummary {
   county: string | null;
   title: string;
   why: string;
-  intent: Intent;
+  /** Ý định ĐO được cho thị trường này. null = chưa đo, không phải "không có". */
+  intent: Intent | null;
   metricCount: number;
 }
 
@@ -160,7 +161,6 @@ export async function discoverCandidates(
   vertical: string,
   opts: { intent?: Intent; servedPaths?: Set<string> } = {}
 ): Promise<CandidateSummary[]> {
-  const intent = opts.intent ?? "move-underway";
 
   /**
    * Chỉ những ZIP mà buildFactSet THẬT SỰ dựng được.
@@ -175,13 +175,34 @@ export async function discoverCandidates(
    * nên scripts/test-candidates.ts khẳng định mọi ứng viên được liệt kê đều
    * dựng được — nếu một bên đổi, bộ test đổ.
    */
-  const identities = (
-    await prisma.marketIdentity.findMany({
-      where: { vertical },
-      select: { zip: true, keywordMetrics: { select: { searchVolume: true } } },
-    })
-  ).filter((i) => i.keywordMetrics.some((k) => k.searchVolume > 0));
+  const rawIdentities = await prisma.marketIdentity.findMany({
+    where: { vertical },
+    select: {
+      zip: true,
+      keywordMetrics: { select: { searchVolume: true, mainIntent: true }, orderBy: { fetchedAt: "desc" } },
+    },
+  });
+  const identities = rawIdentities.filter((i) => i.keywordMetrics.some((k) => k.searchVolume > 0));
   if (identities.length === 0) return [];
+
+  /**
+   * Ý định của TỪNG thị trường, từ từ khoá của chính nó.
+   *
+   * Đo 11/9/2026: 198 từ khoá của moving-services ra 133 commercial, 41
+   * informational, 13 navigational, 11 transactional — và khác nhau không nằm
+   * ở mẫu câu. Cùng "movers {city}": chicago là informational, pflugerville
+   * là transactional. Dùng một nhãn cho cả ngành là áp nhãn của đa số lên 65
+   * thị trường không thuộc nhóm đó.
+   *
+   * Lấy từ khoá có volume cao nhất làm đại diện: đó là truy vấn thị trường
+   * này thật sự sống bằng, không phải trung bình của những truy vấn không ai
+   * gõ.
+   */
+  const intentByZip = new Map<string, string | null>();
+  for (const i of identities) {
+    const lead = [...i.keywordMetrics].sort((a2, b2) => b2.searchVolume - a2.searchVolume)[0];
+    intentByZip.set(i.zip, lead?.mainIntent ?? null);
+  }
 
   const locations = await prisma.location.findMany({
     where: { zip: { in: identities.map((i) => i.zip) } },
@@ -215,6 +236,12 @@ export async function discoverCandidates(
     if (opts.servedPaths?.has(`/${vertical}/${loc.state.toLowerCase()}/${slug(loc.city)}`)) continue;
     const n = countByLocation.get(loc.id) ?? 0;
     if (n === 0) continue;
+
+    // Ý định của thị trường này. Chưa đo thì để null và VẪN liệt kê — bỏ nó
+    // đi sẽ giấu mất một nơi có đủ dữ liệu chỉ vì khâu đo ý định chưa chạy,
+    // và danh sách ngắn đi mà không nói vì sao là thứ không ai phát hiện.
+    const marketIntent = intentByZip.get(loc.zip) ?? null;
+    if (opts.intent && marketIntent !== opts.intent) continue;
     out.push({
       id: `${vertical}:${loc.zip}`,
       vertical,
@@ -222,9 +249,11 @@ export async function discoverCandidates(
       city: loc.city,
       state: loc.state,
       county: loc.county,
-      title: titleFor(intent, loc.city, loc.state),
-      why: `${n} chỉ số đo được ở ${loc.city}, ${loc.state} (ZIP ${loc.zip}).`,
-      intent,
+      title: titleFor(marketIntent ?? "", loc.city, loc.state),
+      why:
+        `${n} chỉ số đo được ở ${loc.city}, ${loc.state} (ZIP ${loc.zip})` +
+        (marketIntent ? `, từ khoá ở đây là ý định "${marketIntent}".` : ", CHƯA đo ý định từ khoá."),
+      intent: marketIntent,
       metricCount: n,
     });
   }

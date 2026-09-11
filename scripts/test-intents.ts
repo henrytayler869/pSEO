@@ -55,6 +55,18 @@ const CASES: { name: string; rows: IntentRow[]; check: (out: ReturnType<typeof s
     },
   },
   {
+    name: "ví dụ KHÔNG lặp lại cùng một chuỗi",
+    rows: [
+      { keyword: "moving companies new york", searchVolume: 10, mainIntent: "commercial", foreignIntent: [] },
+      { keyword: "moving companies new york", searchVolume: 10, mainIntent: "commercial", foreignIntent: [] },
+      { keyword: "movers dallas", searchVolume: 10, mainIntent: "commercial", foreignIntent: [] },
+    ],
+    check: (out) => {
+      const ex = out[0]?.examples ?? [];
+      return new Set(ex).size === ex.length ? null : `ví dụ lặp: ${ex.join(", ")}`;
+    },
+  },
+  {
     name: "ví dụ là từ khoá THẬT, để người đọc tự phán đoán",
     rows: [{ keyword: "moving services prices", searchVolume: 2900, mainIntent: "commercial", foreignIntent: [] }],
     check: (out) => (out[0]?.examples[0] === "moving services prices" ? null : "không kèm từ khoá thật làm ví dụ"),

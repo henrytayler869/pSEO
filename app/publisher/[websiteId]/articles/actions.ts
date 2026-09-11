@@ -171,6 +171,12 @@ export async function writeOneArticleAction(
 
     // Fact dựng ở ĐÂY, không dựng khi liệt kê: 2.6–5.3 giây một ZIP, và một
     // trang danh sách không được phép trả giá đó cho 218 nơi.
+    // Chưa đo ý định thì KHÔNG viết. Đoán một ý định để chọn template là
+    // quay lại đúng việc vừa bỏ đi: một nhãn không có nguồn, quyết định nội
+    // dung 174 trang.
+    if (!candidate.intent) {
+      return { ok: false, message: `Chưa đo ý định từ khoá cho ZIP ${candidate.zip} — chạy đo ý định trước, đừng viết theo phỏng đoán.` };
+    }
     const full = await buildCandidate(website.vertical, candidate.zip, candidate.intent);
     if (!full) {
       return { ok: false, message: `Không dựng được bộ số liệu cho ZIP ${candidate.zip} — thiếu dữ liệu, không viết bài rỗng.` };
@@ -240,7 +246,9 @@ export async function startArticleBatchAction(
           if (fresh?.status !== "running") return; // dừng bởi người dùng
           await prisma.articleJob.update({ where: { id: job.id }, data: { currentTitle: candidate.title } });
 
-          const full = await buildCandidate(website.vertical, candidate.zip, intent);
+          const full = candidate.intent
+            ? await buildCandidate(website.vertical, candidate.zip, candidate.intent)
+            : null;
           if (!full) {
             // Thiếu dữ liệu cho ZIP này thì BỎ QUA và đếm là trượt, không
             // dừng cả lô: một nơi thiếu số liệu không nói gì về 200 nơi còn
