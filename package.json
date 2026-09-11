@@ -9,8 +9,10 @@
     "lint": "eslint",
     "db:tunnel": "./scripts/db-tunnel.sh",
     "db:which": "tsx scripts/db-which.ts",
-    "predev": "./scripts/db-tunnel.sh --ensure || true",
-    "db:tunnel:stop": "kill $(cat ${TMPDIR:-/tmp}/pseo-db-tunnel.pid 2>/dev/null) 2>/dev/null; pkill -f '55433:127.0.0.1:5433' || true"
+    "predev": "./scripts/db-tunnel.sh --ensure || true; ./scripts/wp-tunnel.sh --ensure || true",
+    "db:tunnel:stop": "kill $(cat ${TMPDIR:-/tmp}/pseo-db-tunnel.pid 2>/dev/null) 2>/dev/null; pkill -f '55433:127.0.0.1:5433' || true",
+    "wp:tunnel": "./scripts/wp-tunnel.sh",
+    "wp:tunnel:stop": "pkill -f '8090:127.0.0.1:8090' || true"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
