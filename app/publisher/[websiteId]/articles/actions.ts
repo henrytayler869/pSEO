@@ -6,6 +6,7 @@ import { discoverCandidates, type ArticleCandidate, type Intent } from "@/lib/ar
 import { buildQcContext, writeArticle } from "@/lib/article-qc/write-loop";
 import { createPost, type WpCredentials } from "@/lib/wordpress/posts";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
+import { SpendCapExceededError, getTotalSpendUsd, getAiConfig } from "@/lib/ai/anthropic";
 import type { FactSet } from "@/lib/ai/facts";
 
 export interface ArticleActionResult {
@@ -45,7 +46,7 @@ async function writeOne(
   websiteId: string,
   candidate: ArticleCandidate,
   ctxBase: Awaited<ReturnType<typeof buildQcContext>>
-): Promise<{ ok: boolean; title: string; detail: string }> {
+): Promise<{ ok: boolean; title: string; detail: string; capReached?: boolean }> {
   const existing = await prisma.article.findUnique({
     where: { websiteId_candidateId: { websiteId, candidateId: candidate.id } },
   });
@@ -94,11 +95,17 @@ async function writeOne(
     };
   } catch (err) {
     const detail = err instanceof Error ? err.message : "lỗi không rõ";
-    await prisma.article.update({
-      where: { id: row.id },
-      data: { status: "failed", qcReport: { passed: false, checks: [{ id: "error", label: "Lỗi", passed: false, detail }] } },
-    });
-    return { ok: false, title: candidate.title, detail };
+    const capReached = err instanceof SpendCapExceededError;
+    // Chạm trần thì XOÁ hàng vừa tạo thay vì đánh dấu trượt: hàng đó không
+    // mang nội dung nào và không có báo cáo QC nào, nên để lại nó sẽ chiếm
+    // chỗ ứng viên và chặn lần chạy sau viết đúng bài đó.
+    if (capReached) await prisma.article.delete({ where: { id: row.id } });
+    else
+      await prisma.article.update({
+        where: { id: row.id },
+        data: { status: "failed", qcReport: { passed: false, checks: [{ id: "error", label: "Lỗi", passed: false, detail }] } },
+      });
+    return { ok: false, title: candidate.title, detail, capReached };
   }
 }
 
@@ -171,6 +178,18 @@ export async function startArticleBatchAction(
           await prisma.articleJob.update({ where: { id: job.id }, data: { currentTitle: candidate.title } });
 
           const r = await writeOne(websiteId, candidate, ctx);
+          if (r.capReached) {
+            // Trần ngân sách DỪNG cả lô, không đánh dấu phần còn lại là
+            // "trượt". Hai chuyện khác nhau: một bài trượt QC là bài viết
+            // chưa đạt; một bài không được viết vì hết ngân sách thì chưa ai
+            // đánh giá nó. Gộp chúng lại sẽ tạo ra một danh sách bài "hỏng"
+            // mà thật ra chưa từng được thử.
+            await prisma.articleJob.update({
+              where: { id: job.id },
+              data: { status: "stopped", currentTitle: null, error: r.detail },
+            });
+            return;
+          }
           await prisma.articleJob.update({
             where: { id: job.id },
             data: r.ok ? { done: { increment: 1 } } : { done: { increment: 1 }, failed: { increment: 1 } },
@@ -189,6 +208,14 @@ export async function startArticleBatchAction(
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Thất bại." };
   }
+}
+
+/** Ngân sách còn lại, để trang nói trước thay vì để người dùng phát hiện lúc
+ * chạm trần. Trần là toàn hệ thống, không phải theo publisher — nên con số này
+ * là thứ MỌI publisher chia nhau, và nói rõ điều đó quan trọng hơn con số. */
+export async function getBudgetAction(): Promise<{ capUsd: number; spentUsd: number; remainingUsd: number }> {
+  const [cfg, spent] = await Promise.all([getAiConfig(), getTotalSpendUsd()]);
+  return { capUsd: cfg.spendCapUsd, spentUsd: spent, remainingUsd: Math.max(0, cfg.spendCapUsd - spent) };
 }
 
 export async function stopArticleBatchAction(

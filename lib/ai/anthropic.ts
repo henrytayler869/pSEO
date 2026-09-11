@@ -74,11 +74,15 @@ export interface GenerationResult {
  * One Claude call, with the spend ceiling enforced BEFORE the request goes
  * out — a cap checked afterwards is not a cap.
  *
- * IMPORTANT — not yet exercised against a live call: no ANTHROPIC_API_KEY
- * exists in this environment yet. Written against the official
- * @anthropic-ai/sdk (v0.123) and Anthropic's current documented Messages
- * API. Same "built from real docs, unverified until a credential exists"
- * status the NOAA/EIA/Cloudflare adapters shipped with.
+ * Written against the official @anthropic-ai/sdk (v0.123) and Anthropic's
+ * documented Messages API.
+ *
+ * This block used to say "not yet exercised against a live call: no
+ * ANTHROPIC_API_KEY exists in this environment yet". That stopped being true
+ * and nobody updated it — measured 2026-09-11: the key is configured, 305
+ * calls have been billed, $5.3967 spent. The comment was read as current
+ * state and reported as fact, which is what a stale comment does: it does not
+ * look stale, it looks like knowledge.
  *
  * Adaptive thinking is on by default even though it costs tokens. The task
  * is constraint-heavy — every invented number gets the whole generation

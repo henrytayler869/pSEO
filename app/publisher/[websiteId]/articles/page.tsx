@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db/prisma";
 import { discoverCandidates } from "@/lib/article-candidates/discover";
 import { ArticleWorkbench } from "@/components/article-workbench";
+import { getBudgetAction } from "./actions";
 
 export default async function ArticlesPage({ params }: { params: Promise<{ websiteId: string }> }) {
   const { websiteId } = await params;
@@ -18,6 +19,8 @@ export default async function ArticlesPage({ params }: { params: Promise<{ websi
     prisma.articleJob.findFirst({ where: { websiteId }, orderBy: { startedAt: "desc" } }),
     prisma.aiSpend.aggregate({ where: { websiteId }, _sum: { costUsd: true } }),
   ]);
+
+  const budget = await getBudgetAction();
 
   const written = new Set(articles.map((a) => a.candidateId));
 
@@ -73,6 +76,7 @@ export default async function ArticlesPage({ params }: { params: Promise<{ websi
             }))}
             job={job ? { id: job.id, status: job.status, total: job.total, done: job.done, failed: job.failed, currentTitle: job.currentTitle, error: job.error } : null}
             totalSpendUsd={spend._sum.costUsd ?? 0}
+            budget={budget}
           />
         </CardContent>
       </Card>

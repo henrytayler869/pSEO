@@ -138,12 +138,14 @@ export function ArticleWorkbench({
   articles,
   job,
   totalSpendUsd,
+  budget,
 }: {
   websiteId: string;
   candidates: CandidateRow[];
   articles: ArticleRow[];
   job: JobRow | null;
   totalSpendUsd: number;
+  budget: { capUsd: number; spentUsd: number; remainingUsd: number };
 }) {
   const [intent, setIntent] = useState("move-underway");
   const [oneState, oneAction, writingOne] = useActionState(writeOneArticleAction, EMPTY);
@@ -190,6 +192,17 @@ export function ArticleWorkbench({
           ({articles.length} bài, ${articleCost.toFixed(4)} tính theo bài
           {articles.length > 0 && ` — trung bình $${(articleCost / articles.length).toFixed(4)}/bài`})
         </span>
+      </div>
+
+      {/* Ngân sách nói TRƯỚC. Trần là toàn hệ thống chứ không theo publisher,
+          nên nó là thứ mọi publisher chia nhau — và chạm trần giữa lô sẽ DỪNG
+          lô chứ không đánh dấu phần còn lại là trượt. */}
+      <div
+        className={`rounded-lg border p-3 text-sm ${budget.remainingUsd < 0.5 ? "border-red-300 bg-red-50 text-red-800" : ""}`}
+      >
+        Ngân sách AI toàn hệ thống: còn <span className="font-medium">${budget.remainingUsd.toFixed(4)}</span> trên trần
+        ${budget.capUsd.toFixed(2)} (đã tiêu ${budget.spentUsd.toFixed(4)}).
+        {budget.remainingUsd < 0.5 && " Sắp hết — lô đang chạy sẽ dừng khi chạm trần, phần chưa viết KHÔNG bị đánh dấu trượt."}
       </div>
 
       {job && <Progress job={job} />}
