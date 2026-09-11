@@ -14,7 +14,7 @@
 import { discoverCandidates, buildCandidate } from "../lib/article-candidates/discover";
 import { buildQcContext } from "../lib/article-qc/write-loop";
 import { runQc } from "../lib/article-qc/checklist";
-import { renderArticle, assertTemplate } from "../lib/article-template/render";
+import { renderArticle, assertTemplate, templateProse, placeholders } from "../lib/article-template/render";
 import { DEFAULT_TEMPLATES } from "../lib/article-template/defaults";
 import { fetchSitemapCounts } from "../lib/sitemap/count";
 import { prisma } from "../lib/db/prisma";
@@ -79,7 +79,12 @@ async function main() {
     // Tiêu đề trùng tích luỹ TRONG lô, không chỉ so với bài đã có: viết 48
     // bài cùng tên trong một lô thì bài thứ hai trở đi đều trượt, và chạy khô
     // phải thấy điều đó y như lúc chạy thật.
-    const report = runQc(draft, { ...ctx, factSet: { ...full, mainKeyword: null, countyKeyword: null } , existingTitles: [...seenTitles] });
+    const report = runQc(draft, {
+      ...ctx,
+      factSet: { ...full, mainKeyword: null, countyKeyword: null },
+      existingTitles: [...seenTitles],
+      differentiation: { aiParagraph: PLACEHOLDER, templateProse: templateProse(DEFAULT_TEMPLATES[c.intent], placeholders(full)) },
+    });
     seenTitles.add(draft.title);
 
     const failed = report.checks.filter((x) => !x.passed);

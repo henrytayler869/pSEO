@@ -95,6 +95,29 @@ export function assertTemplate(t: ArticleTemplateShape): string | null {
   return null;
 }
 
+/**
+ * Chỉ phần VĂN XUÔI của template, đã thay biến.
+ *
+ * Dùng để so với đoạn model viết. Cố ý BỎ bảng số liệu, ghi chú nguồn và khối
+ * link: nhãn chỉ số nằm trong bảng ("people who moved in from another state
+ * last year" — 9 chữ), và model BẮT BUỘC phải gọi tên được các con số nó đang
+ * nói tới. Đưa bảng vào phép so sẽ phạt nó vì làm đúng việc.
+ *
+ * Thứ đáng bắt là model nói lại LỜI KHUYÊN hay CÂU DẪN mà template đã nói —
+ * và những câu đó chỉ nằm trong heading, paragraph và cta.
+ */
+export function templateProse(t: ArticleTemplateShape, vars: Record<string, string>): string {
+  const parts: string[] = [];
+  for (const b of t.blocks) {
+    if (b.type === "heading" || b.type === "paragraph") parts.push(fill(b.text, vars));
+    else if (b.type === "cta") {
+      if (b.heading) parts.push(b.heading);
+      parts.push(b.html.replace(/<[^>]+>/g, " "));
+    }
+  }
+  return parts.join(" ");
+}
+
 export function renderArticle(params: {
   template: ArticleTemplateShape;
   candidate: ArticleCandidate;

@@ -41,6 +41,7 @@ export const BUILTIN_RULES: BuiltinRuleRow[] = [
   { checkId: "facts-verified", kind: "content", label: "Mọi con số đến từ dataset", why: "Một con số không có trong fact set là con số model tự nghĩ ra.", params: {} },
   { checkId: "no-supply-side-claim", kind: "content", label: "Không treo nhận định về nhà cung cấp lên số liệu", why: "Không nguồn nào ở đây đo giá cước hay mức bận của hãng.", params: {} },
   { checkId: "no-metric-causation", kind: "content", label: "Không suy nhân quả giữa hai chỉ số", why: "Dataset đo trạng thái, không đo nguyên nhân. Đặt hai con số cạnh nhau thì được; nói cái này gây ra cái kia thì không.", params: {} },
+  { checkId: "no-template-echo", kind: "content", label: "Đoạn AI không lặp lời template", why: "Đoạn AI là thứ duy nhất làm các trang khác nhau. Nó lặp lại phần giống nhau thì 174 trang mất luôn chỗ khác biệt.", params: { maxSharedWords: 6 } },
   { checkId: "semantic-coverage", kind: "content", label: "Đủ từ khoá ngữ nghĩa", why: "Bài không chạm từ khoá nào của ngành thì không ai tìm thấy.", params: { min: 2 } },
   { checkId: "internal-links", kind: "technical", label: "Có link nội bộ, và mọi link tới trang có thật", why: "Một link là nội bộ vì nó ĐÁP, không phải vì nó bắt đầu bằng gạch chéo.", params: { min: 1 } },
   { checkId: "reserved-term-anchors", kind: "content", label: "Term dành riêng chỉ neo về trang pillar của nó", why: "Anchor lấn term sẽ cạnh tranh với chính trang pillar.", params: {} },

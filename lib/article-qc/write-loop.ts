@@ -6,7 +6,7 @@ import { buildContentRules } from "@/lib/content-rules/registry";
 import { fetchSitemapCounts } from "@/lib/sitemap/count";
 import type { ArticleCandidate } from "@/lib/article-candidates/discover";
 import type { FactSet } from "@/lib/ai/facts";
-import { renderArticle, assertTemplate, type ArticleTemplateShape } from "@/lib/article-template/render";
+import { renderArticle, assertTemplate, templateProse, placeholders, type ArticleTemplateShape } from "@/lib/article-template/render";
 
 /**
  * Generate, check, rewrite, until every check passes or the budget runs out.
@@ -222,7 +222,10 @@ export async function writeArticle(params: {
     // guards against is the one already measured on the live site: 368
     // violating sentences, none of them from a model, all of them in template
     // text that no content check ever looked at.
-    const report = runQc(draft, params.ctx);
+    const report = runQc(draft, {
+      ...params.ctx,
+      differentiation: { aiParagraph: paragraph, templateProse: templateProse(params.template, placeholders(params.candidate)) },
+    });
     if (report.passed) return { draft, report, attempts: attempt, costUsd, paragraph };
     previous = { paragraph, report };
   }
