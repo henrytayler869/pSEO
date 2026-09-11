@@ -51,8 +51,12 @@ const ALL_ON: ActiveRules = {
   custom: [],
 };
 
+const TEMPLATE_PROSE =
+  "These numbers describe where people move, not what a move costs. Get a written, itemised estimate from two or three companies and confirm whether it is binding before you book.";
+
 const CTX: QcContext = {
   rules: ALL_ON,
+  differentiation: { aiParagraph: "IRS records show the county gained and lost households last year.", templateProse: TEMPLATE_PROSE },
   factSet: FACTS,
   semanticKeywords: ["moving services near me", "moving help", "moving services prices"],
   reservedTerms: [{ term: "local moving services", ownedBy: "/local-moving" }],
@@ -133,6 +137,36 @@ const CASES: Case[] = [
       );
       return d;
     },
+  },
+  {
+    name: "đoạn AI lặp nguyên văn lời template -> no-template-echo",
+    expectFail: "no-template-echo",
+    draft: goodDraft,
+    ctx: {
+      differentiation: {
+        aiParagraph:
+          "The county gained households last year. Get a written, itemised estimate from two or three companies before you decide.",
+        templateProse: TEMPLATE_PROSE,
+      },
+    },
+  },
+  {
+    name: "đoạn AI diễn đạt lại cùng ý, KHÔNG lặp chữ -> không trượt",
+    expectFail: null,
+    draft: goodDraft,
+    ctx: {
+      differentiation: {
+        aiParagraph:
+          "Ask each company to put its price in writing, and check whether that price can change on moving day.",
+        templateProse: TEMPLATE_PROSE,
+      },
+    },
+  },
+  {
+    name: "thiếu đầu vào so sánh -> TRƯỢT, không bỏ qua",
+    expectFail: "no-template-echo",
+    draft: goodDraft,
+    ctx: { differentiation: undefined },
   },
   {
     name: "chỉ 1 từ khoá ngữ nghĩa -> semantic-coverage",

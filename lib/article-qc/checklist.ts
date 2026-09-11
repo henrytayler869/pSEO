@@ -20,6 +20,12 @@ import { compilePattern, type ActiveRules } from "./rules";
  */
 
 export interface QcContext {
+  /** Đoạn model viết và văn xuôi template, để so trùng lặp.
+   *
+   * Không suy ra được từ `draft`: trang đã ráp trộn cả hai vào một chuỗi HTML,
+   * và tách ngược ra là đoán. Nơi gọi biết chắc phần nào của ai, nên nó
+   * truyền vào. */
+  differentiation?: { aiParagraph: string; templateProse: string };
   /**
    * Which checks are on, and with what thresholds. Read from QcRule.
    *
@@ -141,6 +147,38 @@ export function isCausalBetweenMetrics(sentence: string): boolean {
   return CAUSAL_WORDS.test(between);
 }
 
+/**
+ * Cụm chữ dài nhất mà đoạn model viết lặp lại nguyên văn từ văn xuôi template.
+ *
+ * So bằng n-gram trên chữ đã chuẩn hoá (thường hoá, bỏ dấu câu), không so
+ * bằng ngữ nghĩa: một phép kiểm đoán ý sẽ sai theo cách không ai tranh luận
+ * được, còn "sáu chữ liên tiếp giống hệt" thì mở ra đọc là thấy.
+ *
+ * Trả về null khi không có cụm nào đủ dài.
+ */
+export function longestSharedPhrase(aiText: string, templateText: string, n: number): string | null {
+  const norm = (t: string) =>
+    t.toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/).filter(Boolean);
+  const ai = norm(aiText);
+  const tpl = norm(templateText);
+  if (ai.length < n || tpl.length < n) return null;
+
+  const seen = new Set<string>();
+  for (let i = 0; i + n <= tpl.length; i++) seen.add(tpl.slice(i, i + n).join(" "));
+
+  // Trả cụm DÀI NHẤT chứ không phải cụm đầu tiên: người đọc báo cáo cần thấy
+  // mức độ lặp, và "sáu chữ" với "mười bốn chữ" là hai vấn đề khác nhau.
+  let best: string | null = null;
+  for (let i = 0; i + n <= ai.length; i++) {
+    if (!seen.has(ai.slice(i, i + n).join(" "))) continue;
+    let end = i + n;
+    while (end < ai.length && seen.has(ai.slice(end - n + 1, end + 1).join(" "))) end++;
+    const phrase = ai.slice(i, end).join(" ");
+    if (!best || phrase.length > best.length) best = phrase;
+  }
+  return best;
+}
+
 export function runQc(draft: ArticleDraft, ctx: QcContext): QcReport {
   const text = textOf(draft.html);
   const checks: QcCheck[] = [];
@@ -203,6 +241,39 @@ export function runQc(draft: ArticleDraft, ctx: QcContext): QcReport {
           ? "Không câu nào nói một chỉ số gây ra chỉ số khác."
           : causal.map((c) => `"${c.trim().slice(0, 120)}"`).join(" | "),
     });
+  }
+
+  // 4. Đoạn AI nói lại lời template.
+  //
+  //    Model KHÔNG thấy chữ template (nó chỉ nhận số liệu và từ khoá), nên nó
+  //    có thể viết lại đúng lời khuyên template đã nói mà không hề biết. Chín
+  //    phép kiểm trước không mục nào bắt được: not-duplicate-title chỉ so
+  //    tiêu đề GIỮA CÁC BÀI.
+  //
+  //    Hệ quả nếu để lọt: đoạn duy nhất có nhiệm vụ làm 174 trang khác nhau
+  //    lại đi lặp phần giống nhau ở cả 174 trang.
+  if (on("no-template-echo")) {
+    const d = ctx.differentiation;
+    if (!d) {
+      // Thiếu đầu vào thì TRƯỢT, không bỏ qua. Luật đang bật mà không kiểm
+      // được là luật không kêu được — và một mục vắng mặt trong báo cáo đọc
+      // thành "không có vấn đề".
+      checks.push({
+        id: "no-template-echo",
+        label: "Đoạn AI không lặp lời template",
+        passed: false,
+        detail: "Không nhận được đoạn AI và văn xuôi template để so — bật luật này thì nơi gọi phải truyền ctx.differentiation.",
+      });
+    } else {
+      const n = p("no-template-echo", "maxSharedWords", 6);
+      const shared = longestSharedPhrase(d.aiParagraph, d.templateProse, n);
+      checks.push({
+        id: "no-template-echo",
+        label: `Đoạn AI không lặp ${n} chữ liên tiếp của template`,
+        passed: shared === null,
+        detail: shared === null ? "Không có cụm nào lặp lại." : `Lặp nguyên văn: "${shared}"`,
+      });
+    }
   }
 
   if (on("semantic-coverage")) {
