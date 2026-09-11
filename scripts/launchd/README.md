@@ -1,34 +1,48 @@
-# Mở tunnel tự động khi đăng nhập máy (macOS)
-
-`npm run dev` đã tự mở cả hai tunnel ở bước `predev`, và mỗi tunnel tự nối
-lại khi đứt (đo 11/9/2026: giết ssh bằng -9, tunnel WordPress sống lại sau 14
-giây). Cái còn thiếu là lúc **máy vừa khởi động và bạn chưa chạy lệnh nào** —
-lúc đó chưa có tiến trình nào để tự lành.
-
-Hai file `.plist` ở thư mục này giao việc đó cho `launchd`: nó chạy tunnel
-ngay khi bạn đăng nhập, và `KeepAlive` dựng lại nếu cả script chết.
-
-## Nạp
+# Tunnel tự mở khi đăng nhập máy (macOS)
 
 ```bash
-cp scripts/launchd/*.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pseo.db-tunnel.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.pseo.wp-tunnel.plist
+./scripts/install-tunnel-agents.sh              # sinh + nạp
+./scripts/install-tunnel-agents.sh --uninstall  # gỡ hẳn
 ```
 
-## Gỡ
+## Vì sao agent gọi thẳng `ssh` chứ không gọi script trong repo
+
+Đo 11/9/2026: bản đầu trỏ plist vào `scripts/wp-tunnel.sh`. Job thoát **mã
+126**, log ghi `Operation not permitted` khi chỉ mới `getcwd`. Nguyên nhân là
+TCC của macOS — launchd không được vào `~/Documents`, nơi repo đang nằm.
+
+Cách đi vòng là cấp Full Disk Access cho `bash`, tức mở một quyền rộng hơn
+nhiều so với việc cần làm. Thay vào đó agent chạy `/usr/bin/ssh` với tham số
+sinh sẵn; `ssh` chỉ đọc khoá ở `~/.ssh`, nơi TCC không chặn.
+
+Tham số sinh **từ `scripts/tunnel-config.sh`**, không gõ lại trong plist: có
+hai bản là có một bản sai vào lần đầu ai đó đổi VPS — và bản sai sẽ là bản
+chạy nền, thứ không ai nhìn.
+
+## Đã đo
+
+Giết cả hai tiến trình ssh: launchd dựng lại nhanh tới mức phép kiểm ngay sau
+đó đã thấy cả DB lẫn WordPress thông. Không gõ lệnh nào.
+
+## Quan hệ với `predev`
+
+`npm run dev` vẫn chạy `--ensure` cho cả hai tunnel, nhưng khi agent đang giữ
+cổng thì `--ensure` thấy dịch vụ trả lời và **không làm gì**. Hai lớp không
+tranh nhau.
+
+## Dừng
+
+`npm run wp:tunnel:stop` giết tiến trình ssh, nhưng **launchd sẽ dựng lại
+trong ~10 giây**. Muốn tắt hẳn thì gỡ agent:
 
 ```bash
-launchctl bootout gui/$(id -u)/com.pseo.db-tunnel
-launchctl bootout gui/$(id -u)/com.pseo.wp-tunnel
-rm ~/Library/LaunchAgents/com.pseo.*-tunnel.plist
+./scripts/install-tunnel-agents.sh --uninstall
 ```
 
-## Cần biết trước khi nạp
+## Cần biết
 
-- Đây là **cấu hình thường trú** trên máy bạn: tunnel mở mỗi lần đăng nhập,
-  kể cả khi bạn không định làm việc với dự án này. Tunnel DB nối thẳng vào
-  **database production**.
-- Đường dẫn repo được ghi cứng trong plist (`/Users/user/Documents/pseo-control-panel`). Đổi chỗ repo thì phải
-  sinh lại file.
-- Log: `/tmp/pseo-db-tunnel.log` và `/tmp/pseo-wp-tunnel.log`.
+- Đây là **cấu hình thường trú**: tunnel mở mỗi lần đăng nhập, kể cả khi bạn
+  không làm việc với dự án này. Tunnel DB nối thẳng vào **database
+  production**.
+- Đổi chỗ repo hay đổi VPS thì chạy lại trình cài để sinh plist mới.
+- Log: `/tmp/pseo-com.pseo.db-tunnel.log`, `/tmp/pseo-com.pseo.wp-tunnel.log`.
