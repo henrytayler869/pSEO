@@ -182,11 +182,32 @@ model SemanticKeyword {
   keywordDifficulty Float
   cpc               Float
 
+  /// Ý định tìm kiếm DataForSEO đo cho chính truy vấn này:
+  /// "informational" | "navigational" | "commercial" | "transactional".
+  ///
+  /// ĐO, không phải khai báo. Trước đây pipeline tự đặt ra ba "ý định người
+  /// đọc" trong code và dựng cả giao diện trên chúng, trong khi endpoint đang
+  /// gọi (dataforseo_labs related_keywords) vẫn trả sẵn trường này ở mỗi item
+  /// và adapter vứt đi ở bước .map(). Đo 11/9/2026 cho moving-services:
+  /// 8 commercial, 1 informational — tức bộ chọn ba nút ngang nhau mô tả sai
+  /// hẳn hình dạng thật của ngành.
+  ///
+  /// Null nghĩa là lần lấy đó chưa có trường này, KHÔNG phải "không có ý
+  /// định". Hai chuyện khác nhau, và gộp lại sẽ biến một lần fetch cũ thành
+  /// một khẳng định về ngành.
+  mainIntent String?
+
+  /// Các ý định phụ cùng xuất hiện cho truy vấn đó. "moving help" là
+  /// informational nhưng mang thêm navigational và commercial — một từ khoá
+  /// phục vụ nhiều ý định cùng lúc, và ép nó vào một nhãn là bỏ mất điều đó.
+  foreignIntent String[]
+
   source    String // "dataforseo_related_keywords"
   fetchedAt DateTime @default(now())
 
   @@index([vertical])
   @@index([keyword])
+  @@index([vertical, mainIntent])
 }
 
 // ---------------------------------------------------------------------------

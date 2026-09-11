@@ -45,11 +45,22 @@ export interface JobRow {
   error: string | null;
 }
 
-const INTENTS = [
-  { id: "move-underway", label: "Đang chuyển nhà", hint: "ý định thương mại cao nhất — số liệu đo chính việc chuyển nhà" },
-  { id: "choosing-place", label: "Đang chọn nơi ở", hint: "giá nhà, thu nhập, tỷ lệ sở hữu" },
-  { id: "market-context", label: "Bối cảnh thị trường", hint: "nền, ý định thấp nhất" },
-];
+/** Ý định KHÔNG còn khai báo ở đây.
+ *
+ * Chỗ này từng có ba mục move-underway / choosing-place / market-context do
+ * tôi nghĩ ra. Giờ danh sách đến từ nghiên cứu từ khoá của ngành và đi vào qua
+ * prop `intents`, kèm số từ khoá và volume để người bấm tự thấy nhóm nào thật
+ * sự lớn.
+ */
+export interface NicheIntentRow {
+  id: string;
+  label: string;
+  keywordCount: number;
+  totalVolume: number;
+  alsoServes: number;
+  examples: string[];
+}
+
 
 function Result({ state }: { state: ArticleActionResult }) {
   if (!state.message) return null;
@@ -135,6 +146,7 @@ function QcChecks({ report }: { report: ArticleRow["qcReport"] }) {
 export function ArticleWorkbench({
   websiteId,
   intent,
+  intents,
   candidates,
   articles,
   job,
@@ -142,7 +154,8 @@ export function ArticleWorkbench({
   budget,
 }: {
   websiteId: string;
-  intent: string;
+  intent: string | null;
+  intents: NicheIntentRow[];
   candidates: CandidateRow[];
   articles: ArticleRow[];
   job: JobRow | null;
@@ -158,26 +171,42 @@ export function ArticleWorkbench({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Ý định chọn TRƯỚC, không phải lọc sau. Cùng một dataset phục vụ ba
-          người đọc khác nhau, và lô ứng viên đầu tiên phục vụ nhầm người vì
-          câu hỏi này không được hỏi. */}
+      {/* Ý định đến từ NGHIÊN CỨU TỪ KHOÁ, và hiện kèm bằng chứng.
+          Một nhóm có 1 từ khoá phải TRÔNG như 1 từ khoá — bày ba nút cỡ bằng
+          nhau là nói rằng ba nhóm người đọc lớn ngang nhau, điều dữ liệu
+          không nói. */}
       <div className="flex flex-col gap-2">
-        <span className="text-xs font-medium">Ý định người đọc</span>
-        <div className="flex flex-wrap gap-2">
-          {INTENTS.map((i) => (
-            <Link
-              key={i.id}
-              href={`/publisher/${websiteId}/articles?intent=${i.id}`}
-              title={i.hint}
-              className={`rounded-md border px-3 py-1.5 text-left text-sm ${
-                intent === i.id ? "border-foreground bg-muted" : "hover:bg-muted/50"
-              }`}
-            >
-              {i.label}
-            </Link>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground">{INTENTS.find((i) => i.id === intent)?.hint}</p>
+        <span className="text-xs font-medium">Ý định tìm kiếm của ngành (đo từ từ khoá, không khai báo)</span>
+        {intents.length === 0 ? (
+          <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+            Chưa đo được ý định nào cho ngành này — bộ từ khoá chưa có trường ý định. Chạy lại phần lấy từ khoá liên
+            quan để điền. Đây KHÔNG phải &ldquo;ngành này không có ý định&rdquo;: chưa ai đo thì chưa biết, và đoán một
+            giá trị mặc định ở đây sẽ là một kết luận không có nguồn.
+          </p>
+        ) : (
+          <>
+            <div className="flex flex-wrap gap-2">
+              {intents.map((i) => (
+                <Link
+                  key={i.id}
+                  href={`/publisher/${websiteId}/articles?intent=${i.id}`}
+                  className={`rounded-md border px-3 py-1.5 text-left text-sm ${
+                    intent === i.id ? "border-foreground bg-muted" : "hover:bg-muted/50"
+                  }`}
+                >
+                  <span className="block">{i.label}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {i.keywordCount} từ khoá · {i.totalVolume.toLocaleString("vi-VN")} lượt tìm/tháng
+                    {i.alsoServes > 0 && ` · +${i.alsoServes} phục vụ kèm`}
+                  </span>
+                </Link>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {intents.find((i) => i.id === intent)?.examples.join(" · ")}
+            </p>
+          </>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm">
@@ -203,9 +232,11 @@ export function ArticleWorkbench({
 
       {job && <Progress job={job} />}
 
+      {/* Chưa đo được ý định thì KHÔNG cho chạy lô. Viết 174 bài theo một ý
+          định đoán bừa là trả tiền thật cho một giả định chưa ai kiểm. */}
       <form action={batchAction} className="flex flex-wrap items-center gap-2">
         <input type="hidden" name="websiteId" value={websiteId} />
-        <input type="hidden" name="intent" value={intent} />
+        <input type="hidden" name="intent" value={intent ?? ""} />
         <label className="text-sm">
           Số bài:
           <input
@@ -217,7 +248,7 @@ export function ArticleWorkbench({
             className="ml-2 w-20 rounded-md border px-2 py-1 text-sm"
           />
         </label>
-        <Button type="submit" size="sm" disabled={startingBatch || pending.length === 0}>
+        <Button type="submit" size="sm" disabled={startingBatch || pending.length === 0 || intent === null}>
           <Play className="h-3.5 w-3.5" /> Tạo hàng loạt (nền)
         </Button>
         <Result state={batchState} />

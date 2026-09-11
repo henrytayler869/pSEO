@@ -20,69 +20,24 @@ import type { Fact } from "@/lib/ai/facts";
  */
 
 /**
- * What the reader is trying to do when they land on the article.
+ * Ý định giờ là một CHUỖI ĐO ĐƯỢC, không phải một union tự nghĩ ra.
  *
- * Added after the first batch of candidates came out data-first — "5 ZIPs in
- * AZ lead on homeownership" — which attracts someone curious about numbers,
- * not someone who needs a mover. The dataset was being asked "what is
- * interesting here" when the business question is "who is about to move".
+ * Ở đây từng có `type Intent = "move-underway" | "choosing-place" |
+ * "market-context"` cùng bảng INTENT_BY_METRIC gán mỗi chỉ số cho một trong
+ * ba. Cả hai do tôi khai báo, và chính comment cạnh chúng đã ghi "DECLARED,
+ * not measured" trong khi giao diện vẫn dựng trên chúng như trên dữ liệu.
  *
- *   move-underway    the reader is moving, or has just moved. Served by the
- *                    figures that measure MOVING itself.
- *   choosing-place   the reader is deciding between places. Served by the
- *                    figures that describe what a place costs and who owns
- *                    there.
- *   market-context   background. Real, and lowest intent — this is what the
- *                    first batch was, all of it.
+ * Ý định thật đến từ nghiên cứu từ khoá của ngành — lib/keywords/intents.ts
+ * đọc search_intent_info mà DataForSEO đã trả sẵn. Đo 11/9/2026 cho
+ * moving-services: commercial (5 từ khoá, 40,100 volume) và informational
+ * (1 từ khoá, 12,100). Không phải ba, và không cỡ bằng nhau.
  *
- * Intent changes WHICH figures are eligible and how the piece is framed. It
- * does NOT license supply-side claims: no dataset here measures what movers
- * charge or how busy they are, and `rendered-supply-side-bridge` still
- * rejects a figure hung on a claim about companies. Commercial intent is
- * served by directing the READER — which the content rules explicitly permit
- * — not by asserting about suppliers.
+ * Ý định quyết định TIÊU ĐỀ và TEMPLATE — hai thứ nói về truy vấn trang này
+ * nhắm tới. Nó KHÔNG còn quyết định thứ tự chỉ số: không có phép đo nào nối
+ * "median home value" với "commercial", nên sắp xếp theo nó là khai báo trá
+ * hình một lần nữa.
  */
-export type Intent = "move-underway" | "choosing-place" | "market-context";
-
-/**
- * Which intent a metric can honestly serve, for THIS trade.
- *
- * DECLARED, not measured — unlike resolution, which is read from the data.
- * There is no column saying "this number speaks to someone mid-move"; that is
- * a judgement about what the figure means to a reader, and it is written here
- * so it can be argued with rather than left implicit in a prompt.
- *
- * Keyed by trade because the same metric serves different intents elsewhere:
- * `census_moved_from_different_state` is the whole subject for a mover and
- * mere background for a roofer. Anything unlisted falls to market-context,
- * which is the honest default — the figure is real, it just does not speak to
- * a person with a job to hire for.
- */
-const INTENT_BY_METRIC: Record<string, Record<string, Intent>> = {
-  "moving-services": {
-    census_moved_from_different_state: "move-underway",
-    census_moved_from_different_county: "move-underway",
-    census_moved_within_county: "move-underway",
-    census_moved_from_abroad: "move-underway",
-    census_mobility_rate_pct: "move-underway",
-    irs_migration_inflow_households: "move-underway",
-    irs_migration_outflow_households: "move-underway",
-    irs_migration_net_households: "move-underway",
-
-    census_median_home_value_usd: "choosing-place",
-    census_median_household_income_usd: "choosing-place",
-    census_homeownership_rate_pct: "choosing-place",
-    irs_migration_inflow_agi_usd: "choosing-place",
-  },
-};
-
-export function isIntent(v: string | undefined): v is Intent {
-  return v === "move-underway" || v === "choosing-place" || v === "market-context";
-}
-
-export function intentOf(vertical: string, metric: string): Intent {
-  return INTENT_BY_METRIC[vertical]?.[metric] ?? "market-context";
-}
+export type Intent = string;
 
 /* Bộ từ vựng nhãn chỉ số ĐÃ BỎ khỏi file này.
  *
@@ -104,11 +59,18 @@ export function intentOf(vertical: string, metric: string): Intent {
  * chuyển, giá cước hay lịch trống.
  */
 function titleFor(intent: Intent, city: string, state: string): string {
+  // Khoá theo lớp ý định DataForSEO đo, không theo ba nhãn tự nghĩ ra. Ý định
+  // ngành không có thì rơi về câu trung tính — một tiêu đề hứa ít hơn thì
+  // thừa, một tiêu đề hứa nhiều hơn dữ liệu thì sai.
   switch (intent) {
-    case "move-underway":
-      return `Moving to ${city}, ${state}? What the local figures show`;
-    case "choosing-place":
-      return `Living in ${city}, ${state}: homes, income and who owns`;
+    case "commercial":
+      return `Moving services in ${city}, ${state}: the local figures before you compare quotes`;
+    case "transactional":
+      return `Booking a move in ${city}, ${state}? What the local figures show`;
+    case "informational":
+      return `Moving in ${city}, ${state}: what the published figures say`;
+    case "navigational":
+      return `${city}, ${state} moving figures`;
     default:
       return `${city}, ${state} by the numbers`;
   }
@@ -147,8 +109,14 @@ function slug(s: string): string {
  * một-chỉ-số-một-bài; thứ intent quyết định là bài MỞ ĐẦU bằng gì, không phải
  * bài được biết những gì.
  */
-export function orderFactsForIntent(vertical: string, intent: Intent, facts: Fact[]): Fact[] {
-  const rank = (f: Fact) => (intentOf(vertical, f.key) === intent ? 0 : 1);
+export function orderFactsByScope(facts: Fact[]): Fact[] {
+  // Chỉ số đo TẠI ZIP lên trước, county/state xuống sau.
+  //
+  // Đây là thứ tự ĐO ĐƯỢC: trang nói về một ZIP, nên con số đo đúng ở ZIP đó
+  // cụ thể hơn con số đo cho cả county. Bản trước sắp theo intent, mà không
+  // có phép đo nào nối một chỉ số với một ý định tìm kiếm — nó chỉ là bảng
+  // tôi tự gán, đội lốt xếp hạng theo dữ liệu.
+  const rank = (f: Fact) => (f.scope === "ZIP" ? 0 : f.scope === "COUNTY" ? 1 : 2);
   return [...facts].sort((a, b) => rank(a) - rank(b));
 }
 
@@ -281,7 +249,7 @@ export async function buildCandidate(
   const set = await buildFactSet(vertical, zip);
   if (!set || set.facts.length === 0) return null;
 
-  const facts = orderFactsForIntent(vertical, intent, set.facts);
+  const facts = orderFactsByScope(set.facts);
   return {
     id: `${vertical}:${zip}`,
     vertical,
