@@ -10,6 +10,8 @@ import { getServiceAccountStatus } from "@/lib/google/service-account";
 import { ChangePasswordForm } from "@/components/change-password-form";
 import { getAdminPasswordHash } from "@/lib/auth/password";
 import { loginRequired } from "@/lib/auth/session";
+import { QcRulesManager } from "@/components/qc-rules-manager";
+import { listQcRules } from "./qc-rules-actions";
 
 export default async function SettingsPage() {
   const hasAdminPassword = (await getAdminPasswordHash()) !== null;
@@ -18,6 +20,7 @@ export default async function SettingsPage() {
   const statusByName = new Map(statuses.map((s) => [s.name, s]));
   const apiKeyStatus = await getApiKeyStatus();
   const serviceAccountStatus = await getServiceAccountStatus();
+  const qcRules = await listQcRules();
 
   const groups = new Map<string, CredentialField[]>();
   for (const field of CREDENTIAL_FIELDS) {
@@ -56,6 +59,19 @@ export default async function SettingsPage() {
           </CardContent>
         </Card>
       ))}
+      <Card>
+        <CardHeader>
+          <CardTitle>Checklist QC bài viết</CardTitle>
+          <CardDescription>
+            Bộ kiểm mọi bài viết phải qua trước khi được coi là đạt. Vòng viết lại đọc đúng danh sách này: sửa ngưỡng ở
+            đây là sửa thứ vòng lặp đang cố đạt. Thay đổi chỉ áp dụng cho bài tạo từ lúc lưu trở đi — bài đã viết giữ
+            nguyên báo cáo của chúng, vì báo cáo đó ghi lại thứ ĐÃ được kiểm, không phải thứ bây giờ mới kiểm.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <QcRulesManager rules={qcRules} />
+        </CardContent>
+      </Card>
       <Card>
         <CardHeader>
           <CardTitle>Mật khẩu quản trị</CardTitle>

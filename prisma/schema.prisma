@@ -550,6 +550,49 @@ model Domain {
 // into this DB, so numbers can never go stale relative to the real source.
 // ---------------------------------------------------------------------------
 
+/// One item on the QC checklist, stored as DATA so Settings can edit it.
+///
+/// GLOBAL, not per publisher: the checklist is what Control Panel REQUIRES of
+/// every pub site. A per-site checklist would let a site opt out of the rule
+/// it keeps failing, which is the one case the rule exists for.
+///
+/// An honest boundary, stated because the UI must not pretend otherwise:
+///
+///   BUILT-IN rules are code. Settings can turn them off and change their
+///   thresholds; it cannot change what they inspect. `facts-verified` runs the
+///   validator, and no amount of JSON edits makes it inspect something else.
+///
+///   CUSTOM rules are patterns — a regex that must appear, or must not. That
+///   is genuinely addable without a deploy, and it is the honest extent of
+///   "add a rule" in a text field.
+///
+/// A button offering to add arbitrary new logic as data would be a lie, and
+/// the lie would only surface the day someone relied on a rule that never ran.
+model QcRule {
+  id      String  @id @default(cuid())
+
+  /// "content" or "technical" — which checklist it belongs to.
+  kind    String
+  /// Matches a coded check id for built-ins; free text for custom rules.
+  checkId String  @unique
+  label   String
+  why     String
+
+  builtin  Boolean @default(false)
+  isActive Boolean @default(true)
+
+  /// Built-in: thresholds, e.g. { "min": 30, "max": 65 }.
+  /// Custom: { "mode": "must-not-match" | "must-contain", "pattern": "...", "flags": "i" }.
+  params Json
+
+  sortOrder Int @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([kind, isActive])
+}
+
 /// A publisher's own article template, stored as DATA rather than code.
 ///
 /// Per publisher, not shared: two sites in the same trade should not publish

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { generateWithClaude } from "@/lib/ai/anthropic";
 import { runQc, rewriteInstructions, type ArticleDraft, type QcContext, type QcReport } from "./checklist";
+import { loadActiveRules } from "./rules";
 import { buildContentRules } from "@/lib/content-rules/registry";
 import { fetchSitemapCounts } from "@/lib/sitemap/count";
 import type { ArticleCandidate } from "@/lib/article-candidates/discover";
@@ -97,11 +98,12 @@ export async function buildQcContext(
   vertical: string,
   siteUrl: string
 ): Promise<Omit<QcContext, "factSet">> {
-  const [rules, keywords, existing, sitemap] = await Promise.all([
+  const [rules, keywords, existing, sitemap, activeRules] = await Promise.all([
     buildContentRules(),
     prisma.semanticKeyword.findMany({ where: { vertical }, orderBy: { searchVolume: "desc" }, select: { keyword: true } }),
     prisma.article.findMany({ where: { websiteId }, select: { title: true } }),
     fetchSitemapCounts(siteUrl),
+    loadActiveRules(),
   ]);
 
   const knownPaths = new Set<string>();
@@ -115,6 +117,7 @@ export async function buildQcContext(
   }
 
   return {
+    rules: activeRules,
     semanticKeywords: keywords.map((k) => k.keyword),
     reservedTerms: rules.reservedTerms,
     knownPaths,
@@ -153,6 +156,29 @@ export async function writeArticle(params: {
     return {
       draft: { title: "", metaDescription: "", html: "" },
       report,
+      attempts: 0,
+      costUsd: 0,
+      paragraph: "",
+    };
+  }
+
+  // Cùng lý do với assertTemplate: một checklist rỗng làm mọi bài "đạt" mà
+  // chẳng soi gì. Bắt ở đây, trước lần gọi API đầu tiên, thay vì phát hiện sau
+  // ba lần tính tiền.
+  if (params.ctx.rules.builtin.size === 0 && params.ctx.rules.custom.length === 0) {
+    return {
+      draft: { title: "", metaDescription: "", html: "" },
+      report: {
+        passed: false,
+        checks: [
+          {
+            id: "checklist-empty",
+            label: "Checklist có ít nhất một luật đang bật",
+            passed: false,
+            detail: "Mọi luật QC đều đang tắt trong Cài đặt. Không viết bài khi không có gì để kiểm.",
+          },
+        ],
+      },
       attempts: 0,
       costUsd: 0,
       paragraph: "",

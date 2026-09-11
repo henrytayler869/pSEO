@@ -11,6 +11,7 @@
 
 import { runQc, type ArticleDraft, type QcContext } from "../lib/article-qc/checklist";
 import type { FactSet } from "../lib/ai/facts";
+import { BUILTIN_RULES, type ActiveRules } from "../lib/article-qc/rules";
 
 const FACTS: FactSet = {
   vertical: "moving-services",
@@ -43,7 +44,15 @@ const FACTS: FactSet = {
   ],
 };
 
+/** Mọi luật bật, ngưỡng mặc định — bộ test kiểm PHÉP KIỂM, không kiểm cấu
+ * hình. Một ca riêng ở cuối kiểm việc tắt luật. */
+const ALL_ON: ActiveRules = {
+  builtin: new Map(BUILTIN_RULES.map((r) => [r.checkId, r.params])),
+  custom: [],
+};
+
 const CTX: QcContext = {
+  rules: ALL_ON,
   factSet: FACTS,
   semanticKeywords: ["moving services near me", "moving help", "moving services prices"],
   reservedTerms: [{ term: "local moving services", ownedBy: "/local-moving" }],
@@ -168,6 +177,58 @@ const CASES: Case[] = [
   },
 ];
 
+/** Ca về CẤU HÌNH luật, không về nội dung bài. Tách riêng vì chúng khẳng định
+ * trên hình dạng báo cáo, không trên mục nào trượt. */
+const CONFIG_CASES: { name: string; check: () => string | null }[] = [
+  {
+    name: "tắt một luật -> mục đó BIẾN MẤT khỏi báo cáo, không phải luôn đạt",
+    check: () => {
+      const off: ActiveRules = {
+        builtin: new Map([...ALL_ON.builtin].filter(([id]) => id !== "title-length")),
+        custom: [],
+      };
+      const r = runQc({ ...goodDraft(), title: "x" }, { ...CTX, rules: off });
+      const has = r.checks.some((c) => c.id === "title-length");
+      return has ? "mục title-length vẫn có mặt trong báo cáo dù đã tắt" : null;
+    },
+  },
+  {
+    name: "luật tự thêm must-not-match -> bắt được cụm bị cấm",
+    check: () => {
+      const rules: ActiveRules = {
+        builtin: new Map(),
+        custom: [{ checkId: "no-cheap", label: "Không hứa rẻ", why: "w", params: { mode: "must-not-match", pattern: "cheapest" } }],
+      };
+      const d = goodDraft();
+      d.html = d.html.replace("<h2>What the figures cover</h2>", "<p>We find the cheapest movers.</p><h2>What the figures cover</h2>");
+      const r = runQc(d, { ...CTX, rules });
+      return r.checks.find((c) => c.id === "no-cheap")?.passed === false ? null : "luật tự thêm KHÔNG bắt được cụm bị cấm";
+    },
+  },
+  {
+    name: "tắt HẾT luật -> báo trượt, KHÔNG phải đạt rỗng",
+    check: () => {
+      const none: ActiveRules = { builtin: new Map(), custom: [] };
+      const r = runQc(goodDraft(), { ...CTX, rules: none });
+      if (r.passed) return "checklist rỗng lại cho ra passed=true — bài đạt mà không phép kiểm nào chạy";
+      return r.checks.some((c) => c.id === "checklist-empty") ? null : "trượt nhưng không nói vì sao";
+    },
+  },
+  {
+    name: "mẫu regex hỏng -> TRƯỢT, không phải bỏ qua",
+    check: () => {
+      const rules: ActiveRules = {
+        builtin: new Map(),
+        custom: [{ checkId: "broken", label: "Mẫu hỏng", why: "w", params: { mode: "must-contain", pattern: "([unclosed" } }],
+      };
+      const r = runQc(goodDraft(), { ...CTX, rules });
+      const c = r.checks.find((x) => x.id === "broken");
+      if (!c) return "mẫu hỏng bị BỎ QUA im lặng";
+      return c.passed === false ? null : "mẫu hỏng lại được tính là đạt";
+    },
+  },
+];
+
 let ok = 0;
 const failures: string[] = [];
 const firedAtLeastOnce = new Set<string>();
@@ -204,7 +265,14 @@ if (never.length === 0) {
   console.log(`✗ độ phủ: ${never.join(", ")} chưa ca nào làm trượt`);
 }
 
-console.log(`\n${ok}/${CASES.length + 1} kiểm tra đúng.`);
+for (const c of CONFIG_CASES) {
+  const err = c.check();
+  if (err === null) ok++;
+  else failures.push(`${c.name}\n      ${err}`);
+  console.log(`${err === null ? "✓" : "✗"} ${c.name}`);
+}
+
+console.log(`\n${ok}/${CASES.length + 1 + CONFIG_CASES.length} kiểm tra đúng.`);
 if (failures.length > 0) {
   console.error(`\nTHẤT BẠI:\n  ${failures.join("\n  ")}`);
   process.exitCode = 1;

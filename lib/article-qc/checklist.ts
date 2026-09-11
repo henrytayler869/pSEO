@@ -1,6 +1,7 @@
 import { validateGeneratedText } from "@/lib/ai/validate";
 import { isSupplySideBridge } from "@/lib/content-rules/rendered-rules";
 import type { Fact, FactSet } from "@/lib/ai/facts";
+import { compilePattern, type ActiveRules } from "./rules";
 
 /**
  * The gate an article must pass before it becomes a WordPress draft.
@@ -19,6 +20,15 @@ import type { Fact, FactSet } from "@/lib/ai/facts";
  */
 
 export interface QcContext {
+  /**
+   * Which checks are on, and with what thresholds. Read from QcRule.
+   *
+   * A deactivated check is ABSENT from the report, not present-and-passing.
+   * Rendering it as a green tick would say "we looked and it was fine" about
+   * something nobody looked at — and a report where the off switch looks
+   * identical to a pass is a report that cannot be read.
+   */
+  rules: ActiveRules;
   /** The only numbers the article may contain. */
   factSet: FactSet;
   /** Semantic keywords for the trade, from SemanticKeyword. */
@@ -107,45 +117,53 @@ const MIN_SEMANTIC = 2;
 export function runQc(draft: ArticleDraft, ctx: QcContext): QcReport {
   const text = textOf(draft.html);
   const checks: QcCheck[] = [];
+  const on = (id: string) => ctx.rules.builtin.has(id);
+  const p = (id: string, key: string, fallback: number) => ctx.rules.builtin.get(id)?.[key] ?? fallback;
 
   // 1. Numbers. Reuses the validator that guards market pages, unchanged — an
   //    article is held to the same numeric contract as everything else.
   const v = validateGeneratedText(text, ctx.factSet);
-  checks.push({
-    id: "facts-verified",
-    label: "Mọi con số đến từ dataset",
-    passed: v.passed,
-    detail: v.passed
-      ? `${ctx.factSet.facts.length} fact, không con số nào ngoài danh sách.`
-      : v.issues.map((i) => `[${i.rule}] ${i.detail}`).join(" | "),
-  });
+  if (on("facts-verified")) {
+    checks.push({
+      id: "facts-verified",
+      label: "Mọi con số đến từ dataset",
+      passed: v.passed,
+      detail: v.passed
+        ? `${ctx.factSet.facts.length} fact, không con số nào ngoài danh sách.`
+        : v.issues.map((i) => `[${i.rule}] ${i.detail}`).join(" | "),
+    });
+  }
 
   // 2. Supply-side. The dataset measures who moves, never what movers charge
   //    or how busy they are, so a figure must not carry a claim about them.
   const bridged = text
     .split(/(?<=[.!?])\s+/)
     .filter((s) => isSupplySideBridge(s));
-  checks.push({
-    id: "no-supply-side-claim",
-    label: "Không treo nhận định về nhà cung cấp lên số liệu",
-    passed: bridged.length === 0,
-    detail:
-      bridged.length === 0
-        ? "Không câu nào nối một đại lượng đo với khẳng định về công ty."
-        : `${bridged.length} câu vi phạm. Sửa bằng cách hướng NGƯỜI ĐỌC (hỏi gì, xác nhận gì) thay vì khẳng định về hãng: ${bridged[0].slice(0, 120)}`,
-  });
+  if (on("no-supply-side-claim")) {
+    checks.push({
+      id: "no-supply-side-claim",
+      label: "Không treo nhận định về nhà cung cấp lên số liệu",
+      passed: bridged.length === 0,
+      detail:
+        bridged.length === 0
+          ? "Không câu nào nối một đại lượng đo với khẳng định về công ty."
+          : `${bridged.length} câu vi phạm. Sửa bằng cách hướng NGƯỜI ĐỌC (hỏi gì, xác nhận gì) thay vì khẳng định về hãng: ${bridged[0].slice(0, 120)}`,
+    });
+  }
 
   // 3. Semantic coverage.
   const hit = ctx.semanticKeywords.filter((k) => text.toLowerCase().includes(k.toLowerCase()));
-  checks.push({
-    id: "semantic-coverage",
-    label: `Có ít nhất ${MIN_SEMANTIC} từ khoá ngữ nghĩa`,
-    passed: hit.length >= MIN_SEMANTIC,
-    detail:
-      hit.length >= MIN_SEMANTIC
-        ? `Dùng ${hit.length}: ${hit.join(", ")}`
-        : `Mới có ${hit.length}/${MIN_SEMANTIC}. Có thể dùng: ${ctx.semanticKeywords.filter((k) => !hit.includes(k)).join(", ")}`,
-  });
+  if (on("semantic-coverage")) {
+    checks.push({
+      id: "semantic-coverage",
+      label: `Có ít nhất ${p("semantic-coverage", "min", MIN_SEMANTIC)} từ khoá ngữ nghĩa`,
+      passed: hit.length >= p("semantic-coverage", "min", MIN_SEMANTIC),
+      detail:
+        hit.length >= p("semantic-coverage", "min", MIN_SEMANTIC)
+          ? `Dùng ${hit.length}: ${hit.join(", ")}`
+          : `Mới có ${hit.length}/${p("semantic-coverage", "min", MIN_SEMANTIC)}. Có thể dùng: ${ctx.semanticKeywords.filter((k) => !hit.includes(k)).join(", ")}`,
+    });
+  }
 
   // 4. Internal links, checked against paths the site ACTUALLY serves.
   //
@@ -154,17 +172,19 @@ export function runQc(draft: ArticleDraft, ctx: QcContext): QcReport {
   //    this reason, and those were written by code, not by a model.
   const internal = anchors(draft.html).filter((a) => a.href.startsWith("/"));
   const dead = internal.filter((a) => !ctx.knownPaths.has(a.href.replace(/\/+$/, "") || "/"));
-  checks.push({
-    id: "internal-links",
-    label: "Có link nội bộ, và mọi link đều tới trang có thật",
-    passed: internal.length >= 1 && dead.length === 0,
-    detail:
-      internal.length === 0
-        ? `Chưa có link nội bộ nào. Các trang có thật để trỏ tới: ${[...ctx.knownPaths].slice(0, 8).join(", ")}`
-        : dead.length > 0
-          ? `${dead.length} link trỏ vào trang KHÔNG tồn tại: ${dead.map((d) => d.href).join(", ")}`
-          : `${internal.length} link nội bộ, tất cả đều tới trang có thật.`,
-  });
+  if (on("internal-links")) {
+    checks.push({
+      id: "internal-links",
+      label: "Có link nội bộ, và mọi link đều tới trang có thật",
+      passed: internal.length >= p("internal-links", "min", 1) && dead.length === 0,
+      detail:
+        internal.length === 0
+          ? `Chưa có link nội bộ nào. Các trang có thật để trỏ tới: ${[...ctx.knownPaths].slice(0, 8).join(", ")}`
+          : dead.length > 0
+            ? `${dead.length} link trỏ vào trang KHÔNG tồn tại: ${dead.map((d) => d.href).join(", ")}`
+            : `${internal.length} link nội bộ, tất cả đều tới trang có thật.`,
+    });
+  }
 
   // 5. Reserved terms. Using one is fine; using it as an anchor to somewhere
   //    other than its owner competes with the pillar page for its own term.
@@ -173,49 +193,102 @@ export function runQc(draft: ArticleDraft, ctx: QcContext): QcReport {
       .filter((a) => a.text.toLowerCase().includes(rt.term.toLowerCase()) && !a.href.includes(rt.ownedBy))
       .map((a) => `"${rt.term}" -> ${a.href} (phải là ${rt.ownedBy})`)
   );
-  checks.push({
-    id: "reserved-term-anchors",
-    label: "Term dành riêng chỉ neo về trang pillar của nó",
-    passed: misdirected.length === 0,
-    detail: misdirected.length === 0 ? "Không anchor nào lấn term của pillar." : misdirected.join(" | "),
-  });
+  if (on("reserved-term-anchors")) {
+    checks.push({
+      id: "reserved-term-anchors",
+      label: "Term dành riêng chỉ neo về trang pillar của nó",
+      passed: misdirected.length === 0,
+      detail: misdirected.length === 0 ? "Không anchor nào lấn term của pillar." : misdirected.join(" | "),
+    });
+  }
 
   // 6-8. Shape. Mechanical, and each one is a thing Technical SEO measured as
   //      a real defect on the live site rather than a rule from a checklist
   //      someone copied.
-  checks.push({
-    id: "title-length",
-    label: `Tiêu đề ${TITLE_MIN}-${TITLE_MAX} ký tự`,
-    passed: draft.title.length >= TITLE_MIN && draft.title.length <= TITLE_MAX,
-    detail: `Hiện ${draft.title.length} ký tự.`,
-  });
-  checks.push({
-    id: "meta-description",
-    label: `Meta description ${META_MIN}-${META_MAX} ký tự`,
-    passed: draft.metaDescription.length >= META_MIN && draft.metaDescription.length <= META_MAX,
-    detail: draft.metaDescription
-      ? `Hiện ${draft.metaDescription.length} ký tự.`
-      : "Chưa có meta description.",
-  });
+  if (on("title-length")) {
+    checks.push({
+      id: "title-length",
+      label: `Tiêu đề ${p("title-length", "min", TITLE_MIN)}-${p("title-length", "max", TITLE_MAX)} ký tự`,
+      passed: draft.title.length >= p("title-length", "min", TITLE_MIN) && draft.title.length <= p("title-length", "max", TITLE_MAX),
+      detail: `Hiện ${draft.title.length} ký tự.`,
+    });
+  }
+  if (on("meta-description")) {
+    checks.push({
+      id: "meta-description",
+      label: `Meta description ${p("meta-description", "min", META_MIN)}-${p("meta-description", "max", META_MAX)} ký tự`,
+      passed: draft.metaDescription.length >= p("meta-description", "min", META_MIN) && draft.metaDescription.length <= p("meta-description", "max", META_MAX),
+      detail: draft.metaDescription
+        ? `Hiện ${draft.metaDescription.length} ký tự.`
+        : "Chưa có meta description.",
+    });
+  }
   const h2 = (draft.html.match(/<h2\b/gi) ?? []).length;
-  checks.push({
-    id: "heading-structure",
-    label: `Ít nhất ${MIN_H2} thẻ H2`,
-    passed: h2 >= MIN_H2,
-    detail: `Hiện ${h2} thẻ H2.`,
-  });
+  if (on("heading-structure")) {
+    checks.push({
+      id: "heading-structure",
+      label: `Ít nhất ${p("heading-structure", "min", MIN_H2)} thẻ H2`,
+      passed: h2 >= p("heading-structure", "min", MIN_H2),
+      detail: `Hiện ${h2} thẻ H2.`,
+    });
+  }
 
   // 9. Not a second article about the same thing. Compared against titles
   //    already on this site, because the duplication that costs is
   //    duplication within one domain.
   const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, "").trim();
   const clash = ctx.existingTitles.find((t) => norm(t) === norm(draft.title));
-  checks.push({
-    id: "not-duplicate-title",
-    label: "Tiêu đề chưa từng dùng trên site này",
-    passed: !clash,
-    detail: clash ? `Trùng với bài đã có: "${clash}"` : "Tiêu đề chưa xuất hiện.",
-  });
+  if (on("not-duplicate-title")) {
+    checks.push({
+      id: "not-duplicate-title",
+      label: "Tiêu đề chưa từng dùng trên site này",
+      passed: !clash,
+      detail: clash ? `Trùng với bài đã có: "${clash}"` : "Tiêu đề chưa xuất hiện.",
+    });
+  }
+
+  // Luật tự thêm: mẫu regex, chạy trên văn bản nhìn thấy được.
+  for (const r of ctx.rules.custom) {
+    const re = compilePattern(r.params);
+    if (!re) {
+      // Mẫu hỏng thì TRƯỢT, không phải bỏ qua. Bỏ qua im lặng nghĩa là người
+      // vừa gõ nó tin rằng có thứ đang được canh, trong khi không.
+      checks.push({ id: r.checkId, label: r.label, passed: false, detail: `Mẫu regex không hợp lệ: ${r.params.pattern}` });
+      continue;
+    }
+    const found = re.test(text);
+    const passed = r.params.mode === "must-contain" ? found : !found;
+    checks.push({
+      id: r.checkId,
+      label: r.label,
+      passed,
+      detail: passed
+        ? r.params.mode === "must-contain" ? "Có mẫu bắt buộc." : "Không có mẫu bị cấm."
+        : r.params.mode === "must-contain"
+          ? `Thiếu mẫu bắt buộc: ${r.params.pattern}`
+          : `Khớp mẫu bị cấm: ${text.match(re)?.[0]?.slice(0, 80)}`,
+    });
+  }
+
+  // Danh sách rỗng KHÔNG phải là đạt.
+  //
+  // `[].every(...)` trả về true, nên tắt hết luật sẽ cho ra một bài "đạt" mà
+  // không phép kiểm nào chạy — đúng cái kiểu tín hiệu không thể tắc mà dự án
+  // này liên tục bắt được. Một cổng không soi gì thì phải nói là nó không soi
+  // gì, chứ không được nói là đã qua.
+  if (checks.length === 0) {
+    return {
+      passed: false,
+      checks: [
+        {
+          id: "checklist-empty",
+          label: "Checklist có ít nhất một luật đang bật",
+          passed: false,
+          detail: "Mọi luật đều đang tắt trong Cài đặt, nên không phép kiểm nào chạy. Bật lại ít nhất một luật.",
+        },
+      ],
+    };
+  }
 
   return { passed: checks.every((c) => c.passed), checks };
 }
