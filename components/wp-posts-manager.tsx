@@ -286,7 +286,16 @@ export function WpPostsManager({
     <div className="flex flex-col gap-4">
       <CredentialsForm websiteId={websiteId} username={username} />
 
-      {loadError && <p className="text-sm text-red-700">{loadError}</p>}
+      {loadError && (
+        <p className="text-sm text-red-700">
+          Không đọc được WordPress: {loadError}
+          <span className="block text-xs">
+            HQ gọi WordPress qua loopback của VPS, nên từ máy khác sẽ luôn không tới được. Đây KHÔNG phải
+            &ldquo;WordPress không có bài nào&rdquo; — chưa đọc được thì chưa biết. Trang site đang phục vụ nằm ở thẻ bên
+            dưới, đọc từ nguồn khác.
+          </span>
+        </p>
+      )}
 
       {!loadError && !sawAllStatuses && (
         <p className="text-xs text-muted-foreground">
@@ -296,7 +305,12 @@ export function WpPostsManager({
       )}
 
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm text-muted-foreground">{posts.length} bài</span>
+        {/* Không in "0 bài" khi đọc hỏng.
+            Con số 0 cạnh một dòng lỗi đọc thành "không có bài nào", tức là
+            câu trả lời cho một câu hỏi chưa ai hỏi được. */}
+        <span className="text-sm text-muted-foreground">
+          {loadError ? "chưa đọc được số bài" : `${posts.length} bài`}
+        </span>
         <NewPostForm websiteId={websiteId} />
       </div>
 

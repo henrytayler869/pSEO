@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db/prisma";
 import { listPosts } from "@/lib/wordpress/posts";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
 import { WpPostsManager, type PostRow } from "@/components/wp-posts-manager";
+import { SitePages, type SitePageRow } from "@/components/site-pages";
+import { fetchSitemapCounts, classifySitemapUrl } from "@/lib/sitemap/count";
 
 export default async function PostsPage({ params }: { params: Promise<{ websiteId: string }> }) {
   const { websiteId } = await params;
@@ -35,6 +37,58 @@ export default async function PostsPage({ params }: { params: Promise<{ websiteI
     // normal state for this setup, and a Next.js error page would hide the
     // credential form — which is the one thing that might fix it.
     loadError = err instanceof Error ? err.message : "Không đọc được danh sách bài.";
+  }
+
+  /**
+   * Trang site ĐANG PHỤC VỤ — nguồn là sitemap thật, không phải WordPress.
+   *
+   * Đo 11/9/2026: atmovingservices.com là site Next.js. Gọi
+   * /wp-json/wp/v2/pages trên chính domain đó trả về trang 404 của Next. 158
+   * trang thị trường dựng từ dataset qua /api/v1, nên không REST nào của
+   * WordPress nhìn thấy chúng — một bảng đọc từ WordPress sẽ mãi báo 0 trong
+   * khi site có 158 trang, và đó chính là thứ màn hình này đang nói sai.
+   */
+  let sitePages: SitePageRow[] = [];
+  let sitemapError: string | null = null;
+  try {
+    const sm = await fetchSitemapCounts(website.url);
+    const interpreted = new Set(
+      (
+        await prisma.aiGeneration.findMany({
+          where: { vertical: website.vertical },
+          select: { zip: true },
+        })
+      )
+        .map((g) => g.zip)
+        .filter((z): z is string => z !== null)
+    );
+    const locations = await prisma.location.findMany({ select: { zip: true, city: true, state: true } });
+    // Một thành phố có NHIỀU ZIP — Chicago có 18. Map path -> một ZIP sẽ giữ
+    // cái cuối cùng, và câu trả lời "chưa có đoạn AI" lúc đó nói về một ZIP
+    // chọn bừa chứ không về trang đang hiển thị. Gom hết rồi đếm.
+    const zipsByPath = new Map<string, string[]>();
+    for (const l of locations) {
+      if (!l.city) continue;
+      const slug = l.city.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const key = `/${website.vertical}/${l.state.toLowerCase()}/${slug}`;
+      zipsByPath.set(key, [...(zipsByPath.get(key) ?? []), l.zip]);
+    }
+
+    sitePages = sm.urls.map((u) => {
+      const { path, kind } = classifySitemapUrl(u, website.url);
+      const zips = zipsByPath.get(path);
+      // null khi HQ không biết ZIP nào đứng sau trang đó: câu hỏi "đã có đoạn
+      // AI chưa" lúc ấy không áp dụng, và trả lời "chưa" sẽ là một khẳng định
+      // về thứ chưa tra được.
+      if (!zips) return { path, kind, interpretation: null };
+      return {
+        path,
+        kind,
+        interpretation: { withAi: zips.filter((z) => interpreted.has(z)).length, total: zips.length },
+      };
+    });
+  } catch (err) {
+    sitemapError = err instanceof Error ? err.message : "Không đọc được sitemap.";
   }
 
   return (
@@ -97,6 +151,20 @@ export default async function PostsPage({ params }: { params: Promise<{ websiteI
           />
         </CardContent>
       </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Trang trên site</CardTitle>
+          <CardDescription>
+            Đọc từ sitemap thật của site, KHÔNG phải từ WordPress. Những trang này do site dựng từ dataset qua
+            <code> /api/v1</code>, nên không REST nào của WordPress nhìn thấy chúng — bảng &ldquo;Bài viết WordPress&rdquo;
+            ở trên sẽ mãi báo 0 dù site đang phục vụ hàng trăm trang, và hai con số đó nói về hai thứ khác nhau.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SitePages rows={sitePages} siteUrl={website.url} error={sitemapError} />
+        </CardContent>
+      </Card>
+
     </div>
   );
 }

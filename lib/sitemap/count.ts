@@ -109,6 +109,23 @@ export function parseSitemapXml(xml: string): { isIndex: boolean; locs: string[]
  * exactly what the site independently reports as publishedPages, plus 24 state
  * hubs and 4 root-level pages for 186 total.
  */
+/**
+ * Phân loại TỪNG URL, không chỉ đếm.
+ *
+ * Cùng một quy tắc với categoriseSitemapUrls bên dưới — số tầng đường dẫn —
+ * nên hai bên không thể lệch nhau. Tách ra vì màn hình cần biết từng trang
+ * thuộc loại gì, còn ô thống kê chỉ cần con số.
+ */
+export type PageKind = "home" | "section" | "hub" | "content";
+
+export function classifySitemapUrl(url: string, siteUrl: string): { path: string; kind: PageKind } {
+  const origin = siteUrl.replace(/\/+$/, "");
+  const path = url.replace(origin, "").split(/[?#]/)[0];
+  const segments = path.split("/").filter(Boolean);
+  const kind: PageKind = segments.length === 0 ? "home" : segments.length === 1 ? "section" : segments.length === 2 ? "hub" : "content";
+  return { path: path || "/", kind };
+}
+
 export function categoriseSitemapUrls(urls: string[], siteUrl: string): { content: number; breakdown: { label: string; count: number }[] } {
   const origin = siteUrl.replace(/\/+$/, "");
   let home = 0;
