@@ -20,7 +20,7 @@ export interface CandidateRow {
   id: string;
   title: string;
   why: string;
-  intent: string;
+  intent: string | null;
   factCount: number;
   written: boolean;
 }

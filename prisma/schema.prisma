@@ -157,11 +157,27 @@ model KeywordMetric {
   keywordDifficulty Float // KD, 0-100
   cpc               Float
 
+  /// Ý định tìm kiếm ĐO cho chính từ khoá của thị trường này.
+  ///
+  /// Per-market chứ không per-niche, vì đo được là nó khác nhau giữa các thị
+  /// trường: cùng mẫu "movers {city}" mà "movers chicago" là informational
+  /// còn "movers pflugerville" là transactional. Đo 11/9/2026 trên 198 từ
+  /// khoá của moving-services: 133 commercial, 41 informational, 13
+  /// navigational, 11 transactional.
+  ///
+  /// Trước đây pipeline gán MỘT ý định cho cả ngành rồi dùng nó cho mọi bài.
+  /// Với 174 bài một-địa-điểm, đó là lấy nhãn của đa số áp lên toàn bộ thiểu
+  /// số — và thiểu số ở đây là 65 thị trường.
+  ///
+  /// Null = lần đo đó chưa lấy trường này, KHÔNG phải "không có ý định".
+  mainIntent String?
+
   source    String // "ahrefs_api" | "ahrefs_csv_import"
   fetchedAt DateTime @default(now())
 
   @@index([marketIdentityId])
   @@index([keyword])
+  @@index([mainIntent])
 }
 
 // ---------------------------------------------------------------------------

@@ -18,7 +18,7 @@ import { prisma } from "../lib/db/prisma";
 const VERTICAL = "moving-services";
 
 async function main() {
-  const all = await discoverCandidates(VERTICAL, { intent: "move-underway" });
+  const all = await discoverCandidates(VERTICAL);
   console.log(`${all.length} ứng viên được liệt kê.`);
   if (all.length === 0) {
     console.error("THẤT BẠI: không ứng viên nào — không có gì để kiểm.");
@@ -31,7 +31,7 @@ async function main() {
   const failures: string[] = [];
 
   for (const c of sample) {
-    const full = await buildCandidate(VERTICAL, c.zip, c.intent);
+    const full = await buildCandidate(VERTICAL, c.zip, c.intent ?? "commercial");
     if (!full) {
       failures.push(`${c.zip} ${c.city}, ${c.state} được liệt kê nhưng buildCandidate trả null`);
       console.log(`✗ ${c.zip} ${c.city}`);
@@ -49,7 +49,7 @@ async function main() {
   // Số chỉ số hứa trong danh sách phải khớp số fact dựng ra được. Lệch thì
   // danh sách đang quảng cáo dữ liệu mà bài không có.
   const first = sample[0];
-  const full = await buildCandidate(VERTICAL, first.zip, first.intent);
+  const full = await buildCandidate(VERTICAL, first.zip, first.intent ?? "commercial");
   if (full && full.facts.length !== first.metricCount) {
     failures.push(
       `${first.zip}: danh sách nói ${first.metricCount} chỉ số, dựng ra ${full.facts.length} fact`

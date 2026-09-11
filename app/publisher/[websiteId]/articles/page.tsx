@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db/prisma";
 import { discoverCandidates, type Intent } from "@/lib/article-candidates/discover";
-import { nicheIntents, defaultIntent } from "@/lib/keywords/intents";
+import { marketIntents } from "@/lib/keywords/intents";
 import { fetchSitemapCounts } from "@/lib/sitemap/count";
 import { ArticleWorkbench } from "@/components/article-workbench";
 import { getBudgetAction } from "./actions";
@@ -28,9 +28,11 @@ export default async function ArticlesPage({
   //
   // Chưa đo được ý định nào thì intent là null, và màn hình nói thế — không
   // rơi về một giá trị mặc định trông như một kết luận đã có.
-  const intents = await nicheIntents(website.vertical);
-  const fallback = await defaultIntent(website.vertical);
-  const intent: Intent | null = intents.some((i) => i.id === intentParam) ? (intentParam as Intent) : fallback;
+  // Nút bấm và bộ lọc đọc CÙNG một nguồn: ý định đo trên từ khoá của từng
+  // thị trường. Hai nguồn cho một câu hỏi là cách con số trên nút không khớp
+  // số dòng bên dưới, và không ai biết bên nào sai.
+  const intents = await marketIntents(website.vertical);
+  const intent: Intent | null = intents.some((i) => i.id === intentParam) ? (intentParam as Intent) : intents[0]?.id ?? null;
 
   // Đường dẫn site ĐANG phục vụ, để không mời viết trùng trang market đã có.
   // Lỗi mạng thì trả về rỗng: không loại trừ ai, và danh sách dài bất thường

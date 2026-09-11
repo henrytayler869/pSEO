@@ -100,3 +100,29 @@ export async function defaultIntent(vertical: string): Promise<string | null> {
   const list = await nicheIntents(vertical);
   return list[0]?.id ?? null;
 }
+
+/**
+ * Ý định theo THỊ TRƯỜNG, tính trên chính từ khoá mỗi thị trường đang nhắm.
+ *
+ * Khác `nicheIntents` (dựa trên SemanticKeyword — từ khoá gợi ý quanh một
+ * seed, mô tả cả ngành). Hàm này mới là thứ danh sách ứng viên lọc theo, nên
+ * nút bấm phải đọc CÙNG nguồn với bộ lọc. Hai nguồn cho một câu hỏi là cách
+ * con số trên nút không khớp số dòng bên dưới, và không ai biết bên nào sai.
+ *
+ * Mỗi thị trường tính một lần, theo từ khoá có volume cao nhất của nó — truy
+ * vấn thị trường đó thật sự sống bằng.
+ */
+export async function marketIntents(vertical: string): Promise<NicheIntent[]> {
+  const identities = await prisma.marketIdentity.findMany({
+    where: { vertical },
+    select: { zip: true, keywordMetrics: { select: { keyword: true, searchVolume: true, mainIntent: true } } },
+  });
+
+  const rows: IntentRow[] = [];
+  for (const i of identities) {
+    const lead = [...i.keywordMetrics].sort((a, b) => b.searchVolume - a.searchVolume)[0];
+    if (!lead) continue;
+    rows.push({ keyword: lead.keyword, searchVolume: lead.searchVolume, mainIntent: lead.mainIntent, foreignIntent: [] });
+  }
+  return summariseIntents(rows);
+}
