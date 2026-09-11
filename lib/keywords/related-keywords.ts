@@ -12,6 +12,10 @@ export interface RelatedKeywordResult {
   searchVolume: number;
   cpc: number;
   keywordDifficulty: number;
+  /** Ý định tìm kiếm DataForSEO đo cho truy vấn này. null = phản hồi lần đó
+   * không có trường này, khác hẳn "truy vấn không có ý định". */
+  mainIntent: string | null;
+  foreignIntent: string[];
 }
 
 /**
@@ -57,7 +61,14 @@ export async function fetchRelatedKeywordsForVertical(vertical: string): Promise
   // means no data" reasoning as dataforseo-adapter.ts.
   return items
     .filter((i) => i.depth >= 1 && i.searchVolume !== null && i.cpc !== null && i.keywordDifficulty !== null)
-    .map((i) => ({ keyword: i.keyword, searchVolume: i.searchVolume!, cpc: i.cpc!, keywordDifficulty: i.keywordDifficulty! }));
+    .map((i) => ({
+      keyword: i.keyword,
+      searchVolume: i.searchVolume!,
+      cpc: i.cpc!,
+      keywordDifficulty: i.keywordDifficulty!,
+      mainIntent: i.mainIntent,
+      foreignIntent: i.foreignIntent,
+    }));
 }
 
 export async function fetchAndStoreRelatedKeywords(vertical: string): Promise<{ count: number }> {
@@ -70,6 +81,8 @@ export async function fetchAndStoreRelatedKeywords(vertical: string): Promise<{ 
         searchVolume: r.searchVolume,
         cpc: r.cpc,
         keywordDifficulty: r.keywordDifficulty,
+        mainIntent: r.mainIntent,
+        foreignIntent: r.foreignIntent,
         source: "dataforseo_related_keywords",
       })),
     });
@@ -83,6 +96,8 @@ interface RelatedKeywordItem {
   searchVolume: number | null;
   cpc: number | null;
   keywordDifficulty: number | null;
+  mainIntent: string | null;
+  foreignIntent: string[];
 }
 
 function extractRelatedKeywordItems(body: unknown): RelatedKeywordItem[] | null {
@@ -111,7 +126,32 @@ function extractRelatedKeywordItems(body: unknown): RelatedKeywordItem[] | null 
         : null;
     if (!isNumberOrNull(searchVolume) || !isNumberOrNull(cpc) || !isNumberOrNull(keywordDifficulty)) return null;
 
-    rows.push({ keyword, depth, searchVolume, cpc, keywordDifficulty });
+    // search_intent_info có sẵn ở MỌI item của endpoint này và trước đây bị
+    // vứt ngay tại đây. Hệ quả: pipeline tự khai báo ba "ý định người đọc"
+    // trong code suốt thời gian dữ liệu thật đã nằm trong phản hồi.
+    //
+    // Thiếu trường thì để null chứ KHÔNG return null như các trường số ở
+    // trên: volume thiếu nghĩa là hàng vô dụng, còn intent thiếu chỉ nghĩa là
+    // hàng đó chưa biết ý định — vẫn dùng được cho mọi việc khác.
+    const intentInfo = (keywordData as Record<string, unknown>).search_intent_info;
+    const mainIntentRaw =
+      typeof intentInfo === "object" && intentInfo !== null
+        ? (intentInfo as Record<string, unknown>).main_intent
+        : null;
+    const foreignRaw =
+      typeof intentInfo === "object" && intentInfo !== null
+        ? (intentInfo as Record<string, unknown>).foreign_intent
+        : null;
+
+    rows.push({
+      keyword,
+      depth,
+      searchVolume,
+      cpc,
+      keywordDifficulty,
+      mainIntent: typeof mainIntentRaw === "string" ? mainIntentRaw : null,
+      foreignIntent: Array.isArray(foreignRaw) ? foreignRaw.filter((x): x is string => typeof x === "string") : [],
+    });
   }
   return rows;
 }
@@ -136,5 +176,7 @@ export async function getLatestSemanticKeywords(vertical: string): Promise<Relat
     searchVolume: r.searchVolume,
     cpc: r.cpc,
     keywordDifficulty: r.keywordDifficulty,
+    mainIntent: r.mainIntent,
+    foreignIntent: r.foreignIntent,
   }));
 }

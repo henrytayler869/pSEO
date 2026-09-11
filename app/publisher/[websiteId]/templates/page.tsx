@@ -4,7 +4,8 @@ import { ArrowLeft, Globe } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db/prisma";
-import { discoverCandidates, buildCandidate, isIntent } from "@/lib/article-candidates/discover";
+import { discoverCandidates, buildCandidate } from "@/lib/article-candidates/discover";
+import { defaultIntent } from "@/lib/keywords/intents";
 import { renderArticle } from "@/lib/article-template/render";
 import { TemplateEditor } from "@/components/template-editor";
 import { listTemplates } from "./actions";
@@ -17,9 +18,10 @@ export default async function TemplatesPage({ params }: { params: Promise<{ webs
   const website = await prisma.website.findUnique({ where: { id: websiteId } });
   if (!website) notFound();
 
+  const intent = (await defaultIntent(website.vertical)) ?? "commercial";
   const [rows, candidates, sources] = await Promise.all([
     listTemplates(websiteId),
-    discoverCandidates(website.vertical),
+    discoverCandidates(website.vertical, { intent }),
     prisma.dataSource.findMany({
       where: { isActive: true, relevantVerticals: { has: website.vertical } },
       select: { name: true },
@@ -42,7 +44,7 @@ export default async function TemplatesPage({ params }: { params: Promise<{ webs
   const previews: Record<string, string | null> = {};
   for (const r of rows) {
     const summary = candidates[0];
-    const c = summary && isIntent(r.intent) ? await buildCandidate(website.vertical, summary.zip, r.intent) : null;
+    const c = summary ? await buildCandidate(website.vertical, summary.zip, r.intent) : null;
     if (!c) {
       previews[r.intent] = null;
       continue;
