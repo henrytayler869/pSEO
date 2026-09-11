@@ -77,20 +77,35 @@ function anchors(html: string): { href: string; text: string }[] {
   return out;
 }
 
-/** Title bounds. 30 because a shorter one is not describing an article; 65
- * because Google truncates around there and a truncated title loses the end,
- * which is where the specific part usually is. */
+/**
+ * Bounds. Each one is a thing measured as a real defect on the live site
+ * rather than a rule copied from a checklist.
+ *
+ * There is deliberately NO minimum word count. One existed (350) and was
+ * removed 2026-09-11 on the project owner's call, after it turned out to
+ * contradict the design it was meant to guard: the default templates produce
+ * 107, 92 and 77 words, so every article built from them would have failed a
+ * check written before the templates existed.
+ *
+ * Keeping it would have pushed the fix in the wrong direction — padding every
+ * template with filler prose that repeats on every article, to satisfy a
+ * number nobody chose. Length is not the property that matters here; whether
+ * every figure is real, sourced and correctly scoped is, and those have their
+ * own checks.
+ *
+ * Title: 30 because a shorter one is not describing an article; 65 because
+ * Google truncates around there and a truncated title loses the end, which is
+ * where the specific part usually is.
+ */
 const TITLE_MIN = 30;
 const TITLE_MAX = 65;
 const META_MIN = 70;
 const META_MAX = 160;
-const MIN_WORDS = 350;
 const MIN_H2 = 2;
 const MIN_SEMANTIC = 2;
 
 export function runQc(draft: ArticleDraft, ctx: QcContext): QcReport {
   const text = textOf(draft.html);
-  const words = text.split(/\s+/).filter(Boolean).length;
   const checks: QcCheck[] = [];
 
   // 1. Numbers. Reuses the validator that guards market pages, unchanged — an
@@ -181,12 +196,6 @@ export function runQc(draft: ArticleDraft, ctx: QcContext): QcReport {
     detail: draft.metaDescription
       ? `Hiện ${draft.metaDescription.length} ký tự.`
       : "Chưa có meta description.",
-  });
-  checks.push({
-    id: "min-words",
-    label: `Ít nhất ${MIN_WORDS} từ`,
-    passed: words >= MIN_WORDS,
-    detail: `Hiện ${words} từ.`,
   });
   const h2 = (draft.html.match(/<h2\b/gi) ?? []).length;
   checks.push({

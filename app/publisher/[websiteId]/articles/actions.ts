@@ -8,6 +8,8 @@ import { createPost, type WpCredentials } from "@/lib/wordpress/posts";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
 import { SpendCapExceededError, getTotalSpendUsd, getAiConfig } from "@/lib/ai/anthropic";
 import type { FactSet } from "@/lib/ai/facts";
+import type { ArticleTemplateShape } from "@/lib/article-template/render";
+import { DEFAULT_TEMPLATES } from "@/lib/article-template/defaults";
 
 export interface ArticleActionResult {
   ok: boolean;
@@ -35,6 +37,37 @@ async function loadSite(websiteId: string) {
 }
 
 /**
+ * This publisher's template for an intent, or the starting default.
+ *
+ * Falling back rather than failing: a site that has never opened the template
+ * editor should still be able to write an article, and the default is a real
+ * template rather than a placeholder. The moment someone edits it, the edit is
+ * what gets used — nothing has to be "enabled" first.
+ */
+async function templateFor(websiteId: string, intent: string): Promise<ArticleTemplateShape> {
+  const row = await prisma.articleTemplate.findFirst({
+    where: { websiteId, intent, isActive: true },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (row) return row.blocks as unknown as ArticleTemplateShape;
+  const fallback = DEFAULT_TEMPLATES[intent];
+  if (!fallback) throw new Error(`Chưa có template cho ý định "${intent}", và cũng không có bản mặc định.`);
+  return fallback;
+}
+
+/** Source names for the note block, read from the sources tagged for this
+ * trade — not typed into the template, so renaming a source updates every
+ * article built afterwards. */
+async function sourceNamesFor(vertical: string): Promise<string[]> {
+  const rows = await prisma.dataSource.findMany({
+    where: { isActive: true, relevantVerticals: { has: vertical } },
+    select: { name: true },
+    orderBy: { name: "asc" },
+  });
+  return rows.map((r) => r.name);
+}
+
+/**
  * Writes ONE article: generate, check, rewrite up to the cap, store.
  *
  * The row is created BEFORE generation so the spend ledger has an articleId to
@@ -45,7 +78,9 @@ async function loadSite(websiteId: string) {
 async function writeOne(
   websiteId: string,
   candidate: ArticleCandidate,
-  ctxBase: Awaited<ReturnType<typeof buildQcContext>>
+  ctxBase: Awaited<ReturnType<typeof buildQcContext>>,
+  templates: Map<string, ArticleTemplateShape>,
+  sourceNames: string[]
 ): Promise<{ ok: boolean; title: string; detail: string; capReached?: boolean }> {
   const existing = await prisma.article.findUnique({
     where: { websiteId_candidateId: { websiteId, candidateId: candidate.id } },
@@ -67,9 +102,14 @@ async function writeOne(
   });
 
   try {
+    const template = templates.get(candidate.intent);
+    if (!template) throw new Error(`Chưa nạp template cho ý định "${candidate.intent}".`);
+
     const result = await writeArticle({
       candidate,
       ctx: { ...ctxBase, factSet: factSetFor(candidate) },
+      template,
+      sourceNames,
       websiteId,
       articleId: row.id,
     });
@@ -122,8 +162,12 @@ export async function writeOneArticleAction(
     const candidate = candidates.find((c) => c.id === candidateId);
     if (!candidate) return { ok: false, message: "Ứng viên không còn trong danh sách — dữ liệu có thể đã đổi." };
 
-    const ctx = await buildQcContext(websiteId, website.vertical, website.url);
-    const r = await writeOne(websiteId, candidate, ctx);
+    const [ctx, template, sourceNames] = await Promise.all([
+      buildQcContext(websiteId, website.vertical, website.url),
+      templateFor(websiteId, candidate.intent),
+      sourceNamesFor(website.vertical),
+    ]);
+    const r = await writeOne(websiteId, candidate, ctx, new Map([[candidate.intent, template]]), sourceNames);
     revalidatePath(`/publisher/${websiteId}/articles`);
     return { ok: r.ok, message: `${r.title} — ${r.detail}` };
   } catch (err) {
@@ -171,13 +215,18 @@ export async function startArticleBatchAction(
 
     void (async () => {
       try {
-        const ctx = await buildQcContext(websiteId, website.vertical, website.url);
+        const [ctx, template, sourceNames] = await Promise.all([
+          buildQcContext(websiteId, website.vertical, website.url),
+          templateFor(websiteId, intent),
+          sourceNamesFor(website.vertical),
+        ]);
+        const templates = new Map([[intent, template]]);
         for (const candidate of queue) {
           const fresh = await prisma.articleJob.findUnique({ where: { id: job.id } });
           if (fresh?.status !== "running") return; // dừng bởi người dùng
           await prisma.articleJob.update({ where: { id: job.id }, data: { currentTitle: candidate.title } });
 
-          const r = await writeOne(websiteId, candidate, ctx);
+          const r = await writeOne(websiteId, candidate, ctx, templates, sourceNames);
           if (r.capReached) {
             // Trần ngân sách DỪNG cả lô, không đánh dấu phần còn lại là
             // "trượt". Hai chuyện khác nhau: một bài trượt QC là bài viết
