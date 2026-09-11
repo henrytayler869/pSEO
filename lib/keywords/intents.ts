@@ -68,7 +68,11 @@ export function summariseIntents(rows: IntentRow[]): NicheIntent[] {
     const e = byIntent.get(r.mainIntent) ?? { count: 0, volume: 0, examples: [] };
     e.count++;
     e.volume += r.searchVolume;
-    if (e.examples.length < 3) e.examples.push(r.keyword);
+    // Ví dụ phải KHÁC NHAU. Nhiều thị trường chung một từ khoá dẫn đầu
+    // ("moving companies new york" là từ khoá của mọi ZIP trong thành phố),
+    // nên push thẳng sẽ in ra ba dòng giống hệt — trông như lỗi hiển thị và
+    // che mất sự đa dạng thật của nhóm.
+    if (e.examples.length < 3 && !e.examples.includes(r.keyword)) e.examples.push(r.keyword);
     byIntent.set(r.mainIntent, e);
 
     for (const f of r.foreignIntent) {

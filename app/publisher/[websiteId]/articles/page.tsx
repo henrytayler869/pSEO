@@ -80,8 +80,9 @@ export default async function ArticlesPage({
           <CardDescription>
             Một bài cho MỘT ĐỊA ĐIỂM, ráp từ toàn bộ chỉ số đo được ở nơi đó — cùng template, khác số liệu và khác
             đoạn AI diễn giải. Những nơi site đã có trang market bị loại khỏi danh sách, để không dựng hai trang cạnh
-            tranh nhau trên cùng domain. Ý định lấy từ nghiên cứu từ khoá của ngành (DataForSEO đo), không khai báo trong code — nó quyết định tiêu
-            đề và template. Thứ tự chỉ số thì theo VÙNG ĐO: số liệu đo tại ZIP lên trước, county/state xuống sau. Mỗi bài phải qua toàn bộ checklist QC mới thành bản nháp; không đạt thì viết lại tối đa 3 lần rồi dừng
+            tranh nhau trên cùng domain. Ý định đo cho TỪNG thị trường, từ chính từ khoá nơi đó đang nhắm — không khai báo trong code, và không một
+            nhãn chung cho cả ngành: cùng một mẫu câu mà Chicago là informational còn Pflugerville
+            là transactional. Thứ tự chỉ số thì theo VÙNG ĐO: số liệu đo tại ZIP lên trước, county/state xuống sau. Mỗi bài phải qua toàn bộ checklist QC mới thành bản nháp; không đạt thì viết lại tối đa 3 lần rồi dừng
             và giữ lại báo cáo.
           </CardDescription>
         </CardHeader>
