@@ -5,6 +5,7 @@ import { buildContentRules } from "@/lib/content-rules/registry";
 import { fetchSitemapCounts } from "@/lib/sitemap/count";
 import type { ArticleCandidate } from "@/lib/article-candidates/discover";
 import type { FactSet } from "@/lib/ai/facts";
+import { renderArticle, assertTemplate, type ArticleTemplateShape } from "@/lib/article-template/render";
 
 /**
  * Generate, check, rewrite, until every check passes or the budget runs out.
@@ -28,18 +29,18 @@ import type { FactSet } from "@/lib/ai/facts";
  */
 const MAX_ATTEMPTS = 3;
 
-const SYSTEM = `You write short editorial articles for a local-services website, from federal data.
+const SYSTEM = `You write ONE short interpretation paragraph for a data page on a local-services website.
+
+You are not writing the article. The page already has its title, its headings, its table of figures, its links and its source note — all assembled from a template. Your paragraph is the one part that differs between pages, and it exists so two pages about two places do not read identically.
 
 HARD RULES — a violation means the whole draft is rejected:
 1. Every number you write MUST appear in the FACTS list, written exactly as its "display" string shows it. You may drop decimal places; you may never add a digit, change a digit, or invent a figure.
-2. Never state or imply anything about what service companies charge, how busy they are, what equipment they use, or what a typical job involves. No dataset here measures suppliers. You may address the READER directly — what to ask, what to confirm, what to compare — and that is the correct way to be useful commercially.
+2. Never state or imply anything about what service companies charge, how busy they are, what equipment they use, or what a typical job involves. No dataset here measures suppliers. You may address the READER directly — what to ask, what to confirm, what to compare.
 3. A figure measured at county or state level must say so in the same sentence that contains it.
 4. Do not mention keywords, search volume, SEO, or ranking.
+5. Do not repeat the table. Say what the figures MEAN for someone reading them.
 
-Output STRICT JSON, no prose around it:
-{"title": "...", "metaDescription": "...", "html": "<p>...</p>"}
-
-html: plain semantic HTML — p, h2, ul, li, a. No inline styles, no classes.`;
+Output the paragraph as PLAIN TEXT. No HTML, no markdown, no quotes around it. Two to four sentences.`;
 
 function factsBlock(facts: FactSet["facts"]): string {
   return facts
@@ -50,7 +51,7 @@ function factsBlock(facts: FactSet["facts"]): string {
 function buildPrompt(
   candidate: ArticleCandidate,
   ctx: QcContext,
-  previous: { draft: ArticleDraft; report: QcReport } | null
+  previous: { paragraph: string; report: QcReport } | null
 ): string {
   const base = `TOPIC: ${candidate.title}
 WHY IT IS WORTH WRITING: ${candidate.why}
@@ -60,46 +61,29 @@ SCOPE: ${candidate.scope.kind} — ${candidate.scope.name}
 FACTS — the only numbers you may use:
 ${factsBlock(ctx.factSet.facts)}
 
-SEMANTIC TERMS to work in naturally (at least two): ${ctx.semanticKeywords.join(", ")}
-
-INTERNAL LINKS — link to at least one, using these exact paths:
-${[...ctx.knownPaths].slice(0, 12).join("\n")}
-
-RESERVED TERMS — if you use one as link text, it MUST link to its own page:
-${ctx.reservedTerms.map((r) => `"${r.term}" -> ${r.ownedBy}`).join("\n") || "(none)"}
-
-Length: at least 400 words. At least two <h2> sections. Title 30-65 characters. metaDescription 70-160 characters.`;
+SEMANTIC TERMS you may work in if they fit naturally: ${ctx.semanticKeywords.join(", ")}`;
 
   if (!previous) return base;
 
-  // The previous draft goes back verbatim alongside the failures. Asking for a
-  // fresh article instead loses the parts that already passed, and the next
-  // draft then breaks something different — the loop stops converging and
-  // starts circling.
+  // The previous paragraph goes back verbatim alongside the failures. Asking
+  // for a fresh one loses whatever already passed, and the next attempt then
+  // breaks something different — the loop stops converging and starts
+  // circling.
+  //
+  // The failures may concern parts of the page this paragraph does not
+  // control — a title pattern, a missing link — and that is said plainly
+  // below, because a model told to fix something it cannot reach will damage
+  // something it can.
   return `${base}
 
-Your previous draft FAILED these checks. Fix exactly these and change nothing else:
+The assembled page FAILED these checks:
 
 ${rewriteInstructions(previous.report)}
 
-PREVIOUS DRAFT:
-${JSON.stringify(previous.draft)}`;
-}
+Your previous paragraph:
+${previous.paragraph}
 
-function parseDraft(text: string): ArticleDraft {
-  // The model is asked for bare JSON but may wrap it in a fence. Stripping is
-  // cheaper than a retry, and a retry here would be charged as a QC failure it
-  // is not.
-  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```$/, "").trim();
-  const parsed = JSON.parse(cleaned) as Partial<ArticleDraft>;
-  if (typeof parsed.title !== "string" || typeof parsed.html !== "string") {
-    throw new Error("Model không trả về JSON có title và html.");
-  }
-  return {
-    title: parsed.title,
-    metaDescription: typeof parsed.metaDescription === "string" ? parsed.metaDescription : "",
-    html: parsed.html,
-  };
+Rewrite the paragraph to fix any of the above that a PARAGRAPH can fix — wrong or invented numbers, claims about companies, a missing scope word, a semantic term that would fit. If a failure is about the title, the links, the headings or duplication, it comes from the template and you cannot fix it: leave your paragraph as close to the previous one as possible.`;
 }
 
 /**
@@ -143,15 +127,39 @@ export interface WriteResult {
   report: QcReport;
   attempts: number;
   costUsd: number;
+  /** The model's contribution, kept separate from the assembled page so a bad
+   * article can be traced to the paragraph or to the template. */
+  paragraph: string;
 }
 
 export async function writeArticle(params: {
   candidate: ArticleCandidate;
   ctx: QcContext;
+  template: ArticleTemplateShape;
+  sourceNames: string[];
   websiteId: string;
   articleId: string;
 }): Promise<WriteResult> {
-  let previous: { draft: ArticleDraft; report: QcReport } | null = null;
+  // Checked before spending anything. A template missing its data-table or
+  // carrying two model blocks produces a broken page on every attempt, and
+  // finding that out after three billed calls is finding it out three calls
+  // too late.
+  const templateError = assertTemplate(params.template);
+  if (templateError) {
+    const report: QcReport = {
+      passed: false,
+      checks: [{ id: "template", label: "Template hợp lệ", passed: false, detail: templateError }],
+    };
+    return {
+      draft: { title: "", metaDescription: "", html: "" },
+      report,
+      attempts: 0,
+      costUsd: 0,
+      paragraph: "",
+    };
+  }
+
+  let previous: { paragraph: string; report: QcReport } | null = null;
   let costUsd = 0;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -163,45 +171,45 @@ export async function writeArticle(params: {
       websiteId: params.websiteId,
       articleId: params.articleId,
     });
-    // Added before parsing, not after: the call was billed whether or not the
-    // response is usable, and a cost figure that only counts parseable
-    // responses under-reports exactly when the model is misbehaving.
+    // Added before anything can throw: the call was billed whether or not the
+    // text is usable, and a cost figure that only counts usable responses
+    // under-reports exactly when the model is misbehaving.
     costUsd += result.costUsd;
 
-    let draft: ArticleDraft;
-    try {
-      draft = parseDraft(result.text);
-    } catch (err) {
-      previous = {
-        draft: { title: "", metaDescription: "", html: result.text.slice(0, 2000) },
-        report: {
-          passed: false,
-          checks: [
-            {
-              id: "parse",
-              label: "Trả về JSON hợp lệ",
-              passed: false,
-              detail: err instanceof Error ? err.message : "Không đọc được JSON.",
-            },
-          ],
-        },
-      };
-      continue;
-    }
+    // Strip any markup the model added despite being told not to. The template
+    // owns structure; a paragraph arriving with its own tags would put model
+    // output into a position no check inspects.
+    const paragraph = result.text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
 
+    const draft = renderArticle({
+      template: params.template,
+      candidate: params.candidate,
+      aiParagraph: paragraph,
+      knownPaths: params.ctx.knownPaths,
+      sourceNames: params.sourceNames,
+    });
+
+    // QC runs on the ASSEMBLED page, not on the paragraph. The failure this
+    // guards against is the one already measured on the live site: 368
+    // violating sentences, none of them from a model, all of them in template
+    // text that no content check ever looked at.
     const report = runQc(draft, params.ctx);
-    if (report.passed) return { draft, report, attempts: attempt, costUsd };
-    previous = { draft, report };
+    if (report.passed) return { draft, report, attempts: attempt, costUsd, paragraph };
+    previous = { paragraph, report };
   }
 
-  // Returned rather than thrown. A draft that failed after three tries is
-  // still the most useful thing in the room: it carries the report saying
-  // which check it could not satisfy, which is what a person needs in order
-  // to decide whether the article or the check is wrong.
+  const finalDraft = renderArticle({
+    template: params.template,
+    candidate: params.candidate,
+    aiParagraph: previous!.paragraph,
+    knownPaths: params.ctx.knownPaths,
+    sourceNames: params.sourceNames,
+  });
   return {
-    draft: previous!.draft,
+    draft: finalDraft,
     report: previous!.report,
     attempts: MAX_ATTEMPTS,
     costUsd,
+    paragraph: previous!.paragraph,
   };
 }

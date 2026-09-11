@@ -148,14 +148,6 @@ const CASES: Case[] = [
     draft: () => ({ ...goodDraft(), metaDescription: "Too short." }),
   },
   {
-    name: "bài quá ngắn -> min-words",
-    expectFail: "min-words",
-    draft: () => ({
-      ...goodDraft(),
-      html: `<p>IRS records show 52,675 households moved in.</p><h2>A</h2><p>x</p><h2>B</h2><p><a href="/local-moving">local moving services</a> moving help moving services prices</p>`,
-    }),
-  },
-  {
     name: "chỉ 1 thẻ H2 -> heading-structure",
     expectFail: "heading-structure",
     draft: () => {
