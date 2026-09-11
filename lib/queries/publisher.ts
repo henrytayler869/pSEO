@@ -7,7 +7,7 @@ import { buildContentRules } from "@/lib/content-rules/registry";
 import { fetchSiteSearchTotals, fetchTopPages, listSitemaps, type SubmittedSitemap } from "@/lib/google/search-console";
 import { fetchSiteTrafficTotals, fetchTrafficBySource } from "@/lib/google/analytics-data";
 
-const OVERVIEW_WINDOW_DAYS = 28;
+export const OVERVIEW_WINDOW_DAYS = 28;
 
 export interface WebsiteOverviewRow {
   website: Awaited<ReturnType<typeof prisma.website.findMany>>[number];

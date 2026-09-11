@@ -6,7 +6,9 @@ import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
-import { getWebsiteDetail } from "@/lib/queries/publisher";
+import { getWebsiteDetail, OVERVIEW_WINDOW_DAYS } from "@/lib/queries/publisher";
+import { GoalRecommendations } from "@/components/goal-recommendations";
+import { recommend, isGoal } from "@/lib/publisher/recommend";
 import { MeasurementIdForm } from "@/components/measurement-id-form";
 import { RevalidateSecretForm } from "@/components/revalidate-secret-form";
 import { WpAdminLinkCell } from "@/components/wp-admin-link";
@@ -18,6 +20,15 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
   if (!detail) notFound();
 
   const { website, domain, wpAdmin, requiredPages, requiredPagesError, sitemaps, sitemapsError, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
+
+  const goal = isGoal(website.goal) ? website.goal : null;
+  const recommendations = recommend(goal, {
+    windowDays: OVERVIEW_WINDOW_DAYS,
+    search, gscError, topPages,
+    sitemaps, sitemapsError, sitemapCount, sitemapError,
+    postCount, postCountError,
+    traffic, trafficBySource, ga4Error,
+  });
 
   return (
     <div className="flex flex-col gap-6">
@@ -74,6 +85,21 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
           </>
         }
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Mục tiêu &amp; việc nên làm tiếp</CardTitle>
+          <CardDescription>
+            Cùng những con số bên dưới, một site đang đuổi index và một site đang đuổi lead cần nghe hai việc khác nhau
+            — nên mục tiêu quyết định luật nào chạy, không phải luật nào được tô đậm. Mục &ldquo;không đo được&rdquo;
+            tách riêng khỏi mục &ldquo;đã ổn&rdquo;: một lần mất kết nối Search Console không được phép trông giống một
+            site khoẻ mạnh.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <GoalRecommendations websiteId={website.id} goal={goal} recommendations={recommendations} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
