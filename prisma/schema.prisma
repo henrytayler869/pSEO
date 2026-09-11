@@ -550,6 +550,42 @@ model Domain {
 // into this DB, so numbers can never go stale relative to the real source.
 // ---------------------------------------------------------------------------
 
+/// A publisher's own article template, stored as DATA rather than code.
+///
+/// Per publisher, not shared: two sites in the same trade should not publish
+/// the same skeleton, and a template living in HQ's source means changing one
+/// site's layout is a deploy that changes every site's layout.
+///
+/// Blocks are ordered and typed. The AI paragraph is ONE block among them —
+/// that ratio is the point. The market pages this mirrors measure 90% template
+/// to 10% model (1,061 of 10,674 characters), and that split is what makes the
+/// numeric contract enforceable: almost nothing in the page came from a model,
+/// so almost nothing in it can be invented.
+model ArticleTemplate {
+  id        String @id @default(cuid())
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  /// Which reader intent this template serves. One template per intent per
+  /// site: the same data serves three different readers and they do not want
+  /// the same page.
+  intent String
+  name   String
+
+  /// Ordered blocks. See lib/article-template/render.ts for the shapes.
+  blocks Json
+
+  /// Deactivated rather than deleted — a template that produced published
+  /// articles is the only record of how they were built.
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([websiteId, intent, name])
+  @@index([websiteId, isActive])
+}
+
 /// One editorial article, from candidate to WordPress draft.
 model Article {
   id        String @id @default(cuid())
@@ -707,8 +743,21 @@ model Website {
    */
   wpLoopbackSecret String?
 
-  articles    Article[]
-  articleJobs ArticleJob[]
+  /**
+   * What this site is currently optimising for. Drives which recommendations
+   * Control Panel makes from the same metrics — a site chasing index coverage
+   * and a site chasing leads read the same numbers and should be told
+   * different things.
+   *
+   * Null means nobody has chosen, and the panel says so rather than assuming
+   * traffic. An assumed goal produces confident advice for a target the owner
+   * never set.
+   */
+  goal String?
+
+  articles     Article[]
+  articleJobs  ArticleJob[]
+  templates    ArticleTemplate[]
 
   // Search Console property identity, e.g. "sc-domain:example.com" or
   // "https://example.com/" (URL-prefix form) — GSC requires the exact
