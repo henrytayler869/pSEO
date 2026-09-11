@@ -74,11 +74,15 @@ export interface GenerationResult {
  * One Claude call, with the spend ceiling enforced BEFORE the request goes
  * out — a cap checked afterwards is not a cap.
  *
- * IMPORTANT — not yet exercised against a live call: no ANTHROPIC_API_KEY
- * exists in this environment yet. Written against the official
- * @anthropic-ai/sdk (v0.123) and Anthropic's current documented Messages
- * API. Same "built from real docs, unverified until a credential exists"
- * status the NOAA/EIA/Cloudflare adapters shipped with.
+ * Written against the official @anthropic-ai/sdk (v0.123) and Anthropic's
+ * documented Messages API.
+ *
+ * This block used to say "not yet exercised against a live call: no
+ * ANTHROPIC_API_KEY exists in this environment yet". That stopped being true
+ * and nobody updated it — measured 2026-09-11: the key is configured, 305
+ * calls have been billed, $5.3967 spent. The comment was read as current
+ * state and reported as fact, which is what a stale comment does: it does not
+ * look stale, it looks like knowledge.
  *
  * Adaptive thinking is on by default even though it costs tokens. The task
  * is constraint-heavy — every invented number gets the whole generation
@@ -90,7 +94,12 @@ export async function generateWithClaude(params: {
   system: string;
   prompt: string;
   vertical: string;
-  zip: string;
+  /** Null for an editorial article, which spans many ZIPs. */
+  zip: string | null;
+  /** Set for article generation so cost is attributable per publisher and per
+   * article. The ledger row is written either way — this only says WHOSE. */
+  websiteId?: string | null;
+  articleId?: string | null;
 }): Promise<GenerationResult> {
   const apiKey = await getCredential("ANTHROPIC_API_KEY");
   if (!apiKey) {
@@ -138,6 +147,8 @@ export async function generateWithClaude(params: {
     data: {
       vertical: params.vertical,
       zip: params.zip,
+      websiteId: params.websiteId ?? null,
+      articleId: params.articleId ?? null,
       model: config.model,
       inputTokens,
       outputTokens,
