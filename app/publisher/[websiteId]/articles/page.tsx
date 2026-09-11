@@ -42,6 +42,7 @@ export default async function ArticlesPage({ params }: { params: Promise<{ websi
         <Link href={`/publisher/${websiteId}/onpage`} className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground">OnPage</Link>
         <Link href={`/publisher/${websiteId}/posts`} className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Bài viết</Link>
         <span className="border-b-2 border-foreground px-3 py-2 text-sm font-medium">Tạo bài viết</span>
+        <Link href={`/publisher/${websiteId}/templates`} className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground">Template</Link>
       </div>
 
       <Card>
