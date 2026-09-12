@@ -103,18 +103,51 @@ nó phóng đại quy mô vấn đề gấp bốn lần. Hệ quả thực tế:
 Một con số sai theo hướng phóng đại cũng tốn tiền — nó làm việc đáng làm trông
 như việc phải xin thêm ngân sách.
 
-## Còn lại## Còn lại
+## Đã sinh lại nốt 8 đoạn informational
 
-| Việc | Số đoạn | Chi phí |
+8/8, 0 lỗi, **$0.1858**. Kiểm toán sau đó:
+
+| Nhóm | n | giục so sánh | đánh giá |
+|---|---|---|---|
+| commercial | 97 | 23 (24%) | được phép |
+| informational | 37 | **0 (0%)** | khớp |
+| navigational | 16 | 0 (0%) | khớp |
+| transactional | 11 | 0 (0%) | khớp |
+
+`scripts/audit-intent-match.ts` thoát mã **0** — không còn đoạn nào giục so
+sánh trong nhóm không được phép.
+
+Ví dụ bản mới, ZIP 60634 Chicago (informational). Brief informational yêu cầu
+nói cả thứ số liệu KHÔNG mô tả, và model làm đúng việc đó ba lần trong một
+đoạn:
+
+> …a picture of where new neighbors came from, **not of how many moving
+> companies serve the area or what they charge**. … that is a Cook County
+> total covering far more ground than this ZIP, so it **should not be read as
+> a count of moves on any given street here**. … Median home value in the ZIP
+> is $333,900 and median household income is $84,997 — **background on the
+> area, not a guide to what a move costs**.
+
+Không câu nào giục so sánh, không câu nào giục đặt dịch vụ.
+
+## Còn lại## Còn lại## Còn lại
+
+Không còn gì SAI để sửa. Kiểm toán về 0.
+
+| Việc tuỳ chọn | Số đoạn | Chi phí |
 |---|---|---|
-| 8 đoạn `informational` đang lệch | 8 | **~$0.21** |
-| Cả nhóm `informational` (kể cả đoạn đã khớp) | 37 | ~$0.95 |
 | Cả nhóm `commercial` | 97 | ~$2.49 |
+| 29 đoạn `informational` chưa lệch nhưng viết theo brief cũ | 29 | ~$0.75 |
 
-`commercial` được phép giục so sánh nên không có gì để sửa; nó chỉ đáng sinh
-lại nếu muốn brief mới viết tốt hơn, không phải vì nó sai.
+`commercial` được phép giục so sánh nên nó không sai; sinh lại chỉ để brief
+mới viết tốt hơn. 29 đoạn informational còn lại cũng vậy — chúng không chứa
+câu giục so sánh nào nên phép đo không bắt được, nhưng chúng vẫn được viết
+bởi một brief không biết người đọc đang làm gì.
 
-Ngân sách còn $0.9809 — đủ cho 8 đoạn lệch với đệm lớn.
+Ngân sách còn **$0.7952** trên trần $7.00 — không đủ cho `commercial`.
+
+Tổng chi cho toàn bộ việc sinh lại theo intent: **$0.6037** (27 + 8 + 1 đoạn
+thử) trên 36 đoạn.
 
 ## Lệnh đo lại
 
