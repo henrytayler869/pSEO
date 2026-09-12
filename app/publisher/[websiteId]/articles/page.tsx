@@ -4,7 +4,7 @@ import { ArrowLeft, Globe } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db/prisma";
-import { discoverCandidates, type Intent } from "@/lib/article-candidates/discover";
+import { discoverCandidates, nicheVolumeThresholds, importanceOf, type Intent } from "@/lib/article-candidates/discover";
 import { marketIntents } from "@/lib/keywords/intents";
 import { fetchSitemapCounts } from "@/lib/sitemap/count";
 import { ArticleWorkbench } from "@/components/article-workbench";
@@ -53,6 +53,20 @@ export default async function ArticlesPage({
 
   const written = new Set(articles.map((a) => a.candidateId));
 
+  /**
+   * MỘT thang cho cả ngành, không phải thang riêng từng nhóm ý định.
+   *
+   * Tính riêng từng nhóm thì Brockton, MA (90 lượt/tháng) thành "cao" vì nhóm
+   * navigational chỉ có 10 ứng viên volume 70–90 — đúng trong nhóm, sai khi
+   * người đọc so với nhóm commercial ở 18.100. Một thang duy nhất cũng nói
+   * thêm được điều thang-riêng không nói: rằng cả nhóm navigational nhỏ.
+   *
+   * Tính trên TỪ KHOÁ khác nhau chứ không trên số ứng viên: 125 ứng viên
+   * commercial chỉ dùng 78 từ khoá, và 48 ứng viên chung một từ khoá sẽ kéo
+   * p75 lên đúng đỉnh, khiến nhãn nói về số bản sao thay vì về nhu cầu tìm.
+   */
+  const thresholds = await nicheVolumeThresholds(website.vertical);
+
   return (
     <div className="flex flex-col gap-6">
       <div>
@@ -98,6 +112,13 @@ export default async function ArticlesPage({
               intent: c.intent,
               factCount: c.metricCount,
               written: written.has(c.id),
+              keyword: c.keyword,
+              searchVolume: c.searchVolume,
+              cpc: c.cpc,
+              keywordDifficulty: c.keywordDifficulty,
+              importance: importanceOf(c.searchVolume, thresholds),
+              keywordRank: c.keywordRank,
+              keywordShareCount: c.keywordShareCount,
             }))}
             articles={articles.map((a) => ({
               id: a.id,
