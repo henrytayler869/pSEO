@@ -21,6 +21,7 @@ const FACTS: FactSet = {
   county: "Orange County",
   mainKeyword: null,
   countyKeyword: null,
+  searchIntent: "commercial",
   fingerprint: "qc-test",
   facts: [
     {

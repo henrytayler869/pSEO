@@ -229,6 +229,7 @@ const VECTOR_FACTS: FactSet = {
   county: "Example County",
   mainKeyword: null,
   countyKeyword: null,
+      searchIntent: null,
   fingerprint: "vectors",
   facts: [
     {

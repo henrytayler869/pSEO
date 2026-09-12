@@ -80,7 +80,7 @@ async function main() {
     // phải thấy điều đó y như lúc chạy thật.
     const report = runQc(draft, {
       ...ctx,
-      factSet: { ...full, mainKeyword: null, countyKeyword: null },
+      factSet: { ...full, mainKeyword: null, countyKeyword: null, searchIntent: c.intent },
       existingTitles: [...seenTitles],
       differentiation: { aiParagraph: PLACEHOLDER, templateProse: templateProse(DEFAULT_TEMPLATES[c.intent], placeholders(full)) },
     });

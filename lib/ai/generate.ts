@@ -87,7 +87,47 @@ Write 3-5 sentences of plain, useful prose for a person deciding who to hire. No
  * same drift. */
 export const VERTICALS_WITH_BRIEFS = Object.keys(VERTICAL_BRIEFS);
 
-function systemPromptFor(vertical: string): string {
+/**
+ * Đoạn brief thêm vào theo Ý ĐỊNH TÌM KIẾM của từ khoá thị trường.
+ *
+ * Vì sao cần: đo 12/9/2026 trên 227 đoạn đã sinh, cả bốn nhóm ý định đều
+ * 93–100% mang ngôn ngữ so sánh báo giá — không biến thiên, vì prompt không
+ * biết intent tồn tại. Nhóm transactional tệ nhất: 100% giọng so sánh, 27%
+ * nói gì về đặt dịch vụ. Người gõ "movers pflugerville" để đặt xe bị đưa một
+ * trang bảo họ đi so sánh.
+ *
+ * Ràng buộc quan trọng: đoạn này KHÔNG nới quy tắc nào ở SYSTEM_PROMPT. Nó
+ * chỉ đổi việc người đọc đang làm, nên đổi thứ đáng nói trước. Không có ý
+ * định nào cho phép nói về giá cước, lịch trống hay mức bận của hãng — không
+ * nguồn nào ở đây đo những thứ đó, và một intent "sẵn sàng đặt" không làm dữ
+ * liệu xuất hiện.
+ */
+const INTENT_BRIEFS: Record<string, string> = {
+  commercial: `READER INTENT: commercial — they are comparing before hiring.
+Lead with what the figures say about the area, then what to check when weighing options. This is the one intent where "compare" language belongs.`,
+
+  transactional: `READER INTENT: transactional — they have decided to move and are arranging it now.
+Do NOT tell them to go compare or shop around; that decision is behind them. Lead with what the figures mean for a move that is already happening — what to have ready, what to confirm, what tends to be specific about this area. Practical and immediate.`,
+
+  informational: `READER INTENT: informational — they are reading to understand the area, not to hire today.
+Explain what the figures describe and what they do NOT describe. No urging, no calls to compare or book. If a figure is easy to misread, say how.`,
+
+  navigational: `READER INTENT: navigational — they are looking for a specific named business.
+Keep it short and factual about the area. Do not invent or imply anything about which companies operate here, and do not try to redirect them into comparing; nothing here measures companies.`,
+};
+
+function intentBriefFor(intent: string | null): string {
+  // Chưa đo intent thì nói THẲNG là chưa biết, không rơi về commercial. Rơi
+  // về một giọng mặc định là cách 54 thị trường informational nhận giọng so
+  // sánh mà không ai thấy.
+  return (
+    INTENT_BRIEFS[intent ?? ""] ??
+    `READER INTENT: not measured for this market.
+Stay neutral: describe what the figures show and what they do not. Do not urge the reader to compare, to book, or to do anything — the intent behind the query is unknown, and guessing it wrong is worse than not addressing it.`
+  );
+}
+
+function systemPromptFor(vertical: string, searchIntent: string | null): string {
   const brief = VERTICAL_BRIEFS[vertical];
   if (!brief) {
     // No brief means no way to keep the copy on-topic, and a generic prompt
@@ -99,6 +139,8 @@ function systemPromptFor(vertical: string): string {
     );
   }
   return `${SYSTEM_PROMPT}
+
+${intentBriefFor(searchIntent)}
 
 STAY ON TOPIC
 The reader is hiring a business that does this: ${brief.does}.
@@ -248,7 +290,12 @@ export async function getOrGenerateInterpretation(vertical: string, zip: string)
   let totalCost = 0;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const result = await generateWithClaude({ system: systemPromptFor(vertical), prompt, vertical, zip });
+    const result = await generateWithClaude({
+      system: systemPromptFor(vertical, factSet.searchIntent),
+      prompt,
+      vertical,
+      zip,
+    });
     totalCost += result.costUsd;
     const validation = validateGeneratedText(result.text, factSet);
     lastValidation = validation;
@@ -293,5 +340,5 @@ export async function getOrGenerateInterpretation(vertical: string, zip: string)
 /** Exposed for the test/preview script so a prompt can be inspected without
  * spending anything. */
 export function buildPromptPreview(factSet: FactSet): { system: string; prompt: string } {
-  return { system: systemPromptFor(factSet.vertical), prompt: renderFactsForPrompt(factSet) };
+  return { system: systemPromptFor(factSet.vertical, factSet.searchIntent), prompt: renderFactsForPrompt(factSet) };
 }
