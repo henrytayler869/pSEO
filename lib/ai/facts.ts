@@ -50,6 +50,19 @@ export interface FactSet {
   mainKeyword: string | null;
   /** Set when the county has its own measured search term (NYC boroughs). */
   countyKeyword: string | null;
+  /**
+   * Ý định tìm kiếm ĐO được cho từ khoá chính của thị trường này.
+   *
+   * Thiếu trường này là lý do 227 đoạn đã sinh đều mang một giọng. Đo
+   * 12/9/2026: nhóm commercial 94% có ngôn ngữ so sánh, nhóm informational
+   * 93%, navigational 94%, transactional 100% — không biến thiên, vì prompt
+   * không hề biết intent tồn tại. Nặng nhất là nhóm transactional: người sẵn
+   * sàng đặt dịch vụ bị bảo đi so sánh báo giá.
+   *
+   * null = chưa đo, và prompt phải xử lý như "không biết" chứ không rơi về
+   * một giọng mặc định.
+   */
+  searchIntent: string | null;
   fingerprint: string;
 }
 
@@ -294,9 +307,14 @@ export async function buildFactSet(vertical: string, zip: string): Promise<FactS
   // key makes the input canonical: same facts, same fingerprint, whatever
   // order the rows arrived in.
   const canonical = [...facts].map((f) => [f.key, f.value, f.scope] as const).sort((a, b) => a[0].localeCompare(b[0]));
+  const leadKeyword = latestPerKeyword(identity.keywordMetrics).sort((a, b) => b.searchVolume - a.searchVolume)[0];
+  const searchIntent = leadKeyword?.mainIntent ?? null;
+  // searchIntent vào fingerprint: nó đổi thì brief đổi, nên bản văn cũ không
+  // còn đúng nữa và cache phải trượt. Không có nó thì đo xong intent mà trang
+  // vẫn trả về đúng đoạn văn viết theo brief cũ — im lặng.
   const fingerprint = crypto
     .createHash("sha256")
-    .update(JSON.stringify({ vertical, zip, facts: canonical }))
+    .update(JSON.stringify({ vertical, zip, facts: canonical, searchIntent }))
     .digest("hex")
     .slice(0, 32);
 
@@ -309,6 +327,7 @@ export async function buildFactSet(vertical: string, zip: string): Promise<FactS
     facts,
     mainKeyword: latestPerKeyword(identity.keywordMetrics)[0]?.keyword ?? null,
     countyKeyword: countyKeyword?.keyword ?? null,
+    searchIntent,
     fingerprint,
   };
 }

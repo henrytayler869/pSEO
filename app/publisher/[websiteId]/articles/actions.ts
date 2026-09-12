@@ -30,6 +30,7 @@ function factSetFor(c: ArticleCandidate): FactSet {
     county: c.county,
     mainKeyword: null,
     countyKeyword: null,
+    searchIntent: c.intent,
     fingerprint: c.fingerprint,
     facts: c.facts,
   };

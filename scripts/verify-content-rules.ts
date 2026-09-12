@@ -45,6 +45,7 @@ async function main() {
       county: "Example County",
       mainKeyword: null,
       countyKeyword: null,
+        searchIntent: null,
       fingerprint: "vectors",
       facts: v.facts.map((f) => ({
         key: f.key,
