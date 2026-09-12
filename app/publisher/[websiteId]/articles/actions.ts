@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { buildCandidate, discoverCandidates, type ArticleCandidate, type Intent } from "@/lib/article-candidates/discover";
-import { fetchSitemapCounts } from "@/lib/sitemap/count";
+import { fetchServedInventory } from "@/lib/publisher/inventory";
+import { logDependencyFailure } from "@/lib/observability/dependency-log";
 import { buildQcContext, writeArticle } from "@/lib/article-qc/write-loop";
 import { createPost, type WpCredentials } from "@/lib/wordpress/posts";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
@@ -244,17 +245,24 @@ export async function startArticleBatchAction(
     const running = await prisma.articleJob.findFirst({ where: { websiteId, status: "running" } });
     if (running) return { ok: false, message: "Đang có một lượt chạy chưa xong. Đợi nó kết thúc hoặc dừng nó trước." };
 
-    // servedPaths phải truyền Ở ĐÂY nữa, không chỉ ở trang danh sách.
+    // Hàng đợi đọc CÙNG nguồn loại trừ với danh sách. Thiếu bước này thì màn
+    // hình hiện một tập, lô viết một tập khác — lỗi không ai thấy cho tới khi
+    // bài trùng đã lên site.
     //
-    // Thiếu nó, màn hình hiện 174 ứng viên còn lô lấy từ 256 — chênh 82 nơi
-    // ĐÃ có trang market, tức đúng những bài mà phần loại trừ sinh ra để
-    // tránh. Một danh sách và một hàng đợi đọc hai tập khác nhau là lỗi không
-    // ai thấy cho tới khi bài trùng đã lên site.
-    const servedPaths = await fetchSitemapCounts(website.url).then(
-      (sm) => new Set(sm.urls.map((u) => new URL(u).pathname.replace(/\/+$/, ""))),
-      () => new Set<string>()
-    );
-    const all = await discoverCandidates(website.vertical, { servedPaths });
+    // Khác trang danh sách ở một chỗ: ở đây đọc hỏng thì DỪNG, không chạy với
+    // tập rỗng. Danh sách mời sai thì người dùng thấy; một lô chạy sai thì
+    // tiêu tiền xong mới thấy.
+    const inv = await fetchServedInventory(website.url).catch((err) => {
+      logDependencyFailure("publisher-inventory", err, { websiteId, site: website.url });
+      return null;
+    });
+    if (!inv) {
+      return {
+        ok: false,
+        message: "Không đọc được /api/inventory của publisher — chưa biết market nào đã có trang, nên không chạy lô để tránh viết trùng.",
+      };
+    }
+    const all = await discoverCandidates(website.vertical, { servedZips: new Set(inv.byZip.keys()) });
     const done = await prisma.article.findMany({ where: { websiteId }, select: { candidateId: true } });
     const doneIds = new Set(done.map((d) => d.candidateId));
     const queue = all

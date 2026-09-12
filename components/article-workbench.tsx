@@ -161,6 +161,8 @@ export function ArticleWorkbench({
   websiteId,
   intent,
   intents,
+  inventoryError,
+  servedPageCount,
   candidates,
   articles,
   job,
@@ -170,6 +172,10 @@ export function ArticleWorkbench({
   websiteId: string;
   intent: string | null;
   intents: NicheIntentRow[];
+  /** null = đọc được. Có chuỗi = CHƯA loại trừ được market đã có trang, nên
+   * danh sách dưới đây dài hơn thực tế. */
+  inventoryError: string | null;
+  servedPageCount: number | null;
   candidates: CandidateRow[];
   articles: ArticleRow[];
   job: JobRow | null;
@@ -255,6 +261,23 @@ export function ArticleWorkbench({
         {budget.remainingUsd < 0.5 && " Sắp hết — lô đang chạy sẽ dừng khi chạm trần, phần chưa viết KHÔNG bị đánh dấu trượt."}
       </div>
 
+      {/* Trạng thái loại trừ nói TRƯỚC danh sách. "125 ứng viên" và "125 ứng
+          viên vì chưa loại trừ được" là hai chuyện khác nhau, và số lớn hơn
+          luôn trông như tin tốt. */}
+      {inventoryError ? (
+        <div className="rounded-lg border border-amber-300 bg-amber-50/60 p-3 text-sm text-amber-900">
+          Chưa đọc được danh sách trang publisher đang phục vụ ({inventoryError}) — nên danh sách dưới đây{" "}
+          <strong>chưa loại</strong> những market đã có trang, và sẽ dài hơn thực tế. Nút chạy lô bị chặn để không viết
+          trùng.
+        </div>
+      ) : (
+        servedPageCount !== null && (
+          <p className="text-xs text-muted-foreground">
+            Đã loại những market publisher đang phục vụ — {servedPageCount} trang, đọc từ <code>/api/inventory</code>.
+          </p>
+        )
+      )}
+
       {job && <Progress job={job} />}
 
       {/* Chưa đo được ý định thì KHÔNG cho chạy lô. Viết 174 bài theo một ý
@@ -275,7 +298,7 @@ export function ArticleWorkbench({
               className="ml-2 w-20 rounded-md border px-2 py-1 text-sm"
             />
           </label>
-          <Button type="submit" size="sm" disabled={startingBatch || pending.length === 0 || intent === null}>
+          <Button type="submit" size="sm" disabled={startingBatch || pending.length === 0 || intent === null || inventoryError !== null}>
             <Play className="h-3.5 w-3.5" /> Viết {Math.min(limit, pending.length)} bài quan trọng nhất (nền)
           </Button>
 
@@ -294,7 +317,7 @@ export function ArticleWorkbench({
               value={String(highThreshold)}
               size="sm"
               variant="secondary"
-              disabled={startingBatch || intent === null}
+              disabled={startingBatch || intent === null || inventoryError !== null}
             >
               <Play className="h-3.5 w-3.5" /> Viết hết nhóm quan trọng ({highCount})
             </Button>
@@ -306,7 +329,7 @@ export function ArticleWorkbench({
               size="sm"
               variant="secondary"
               onClick={() => setConfirmAll(true)}
-              disabled={startingBatch || pending.length === 0 || intent === null}
+              disabled={startingBatch || pending.length === 0 || intent === null || inventoryError !== null}
             >
               <ListPlus className="h-3.5 w-3.5" /> Tạo tất cả ({pending.length})
             </Button>
@@ -331,6 +354,25 @@ export function ArticleWorkbench({
 
       <div className="flex flex-col gap-2">
         <span className="text-xs font-medium">{pending.length} ứng viên chưa viết</span>
+        {/* Rỗng vì MỌI market đã có trang là một kết luận, không phải một chỗ
+            trống. Đo 12/9/2026: 256 market có dữ liệu, publisher phục vụ cả
+            256 qua 158 trang (127 trang riêng + 31 trang cụm) — nên dataset
+            không còn nơi nào cần trang mới ở cấp thị trường. */}
+        {pending.length === 0 && !inventoryError && (
+          <div className="rounded-lg border border-dashed p-4 text-sm">
+            <p className="font-medium">Không còn market nào cần bài mới.</p>
+            <p className="pt-1 text-muted-foreground">
+              Mọi thị trường HQ có dữ liệu đều đã có trang trên publisher
+              {servedPageCount !== null && ` — ${servedPageCount} trang`}, kể cả những nơi được trang cụm phủ (Brooklyn
+              gộp 23 ZIP vào một trang). Viết thêm bài cho chúng là dựng trang thứ hai cạnh tranh với trang đã có.
+            </p>
+            <p className="pt-2 text-muted-foreground">
+              Muốn có thêm trang thì mở rộng dataset: thu thập thêm thị trường ở mục Thu thập dữ liệu, rồi để publisher
+              kéo manifest mới. Đường bài viết này dành cho nội dung dataset KHÔNG dựng được ở cấp thị trường.
+            </p>
+          </div>
+        )}
+
         {pending.slice(0, 30).map((c) => (
           <div key={c.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border p-3">
             <div className="min-w-0 flex-1">

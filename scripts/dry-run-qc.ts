@@ -16,7 +16,7 @@ import { buildQcContext } from "../lib/article-qc/write-loop";
 import { runQc } from "../lib/article-qc/checklist";
 import { renderArticle, assertTemplate, templateProse, placeholders } from "../lib/article-template/render";
 import { DEFAULT_TEMPLATES } from "../lib/article-template/defaults";
-import { fetchSitemapCounts } from "../lib/sitemap/count";
+import { fetchServedInventory } from "../lib/publisher/inventory";
 import { prisma } from "../lib/db/prisma";
 
 const PLACEHOLDER =
@@ -29,9 +29,8 @@ async function main() {
   const website = await prisma.website.findFirst({ where: { vertical: "moving-services" } });
   if (!website) { console.error("Không có website moving-services."); process.exitCode = 1; return; }
 
-  const sm = await fetchSitemapCounts(website.url);
-  const served = new Set(sm.urls.map((u) => new URL(u).pathname.replace(/\/+$/, "")));
-  const all = await discoverCandidates(website.vertical, { servedPaths: served });
+  const inv = await fetchServedInventory(website.url);
+  const all = await discoverCandidates(website.vertical, { servedZips: new Set(inv.byZip.keys()) });
 
   const limit = Number(process.argv[2] ?? all.length);
   const candidates = all.slice(0, limit);

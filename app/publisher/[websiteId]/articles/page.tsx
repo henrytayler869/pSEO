@@ -6,7 +6,8 @@ import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db/prisma";
 import { discoverCandidates, nicheVolumeThresholds, importanceOf, type Intent } from "@/lib/article-candidates/discover";
 import { marketIntents } from "@/lib/keywords/intents";
-import { fetchSitemapCounts } from "@/lib/sitemap/count";
+import { fetchServedInventory } from "@/lib/publisher/inventory";
+import { logDependencyFailure } from "@/lib/observability/dependency-log";
 import { ArticleWorkbench } from "@/components/article-workbench";
 import { getBudgetAction } from "./actions";
 
@@ -34,16 +35,27 @@ export default async function ArticlesPage({
   const intents = await marketIntents(website.vertical);
   const intent: Intent | null = intents.some((i) => i.id === intentParam) ? (intentParam as Intent) : intents[0]?.id ?? null;
 
-  // Đường dẫn site ĐANG phục vụ, để không mời viết trùng trang market đã có.
-  // Lỗi mạng thì trả về rỗng: không loại trừ ai, và danh sách dài bất thường
-  // là thứ nhìn thấy được — im lặng bỏ qua nơi đáng viết thì không.
-  const servedPaths = await fetchSitemapCounts(website.url).then(
-    (s) => new Set(s.urls.map((u) => new URL(u).pathname.replace(/\/+$/, ""))),
-    () => new Set<string>()
+  /**
+   * ZIP publisher ĐÃ có trang, đọc từ /api/inventory của chính nó.
+   *
+   * Lỗi khi đọc thì trả về rỗng — KHÔNG loại trừ ai, và danh sách dài bất
+   * thường là thứ nhìn thấy được. Im lặng bỏ qua nơi đáng viết vì một lần
+   * gọi mạng hỏng thì không ai phát hiện; mời viết trùng thì thấy ngay.
+   *
+   * Dòng cảnh báo bên dưới nói rõ đang ở trạng thái nào, vì "125 ứng viên" và
+   * "125 ứng viên vì chưa loại trừ được" là hai chuyện khác nhau.
+   */
+  const inventory = await fetchServedInventory(website.url).then(
+    (inv) => ({ ok: true as const, inv }),
+    (err) => {
+      logDependencyFailure("publisher-inventory", err, { websiteId, site: website.url });
+      return { ok: false as const, error: err instanceof Error ? err.message : "Không đọc được /api/inventory." };
+    }
   );
+  const servedZips = inventory.ok ? new Set(inventory.inv.byZip.keys()) : new Set<string>();
 
   const [candidates, articles, job, spend] = await Promise.all([
-    intent ? discoverCandidates(website.vertical, { intent, servedPaths }) : Promise.resolve([]),
+    intent ? discoverCandidates(website.vertical, { intent, servedZips }) : Promise.resolve([]),
     prisma.article.findMany({ where: { websiteId }, orderBy: { createdAt: "desc" } }),
     prisma.articleJob.findFirst({ where: { websiteId }, orderBy: { startedAt: "desc" } }),
     prisma.aiSpend.aggregate({ where: { websiteId }, _sum: { costUsd: true } }),
@@ -93,8 +105,9 @@ export default async function ArticlesPage({
           <CardTitle>Ứng viên từ dataset</CardTitle>
           <CardDescription>
             Một bài cho MỘT ĐỊA ĐIỂM, ráp từ toàn bộ chỉ số đo được ở nơi đó — cùng template, khác số liệu và khác
-            đoạn AI diễn giải. Những nơi site đã có trang market bị loại khỏi danh sách, để không dựng hai trang cạnh
-            tranh nhau trên cùng domain. Ý định đo cho TỪNG thị trường, từ chính từ khoá nơi đó đang nhắm — không khai báo trong code, và không một
+            đoạn AI diễn giải. Những market publisher đã phục vụ bị loại khỏi danh sách — đọc theo ZIP từ
+            <code>/api/inventory</code> của chính publisher, vì trang cụm đặt tên theo TỪ KHOÁ nên không phép ghép nào
+            theo tên thành phố tìm ra chúng. Ý định đo cho TỪNG thị trường, từ chính từ khoá nơi đó đang nhắm — không khai báo trong code, và không một
             nhãn chung cho cả ngành: cùng một mẫu câu mà Chicago là informational còn Pflugerville
             là transactional. Thứ tự chỉ số thì theo VÙNG ĐO: số liệu đo tại ZIP lên trước, county/state xuống sau. Mỗi bài phải qua toàn bộ checklist QC mới thành bản nháp; không đạt thì viết lại tối đa 3 lần rồi dừng
             và giữ lại báo cáo.
@@ -105,6 +118,8 @@ export default async function ArticlesPage({
             websiteId={websiteId}
             intent={intent}
             intents={intents}
+            inventoryError={inventory.ok ? null : inventory.error}
+            servedPageCount={inventory.ok ? inventory.inv.pageCount : null}
             candidates={candidates.map((c) => ({
               id: c.id,
               title: c.title,
