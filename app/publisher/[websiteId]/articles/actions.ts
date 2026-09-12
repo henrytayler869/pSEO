@@ -219,6 +219,22 @@ export async function startArticleBatchAction(
 
   // "Tạo tất cả" bỏ trần 50, nhưng KHÔNG bỏ trần ngân sách: lô vẫn dừng khi
   // chạm trần chi tiêu, và phần chưa viết không bị đánh dấu trượt.
+  // Ngưỡng volume tối thiểu, cho nút "viết hết nhóm quan trọng". Khác "top N"
+  // ở chỗ nó là một BỘ LỌC: 40 thị trường trên ngưỡng thì viết 40, không phải
+  // viết đúng 10 rồi dừng giữa nhóm.
+  // Một nút gửi một trường: `priority=<ngưỡng>` vừa nói ngưỡng volume vừa
+  // nói "chỉ bài đầu của mỗi từ khoá". Gộp vào một trường vì hai trường rời
+  // sẽ có tổ hợp vô nghĩa — ngưỡng cao mà vẫn nhận bản sao — và tổ hợp vô
+  // nghĩa nào tồn tại được thì sẽ có ngày ai đó gửi đúng nó.
+  const priority = Number(formData.get("priority") ?? 0) || 0;
+  const minVolume = priority;
+
+  // Chỉ lấy bài ĐẦU TIÊN của mỗi từ khoá. Không có cờ này thì "viết hết nhóm
+  // quan trọng" sẽ dựng 48 trang New York tranh nhau đúng một truy vấn — đúng
+  // thứ thứ tự trải-rộng-trước sinh ra để tránh, và một nút đi ngược lại nó
+  // thì tệ hơn không có nút.
+  const firstPerKeyword = priority > 0;
+
   const wantsAll = formData.get("all") === "1";
   const limit = wantsAll ? Number.MAX_SAFE_INTEGER : Math.max(1, Math.min(50, Number(formData.get("limit") ?? 10)));
 
@@ -241,9 +257,24 @@ export async function startArticleBatchAction(
     const all = await discoverCandidates(website.vertical, { servedPaths });
     const done = await prisma.article.findMany({ where: { websiteId }, select: { candidateId: true } });
     const doneIds = new Set(done.map((d) => d.candidateId));
-    const queue = all.filter((c) => c.intent === intent && !doneIds.has(c.id)).slice(0, limit);
+    const queue = all
+      .filter(
+        (c) =>
+          c.intent === intent &&
+          !doneIds.has(c.id) &&
+          c.searchVolume >= minVolume &&
+          (!firstPerKeyword || c.keywordRank === 1)
+      )
+      .slice(0, limit);
 
-    if (queue.length === 0) return { ok: false, message: `Không còn ứng viên "${intent}" nào chưa viết.` };
+    if (queue.length === 0) {
+      return {
+        ok: false,
+        message: minVolume > 0
+          ? `Không còn ứng viên "${intent}" nào chưa viết có từ khoá từ ${minVolume.toLocaleString("vi-VN")} lượt/tháng trở lên.`
+          : `Không còn ứng viên "${intent}" nào chưa viết.`,
+      };
+    }
 
     const job = await prisma.articleJob.create({
       data: { websiteId, intent, total: queue.length, status: "running" },

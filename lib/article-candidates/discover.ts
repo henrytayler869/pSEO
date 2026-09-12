@@ -160,6 +160,74 @@ export interface CandidateSummary {
   /** Ý định ĐO được cho thị trường này. null = chưa đo, không phải "không có". */
   intent: Intent | null;
   metricCount: number;
+
+  /** Từ khoá thị trường này thật sự sống bằng (volume cao nhất của nó), kèm
+   * số liệu của chính nó. null/0 khi chưa đo được từ khoá nào — và 0 ở đây
+   * KHÔNG có nghĩa "không ai tìm", nó có nghĩa "chưa ai đo". */
+  keyword: string | null;
+  searchVolume: number;
+  cpc: number;
+  keywordDifficulty: number;
+
+  /** Đây là bài thứ mấy nhắm vào cùng từ khoá đó, trên tổng bao nhiêu bài
+   * cùng nhắm. rank 1 = bài đầu tiên cho từ khoá này. */
+  keywordRank: number;
+  keywordShareCount: number;
+}
+
+/**
+ * Ngưỡng phân nhóm quan trọng, TÍNH TỪ chính phân bố của ngành này.
+ *
+ * Không đặt con số tuyệt đối. "Trên 5.000 là cao" nghe hợp lý cho một ngành
+ * và vô nghĩa cho ngành khác; một ngưỡng khai báo sẵn sẽ nói sai về mọi ngành
+ * trừ ngành nó được viết cho.
+ *
+ * Đo trên moving-services 11/9/2026: nhỏ nhất 10, p25 720, trung vị 2.900,
+ * p75 6.600, cao nhất 18.100.
+ *
+ * Đánh đổi phải biết: nhãn này TƯƠNG ĐỐI. Một thị trường có thể rơi từ "cao"
+ * xuống "vừa" mà volume của nó không đổi, chỉ vì những nơi khác được đo thêm.
+ * Vì vậy con số volume luôn hiện cạnh nhãn — nhãn để quét nhanh, con số mới
+ * là thứ so sánh được qua thời gian.
+ */
+export function volumeThresholds(volumes: number[]): { high: number; mid: number } {
+  const sorted = volumes.filter((v) => v > 0).sort((a, b) => a - b);
+  if (sorted.length === 0) return { high: 0, mid: 0 };
+  const at = (pct: number) => sorted[Math.floor((sorted.length - 1) * pct)];
+  return { high: at(0.75), mid: at(0.25) };
+}
+
+/**
+ * Ngưỡng cho CẢ NGÀNH, một thang duy nhất.
+ *
+ * Đo 11/9/2026: tính ngưỡng trong từng nhóm ý định thì Brockton, MA (90
+ * lượt/tháng) được gắn "cao" — vì nhóm navigational chỉ có 10 ứng viên,
+ * volume 70–90, nên 90 đúng là top quartile CỦA NHÓM ĐÓ. Nhưng 90 so với
+ * 18.100 của nhóm commercial thì "cao" là nói sai, và người đọc so hai tab
+ * với nhau sẽ tin hai thứ khác cỡ nhau là bằng nhau.
+ *
+ * Một thang cho cả ngành cũng nói thêm được điều nhóm-riêng không nói: rằng
+ * cả nhóm navigational nhỏ, không chỉ từng thị trường trong đó.
+ *
+ * Lấy volume LỚN NHẤT cho mỗi chuỗi từ khoá: cùng một từ khoá đo nhiều lần
+ * thì lần cao nhất là con số của nó, và đếm mỗi lần đo một phiếu sẽ cho từ
+ * khoá được đo nhiều lần nặng hơn.
+ */
+export async function nicheVolumeThresholds(vertical: string): Promise<{ high: number; mid: number }> {
+  const rows = await prisma.keywordMetric.findMany({
+    where: { marketIdentity: { vertical } },
+    select: { keyword: true, searchVolume: true },
+  });
+  const byKeyword = new Map<string, number>();
+  for (const r of rows) byKeyword.set(r.keyword, Math.max(byKeyword.get(r.keyword) ?? 0, r.searchVolume));
+  return volumeThresholds([...byKeyword.values()]);
+}
+
+export function importanceOf(volume: number, t: { high: number; mid: number }): "cao" | "vừa" | "thấp" | "chưa đo" {
+  if (volume <= 0) return "chưa đo";
+  if (volume >= t.high) return "cao";
+  if (volume >= t.mid) return "vừa";
+  return "thấp";
 }
 
 export async function discoverCandidates(
@@ -184,7 +252,10 @@ export async function discoverCandidates(
     where: { vertical },
     select: {
       zip: true,
-      keywordMetrics: { select: { searchVolume: true, mainIntent: true }, orderBy: { fetchedAt: "desc" } },
+      keywordMetrics: {
+        select: { keyword: true, searchVolume: true, cpc: true, keywordDifficulty: true, mainIntent: true },
+        orderBy: { fetchedAt: "desc" },
+      },
     },
   });
   const identities = rawIdentities.filter((i) => i.keywordMetrics.some((k) => k.searchVolume > 0));
@@ -203,10 +274,13 @@ export async function discoverCandidates(
    * này thật sự sống bằng, không phải trung bình của những truy vấn không ai
    * gõ.
    */
-  const intentByZip = new Map<string, string | null>();
+  const leadByZip = new Map<
+    string,
+    { keyword: string; searchVolume: number; cpc: number; keywordDifficulty: number; mainIntent: string | null }
+  >();
   for (const i of identities) {
     const lead = [...i.keywordMetrics].sort((a2, b2) => b2.searchVolume - a2.searchVolume)[0];
-    intentByZip.set(i.zip, lead?.mainIntent ?? null);
+    if (lead) leadByZip.set(i.zip, lead);
   }
 
   const locations = await prisma.location.findMany({
@@ -245,7 +319,8 @@ export async function discoverCandidates(
     // Ý định của thị trường này. Chưa đo thì để null và VẪN liệt kê — bỏ nó
     // đi sẽ giấu mất một nơi có đủ dữ liệu chỉ vì khâu đo ý định chưa chạy,
     // và danh sách ngắn đi mà không nói vì sao là thứ không ai phát hiện.
-    const marketIntent = intentByZip.get(loc.zip) ?? null;
+    const lead = leadByZip.get(loc.zip);
+    const marketIntent = lead?.mainIntent ?? null;
     if (opts.intent && marketIntent !== opts.intent) continue;
     out.push({
       id: `${vertical}:${loc.zip}`,
@@ -260,8 +335,57 @@ export async function discoverCandidates(
         (marketIntent ? `, từ khoá ở đây là ý định "${marketIntent}".` : ", CHƯA đo ý định từ khoá."),
       intent: marketIntent,
       metricCount: n,
+      keyword: lead?.keyword ?? null,
+      searchVolume: lead?.searchVolume ?? 0,
+      cpc: lead?.cpc ?? 0,
+      keywordDifficulty: lead?.keywordDifficulty ?? 0,
+      keywordRank: 1,
+      keywordShareCount: 1,
     });
   }
+  // Sắp theo VOLUME giảm dần, không theo ZIP.
+  //
+  // Thứ tự cũ là ZIP tăng dần — một thứ tự không mang thông tin nào, và nó
+  // đẩy Brockton, MA (90 lượt/tháng, xếp 512/538) lên đầu danh sách trong khi
+  // những thị trường 18.100 lượt nằm đâu đó phía dưới.
+  //
+  // Sắp ở ĐÂY, không sắp ở giao diện: hàng đợi của lô cũng đọc hàm này, nên
+  // "tạo 10 bài" phải là 10 bài đáng viết nhất, không phải 10 ZIP nhỏ nhất.
+  out.sort((a, b) => b.searchVolume - a.searchVolume || a.zip.localeCompare(b.zip));
+
+  /**
+   * TRẢI RỘNG trước, ĐÀO SÂU sau.
+   *
+   * Sắp theo volume đơn thuần cho ra kết quả trông đúng mà hỏng: đo 11/9/2026
+   * trên ý định commercial, 125 ứng viên dùng 78 từ khoá, nhưng 48 ứng viên
+   * chung đúng một từ khoá "moving companies new york" — và 10 ứng viên đầu
+   * theo volume dùng ĐÚNG MỘT từ khoá. Bấm "viết 10 bài quan trọng nhất" sẽ
+   * dựng 10 trang New York tranh nhau một truy vấn.
+   *
+   * Nên thứ tự là: bản ĐẦU TIÊN của mỗi từ khoá, theo volume giảm dần; rồi
+   * mới tới các bản thứ hai, thứ ba. Mười bài đầu thành mười từ khoá khác
+   * nhau.
+   *
+   * Không LOẠI bản thứ hai: nhiều ZIP trong một thành phố vẫn có số liệu khác
+   * nhau và vẫn là trang hợp lệ. Chỉ là chúng không đáng viết trước khi mọi
+   * từ khoá khác có bài đầu tiên.
+   */
+  const seenKeyword = new Map<string, number>();
+  for (const c of out) {
+    const k = c.keyword ?? "";
+    const rank = (seenKeyword.get(k) ?? 0) + 1;
+    seenKeyword.set(k, rank);
+    c.keywordRank = rank;
+  }
+  const shareCount = new Map<string, number>(seenKeyword);
+  for (const c of out) c.keywordShareCount = shareCount.get(c.keyword ?? "") ?? 1;
+
+  out.sort(
+    (a, b) =>
+      a.keywordRank - b.keywordRank ||
+      b.searchVolume - a.searchVolume ||
+      a.zip.localeCompare(b.zip)
+  );
   return out;
 }
 

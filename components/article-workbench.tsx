@@ -16,12 +16,26 @@ import {
 
 const EMPTY: ArticleActionResult = { ok: false, message: "" };
 
+const IMPORTANCE_STYLE: Record<CandidateRow["importance"], "default" | "secondary" | "outline" | "destructive"> = {
+  cao: "default",
+  "vừa": "secondary",
+  "thấp": "outline",
+  "chưa đo": "destructive",
+};
+
 export interface CandidateRow {
   id: string;
   title: string;
   why: string;
   intent: string | null;
   factCount: number;
+  keyword: string | null;
+  searchVolume: number;
+  cpc: number;
+  keywordDifficulty: number;
+  importance: "cao" | "vừa" | "thấp" | "chưa đo";
+  keywordRank: number;
+  keywordShareCount: number;
   written: boolean;
 }
 
@@ -166,8 +180,18 @@ export function ArticleWorkbench({
   const [batchState, batchAction, startingBatch] = useActionState(startArticleBatchAction, EMPTY);
   const [pubState, pubAction, publishing] = useActionState(publishArticleAction, EMPTY);
   const [confirmAll, setConfirmAll] = useState(false);
+  const [limit, setLimit] = useState(10);
 
   const pending = candidates.filter((c) => !c.written);
+  // Ngưỡng "cao" lấy từ chính nhãn server đã tính — không tính lại ở client.
+  // Hai phép tính cho cùng một ngưỡng là hai cơ hội lệch nhau, và bên lệch sẽ
+  // là bên người dùng nhìn thấy.
+  // Nhóm đáng viết trước = volume cao VÀ là bài đầu của từ khoá. Bỏ điều kiện
+  // thứ hai thì con số trên nút sẽ là 70, trong đó 47 bài là bản sao của một
+  // từ khoá duy nhất.
+  const high = pending.filter((c) => c.importance === "cao" && c.keywordRank === 1);
+  const highCount = high.length;
+  const highThreshold = highCount > 0 ? Math.min(...high.map((c) => c.searchVolume)) : 0;
   const articleCost = articles.reduce((s, a) => s + a.costUsd, 0);
 
   return (
@@ -246,12 +270,13 @@ export function ArticleWorkbench({
               type="number"
               min={1}
               max={50}
-              defaultValue={Math.min(10, Math.max(1, pending.length))}
+              value={limit}
+              onChange={(e) => setLimit(Math.max(1, Math.min(50, Number(e.target.value) || 1)))}
               className="ml-2 w-20 rounded-md border px-2 py-1 text-sm"
             />
           </label>
           <Button type="submit" size="sm" disabled={startingBatch || pending.length === 0 || intent === null}>
-            <Play className="h-3.5 w-3.5" /> Tạo hàng loạt (nền)
+            <Play className="h-3.5 w-3.5" /> Viết {Math.min(limit, pending.length)} bài quan trọng nhất (nền)
           </Button>
 
           {/* "Tạo tất cả" đi qua một bước xác nhận, không phải vì thao tác khó
@@ -259,6 +284,22 @@ export function ArticleWorkbench({
               BÀI CHƯA AI ĐO. Chưa bài nào được viết bằng model thật, nên con
               số duy nhất hiện có là ước lượng từ một dạng prompt khác. Một cú
               bấm nhầm ở đây tiêu hết phần ngân sách còn lại. */}
+          {/* Nút này là BỘ LỌC, không phải "top N": 40 thị trường trên ngưỡng
+              thì viết cả 40. Khác nút bên cạnh ở chỗ nó không dừng giữa nhóm
+              vì con số 10 do người gõ. */}
+          {highCount > 0 && (
+            <Button
+              type="submit"
+              name="priority"
+              value={String(highThreshold)}
+              size="sm"
+              variant="secondary"
+              disabled={startingBatch || intent === null}
+            >
+              <Play className="h-3.5 w-3.5" /> Viết hết nhóm quan trọng ({highCount})
+            </Button>
+          )}
+
           {!confirmAll ? (
             <Button
               type="button"
@@ -293,7 +334,35 @@ export function ArticleWorkbench({
         {pending.slice(0, 30).map((c) => (
           <div key={c.id} className="flex flex-wrap items-start justify-between gap-2 rounded-lg border p-3">
             <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">{c.title}</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium">{c.title}</span>
+                <Badge variant={IMPORTANCE_STYLE[c.importance]}>{c.importance}</Badge>
+                {/* Bản thứ hai trở đi của cùng một từ khoá phải nhìn thấy
+                    được. Volume của nó vẫn là 18.100 — nhưng đó là 18.100 mà
+                    nó CHIA với 47 trang khác, không phải 18.100 nó giành
+                    được. Nhãn "cao" một mình sẽ nói sai chuyện đó. */}
+                {c.keywordShareCount > 1 && (
+                  <Badge variant={c.keywordRank === 1 ? "secondary" : "outline"}>
+                    {c.keywordRank === 1
+                      ? `bài đầu cho từ khoá này (${c.keywordShareCount} trang cùng nhắm)`
+                      : `bài thứ ${c.keywordRank}/${c.keywordShareCount} cùng từ khoá`}
+                  </Badge>
+                )}
+              </div>
+              {/* Con số volume luôn đi kèm nhãn. Nhãn là TƯƠNG ĐỐI — tính từ
+                  phân bố của chính ngành này — nên một thị trường có thể đổi
+                  nhãn mà volume không đổi. Con số mới là thứ so sánh được qua
+                  thời gian. */}
+              <div className="pt-0.5 text-xs text-muted-foreground">
+                {c.keyword ? (
+                  <>
+                    <span className="font-mono">{c.keyword}</span> · {c.searchVolume.toLocaleString("vi-VN")} lượt
+                    tìm/tháng · KD {c.keywordDifficulty} · CPC ${c.cpc.toFixed(2)}
+                  </>
+                ) : (
+                  "CHƯA đo được từ khoá cho thị trường này"
+                )}
+              </div>
               <div className="text-xs text-muted-foreground">{c.why}</div>
               <div className="pt-1 text-xs text-muted-foreground">{c.factCount} chỉ số được phép dùng</div>
             </div>

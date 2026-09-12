@@ -43,6 +43,13 @@ tunnel_alive() {
   lsof -ti:"$LOCAL_PORT" >/dev/null 2>&1
 }
 
+# Hỏi thẳng Postgres, không tin vào việc cổng đang mở: cổng mở chưa chắc
+# tunnel còn sống — ssh có thể đã chết mà một tiến trình khác giữ cổng.
+db_answers() {
+  nc -z -G 2 127.0.0.1 "$LOCAL_PORT" >/dev/null 2>&1
+}
+
+
 # --agent: chế độ dành cho launchd.
 #
 # Khác chế độ tiền cảnh ở một điểm quyết định: nó KHÔNG tranh cổng. Nếu đã có
@@ -65,8 +72,17 @@ fi
 
 if tunnel_alive; then
   if [ "$ENSURE" = "yes" ]; then
-    echo "Tunnel DB đã mở sẵn ở cổng $LOCAL_PORT."
-    exit 0
+    # Cổng bị chiếm CHƯA CHẮC tunnel còn sống — ssh có thể đang giữa nhịp nối
+    # lại, hoặc đã chết mà tiến trình khác giữ cổng. Đo được 12/9/2026: cổng
+    # mở, launchd báo running, mà Prisma vẫn không kết nối được; hai giây sau
+    # thì được. Hỏi thẳng Postgres rồi mới báo thành công, như wp-tunnel.sh.
+    for _ in 1 2 3 4 5; do
+      db_answers && { echo "Tunnel DB đã mở sẵn ở cổng $LOCAL_PORT."; exit 0; }
+      sleep 2
+    done
+    echo "Cổng $LOCAL_PORT bị chiếm nhưng Postgres không trả lời sau 10 giây."
+    echo "Kiểm: lsof -ti:$LOCAL_PORT"
+    exit 1
   fi
   echo "Cổng $LOCAL_PORT đang bị chiếm — tunnel có thể đã mở sẵn."
   echo "Kiểm: lsof -ti:$LOCAL_PORT"
@@ -112,12 +128,6 @@ echo
 # Vòng lặp dừng hẳn khi ssh thoát 0 (người dùng Ctrl-C) và chỉ nối lại khi ssh
 # chết vì lý do khác. Nối lại vô điều kiện sẽ biến "khoá SSH sai" thành một
 # vòng lặp vô hạn nói cùng một lỗi mãi mãi.
-# Hỏi thẳng Postgres, không tin vào việc cổng đang mở: cổng mở chưa chắc
-# tunnel còn sống — ssh có thể đã chết mà một tiến trình khác giữ cổng.
-db_answers() {
-  nc -z -G 2 127.0.0.1 "$LOCAL_PORT" >/dev/null 2>&1
-}
-
 connect_loop() {
   local delay=2
   while true; do
