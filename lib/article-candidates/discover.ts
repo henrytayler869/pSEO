@@ -103,9 +103,6 @@ export interface ArticleCandidate {
   fingerprint: string;
 }
 
-function slug(s: string): string {
-  return s.toLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-}
 
 /**
  * Sắp fact theo intent: chỉ số phục vụ ý định đang chọn lên trước.
@@ -232,7 +229,7 @@ export function importanceOf(volume: number, t: { high: number; mid: number }): 
 
 export async function discoverCandidates(
   vertical: string,
-  opts: { intent?: Intent; servedPaths?: Set<string> } = {}
+  opts: { intent?: Intent; servedZips?: Set<string> } = {}
 ): Promise<CandidateSummary[]> {
 
   /**
@@ -312,7 +309,14 @@ export async function discoverCandidates(
   const out: CandidateSummary[] = [];
   for (const loc of locations) {
     if (!loc.city) continue;
-    if (opts.servedPaths?.has(`/${vertical}/${loc.state.toLowerCase()}/${slug(loc.city)}`)) continue;
+    // Loại theo ZIP, từ danh sách publisher TỰ CÔNG BỐ.
+    //
+    // Bản trước ghép tên thành phố thành đường dẫn rồi so với sitemap. Nó bỏ
+    // sót gần hết: trang cụm đặt tên theo TỪ KHOÁ, và những ZIP sau
+    // /moving-services/ny/brooklyn đều mang city "New York" ở đây — không
+    // phép ghép nào tìm ra. Kết quả: mời viết 174 bài cho 174 market đã có
+    // trang.
+    if (opts.servedZips?.has(loc.zip)) continue;
     const n = countByLocation.get(loc.id) ?? 0;
     if (n === 0) continue;
 
