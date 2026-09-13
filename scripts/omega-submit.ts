@@ -53,23 +53,32 @@ async function main() {
   // Chỉ trang nội dung. Hub và trang mục đã ở trong danh sách bấm tay
   // (npm run index:priority) và trộn chúng vào đây sẽ làm hai phép can thiệp
   // chồng lên nhau — lúc đó không tách được tác dụng của cái nào.
-  // --dry không đọc bảng: nó tồn tại để xem TRƯỚC khi quyết định có dựng
-  // bảng hay không, và bắt chạy migration mới xem được là đảo ngược thứ tự
-  // đó.
-  const already = dry
-    ? new Set<string>()
-    : new Set(
-        (
-          // MỌI provider, không chỉ Omega. Một URL đã bấm tay trong Search
-          // Console cũng phải bị loại — nó đã nhận một can thiệp, và để nó
-          // vào nhóm đối chứng sẽ làm nhóm đối chứng trông tốt lên vì lý do
-          // không liên quan gì tới đối chứng.
-          await prisma.indexSubmission.findMany({
-            where: { websiteId: site.id },
-            select: { url: true },
-          })
-        ).map((r) => r.url)
-      );
+  //
+  // --dry ĐỌC bảng như lần chạy thật. Ban đầu nó không đọc, để xem trước
+  // được khi bảng chưa tồn tại; giờ bảng đã có, và một bản xem trước bỏ qua
+  // danh sách loại trừ sẽ in ra một kế hoạch mà lần chạy thật không làm
+  // theo — đúng những URL bạn đã bấm tay là những URL nó không biết để bỏ.
+  // Xem trước sai còn tệ hơn không có xem trước.
+  //
+  // Nếu bảng chưa tồn tại (chưa chạy migration), --dry vẫn chạy được và nói
+  // rõ là chưa loại trừ được gì, thay vì chết với lỗi Prisma.
+  let already: Set<string>;
+  try {
+    // MỌI provider, không chỉ Omega. Một URL đã bấm tay trong Search
+    // Console cũng phải bị loại — nó đã nhận một can thiệp, và để nó
+    // vào nhóm đối chứng sẽ làm nhóm đối chứng trông tốt lên vì lý do
+    // không liên quan gì tới đối chứng.
+    const rows = await prisma.indexSubmission.findMany({
+      where: { websiteId: site.id },
+      select: { url: true },
+    });
+    already = new Set(rows.map((r) => r.url));
+  } catch (err) {
+    if (!dry) throw err;
+    console.log("⚠ chưa đọc được bảng IndexSubmission — xem trước NÀY chưa loại trừ gì.");
+    console.log(`  (${err instanceof Error ? err.message.split("\n")[0] : String(err)})\n`);
+    already = new Set<string>();
+  }
   const candidates = sm.urls
     .filter((u) => new URL(u).pathname.split("/").filter(Boolean).length === 3)
     .filter((u) => !already.has(u))
@@ -83,9 +92,26 @@ async function main() {
   candidates.forEach((u, i) => (i % 2 === 0 ? submitted : control).push(u));
 
   console.log(`${candidates.length} URL: gửi ${submitted.length}, đối chứng ${control.length}, drip ${drip} ngày\n`);
-  for (const u of submitted.slice(0, 5)) console.log(`  GỬI       ${u.replace(site.url, "")}  ${volByPath.get(new URL(u).pathname) ?? 0} lượt`);
-  for (const u of control.slice(0, 5)) console.log(`  đối chứng ${u.replace(site.url, "")}  ${volByPath.get(new URL(u).pathname) ?? 0} lượt`);
+  // In xen kẽ theo cặp, không gộp nhóm. Điều cần kiểm bằng mắt là hai nhánh
+  // có CÂN về độ quan trọng không; in gộp thì hai cột volume nằm cách nhau
+  // năm dòng và không so được. Xen kẽ thì lệch cặp nào đập ngay vào mắt.
+  const vol = (u: string) => volByPath.get(new URL(u).pathname) ?? 0;
+  for (let i = 0; i < Math.min(5, submitted.length); i++) {
+    console.log(`  GỬI       ${submitted[i].replace(site.url, "").padEnd(44)} ${String(vol(submitted[i])).padStart(6)} lượt`);
+    if (control[i]) console.log(`  đối chứng ${control[i].replace(site.url, "").padEnd(44)} ${String(vol(control[i])).padStart(6)} lượt`);
+  }
   if (candidates.length > 10) console.log(`  … và ${candidates.length - 10} URL nữa`);
+
+  // Tổng volume hai nhánh. Chia xen kẽ theo hạng làm hai nhánh cân, nhưng
+  // "làm cho cân" và "đã cân" là hai việc khác nhau — với danh sách lẻ hoặc
+  // một trang lớn bất thường, chênh lệch có thật. In ra để thấy, vì nếu hai
+  // nhánh lệch nhiều thì kết quả đọc được là chênh lệch độ quan trọng chứ
+  // không phải tác dụng của dịch vụ.
+  const sum = (a: string[]) => a.reduce((t, u) => t + vol(u), 0);
+  const [sv, cv] = [sum(submitted), sum(control)];
+  const skew = sv + cv === 0 ? 0 : Math.abs(sv - cv) / ((sv + cv) / 2);
+  console.log(`\ntổng volume — gửi ${sv}, đối chứng ${cv} (lệch ${(skew * 100).toFixed(1)}%)`);
+  if (skew > 0.2) console.log("  ⚠ lệch trên 20%: hai nhánh không so được trực tiếp.");
 
   if (dry) { console.log("\n--dry: không gửi, không ghi gì."); await prisma.$disconnect(); return; }
 
