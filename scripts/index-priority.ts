@@ -15,6 +15,7 @@
 
 import { prisma } from "../lib/db/prisma";
 import { resolveSite, reportSiteError } from "../lib/scripts/resolve-site";
+import { numberArg, reportArgError } from "../lib/scripts/argv";
 import { fetchServedInventory } from "../lib/publisher/inventory";
 import { fetchSitemapCounts } from "../lib/sitemap/count";
 
@@ -79,7 +80,7 @@ async function main() {
     .sort();
 
   const ranked = [...pages].sort((a, b) => b[1].volume - a[1].volume || a[0].localeCompare(b[0]));
-  const perDay = Number(process.argv[2] ?? 10);
+  const perDay = numberArg(0, 10);
 
   console.log(`${ranked.length} trang thị trường + ${hubs.length} hub bang. Hạn mức ~${perDay} URL/ngày.\n`);
 
@@ -134,4 +135,7 @@ async function main() {
   if (days > showDays) console.log(`… còn ${days - showDays} ngày nữa cho ${queue.length - showDays * perDay} URL còn lại.`);
   await prisma.$disconnect();
 }
-main();
+main().catch((err) => {
+  if (reportArgError(err)) return;
+  throw err;
+});
