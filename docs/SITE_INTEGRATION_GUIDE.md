@@ -8,6 +8,27 @@
 > Mọi ví dụ response trong tài liệu này đều **chụp từ API thật đang chạy**
 > (2026-09-06), không phải shape tự nghĩ ra.
 
+> **Đọc kèm hai tài liệu nữa — chúng không lặp lại nội dung ở đây.**
+> File này là *hợp đồng dữ liệu*: lấy gì, hình dạng ra sao. Hai file kia là
+> *những gì đã sai khi dựng site đầu tiên*, đo trên site thật chứ không suy
+> luận. Bỏ qua chúng nghĩa là phát hiện lại từ đầu:
+>
+> | File | Trả lời câu hỏi | Vì sao cần trước khi viết code |
+> |---|---|---|
+> | `docs/TECHNICAL_SEO_QC.md` | sitemap, canonical, redirect, cấu trúc URL, JSON-LD; §5 là checklist publisher tự giữ, §8 là quy trình worktree + PR | Viết ra để publisher mới **kế thừa** — dòng đầu file nói đúng vậy. Nhiều mục là thứ sửa được trong 5 phút lúc dựng, và tốn một đợt re-crawl nếu phát hiện sau. |
+> | `docs/CONTENT_QC.md` | luật nội dung, và **cách chứng minh** đã tuân thủ | Crawl toàn bộ 192 URL, không lấy mẫu. Phát hiện chính: **368 câu vi phạm `no-supply-side-bridge`, không câu nào do AI viết** — tất cả nằm trong text template mà không check nội dung nào từng soi tới. |
+>
+> Dòng cuối bảng là bài học đắt nhất của cả ba tài liệu: lớp deterministic
+> không được miễn kiểm chỉ vì con người viết ra nó.
+
+**Bản 7 — 2026-09-13**:
+> - **§3.7c mới**: endpoint đoạn cấp cụm `/cluster-interpretation`. Trước đó
+>   tài liệu không nhắc nó lần nào, và bỏ sót nó **không gây lỗi** — trang
+>   cụm vẫn build, chỉ là không có chữ AI. Đo trên site đầu: 161 ZIP có
+>   đoạn, **127 hiện ra, 34 nằm im**.
+> - Trỏ sang hai tài liệu QC ở trên; trước đây không tài liệu nào trỏ sang
+>   tài liệu nào.
+
 **Bản 6 — 2026-09-07** (sau đợt 5 việc lớn):
 > - **Nguồn mới `census_mobility`** (ACS B07003): số người chuyển nhà theo
 >   từng zip — dữ liệu cấp ZIP đầu tiên đo đúng hành vi của niche này. Xem §4.
