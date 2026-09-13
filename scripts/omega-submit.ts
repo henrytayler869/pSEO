@@ -60,8 +60,12 @@ async function main() {
     ? new Set<string>()
     : new Set(
         (
+          // MỌI provider, không chỉ Omega. Một URL đã bấm tay trong Search
+          // Console cũng phải bị loại — nó đã nhận một can thiệp, và để nó
+          // vào nhóm đối chứng sẽ làm nhóm đối chứng trông tốt lên vì lý do
+          // không liên quan gì tới đối chứng.
           await prisma.indexSubmission.findMany({
-            where: { websiteId: site.id, provider: PROVIDER },
+            where: { websiteId: site.id },
             select: { url: true },
           })
         ).map((r) => r.url)
