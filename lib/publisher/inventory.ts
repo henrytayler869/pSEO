@@ -17,6 +17,20 @@
 export interface ServedInventory {
   /** ZIP -> đường dẫn trang đang phục vụ nó. */
   byZip: Map<string, string>;
+  /**
+   * ZIP -> loại trang phục vụ nó.
+   *
+   * "market" = trang riêng, có render đoạn AI diễn giải.
+   * "cluster" = trang gộp nhiều ZIP, KHÔNG render đoạn AI nào.
+   *
+   * Phân biệt này tốn tiền thật mới biết. Đo 13/9/2026: sinh lại 35 đoạn
+   * theo ý định, 9 trong số đó thuộc ZIP nằm trong cụm — cluster-view.tsx
+   * bên Pubsite không tham chiếu tới lớp AI, nên 9 đoạn ấy không xuất hiện
+   * trên trang nào. Khoảng $0.20 cho chữ không ai đọc.
+   *
+   * Nơi nào sinh lại nội dung theo lô nên lọc theo trường này.
+   */
+  kindByZip: Map<string, "market" | "cluster">;
   pageCount: number;
   generatedAt: string | null;
 }
@@ -35,11 +49,15 @@ export async function fetchServedInventory(siteUrl: string): Promise<ServedInven
   if (!Array.isArray(entries)) throw new Error("Phản hồi /api/inventory thiếu mảng entries.");
 
   const byZip = new Map<string, string>();
+  const kindByZip = new Map<string, "market" | "cluster">();
   for (const e of entries) {
     if (typeof e !== "object" || e === null) continue;
     const zip = (e as Record<string, unknown>).zip;
     const path = (e as Record<string, unknown>).path;
-    if (typeof zip === "string" && typeof path === "string") byZip.set(zip, path);
+    const kind = (e as Record<string, unknown>).kind;
+    if (typeof zip !== "string" || typeof path !== "string") continue;
+    byZip.set(zip, path);
+    if (kind === "market" || kind === "cluster") kindByZip.set(zip, kind);
   }
   // Mảng entries rỗng KHÔNG được coi là "site chưa có trang nào": nó gần như
   // luôn nghĩa là phản hồi sai hình dạng, và coi nó là 0 sẽ mở lại đúng lỗi
@@ -50,6 +68,7 @@ export async function fetchServedInventory(siteUrl: string): Promise<ServedInven
   const generatedAt = (body as Record<string, unknown>).generatedAt;
   return {
     byZip,
+    kindByZip,
     pageCount: typeof pageCount === "number" ? pageCount : new Set(byZip.values()).size,
     generatedAt: typeof generatedAt === "string" ? generatedAt : null,
   };
