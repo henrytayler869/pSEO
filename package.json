@@ -20,7 +20,8 @@
     "index:experiment": "tsx scripts/index-experiment.ts",
     "index:manual": "tsx scripts/record-manual-index.ts",
     "test:resolve-site": "tsx scripts/test-resolve-site.ts",
-    "cluster:generate": "tsx scripts/generate-cluster-text.ts"
+    "cluster:generate": "tsx scripts/generate-cluster-text.ts",
+    "test:argv": "tsx scripts/test-argv.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",

@@ -159,6 +159,12 @@ jobs:
       - name: Script không được tự đoán chạy trên site nào
         run: npx tsx scripts/test-resolve-site.ts
 
+      # Ca "cờ đứng trước số" là lỗi thật đã đo: Number(argv[2]) gặp --site
+      # cho NaN, slice(0, NaN) cho mảng rỗng, script in "31 cụm" và sinh 0
+      # đoạn — không lỗi nào. Im lặng nên chỉ test bắt được.
+      - name: Tham số script — cờ không được nuốt số, số sai không được im
+        run: npx tsx scripts/test-argv.ts
+
       # Schema phải có trước khi script chạm Prisma. Không dữ liệu nào được
       # nạp: xem chú thích ở khối `services` về việc DB rỗng kiểm được gì và
       # KHÔNG kiểm được gì.

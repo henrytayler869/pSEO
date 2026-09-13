@@ -19,6 +19,7 @@ import { DEFAULT_TEMPLATES } from "../lib/article-template/defaults";
 import { fetchServedInventory } from "../lib/publisher/inventory";
 import { prisma } from "../lib/db/prisma";
 import { resolveSite, reportSiteError } from "../lib/scripts/resolve-site";
+import { numberArg, reportArgError } from "../lib/scripts/argv";
 
 const PLACEHOLDER =
   "Records for the area show how many households arrive and leave each year, what homes are worth and what households earn. " +
@@ -38,7 +39,7 @@ async function main() {
   const inv = await fetchServedInventory(website.url);
   const all = await discoverCandidates(website.vertical, { servedZips: new Set(inv.byZip.keys()) });
 
-  const limit = Number(process.argv[2] ?? all.length);
+  const limit = numberArg(0, all.length);
   const candidates = all.slice(0, limit);
   console.log(`Chạy khô ${candidates.length}/${all.length} ứng viên.\n`);
 
@@ -106,4 +107,7 @@ async function main() {
   await prisma.$disconnect();
 }
 
-main();
+main().catch((err) => {
+  if (reportArgError(err)) return;
+  throw err;
+});

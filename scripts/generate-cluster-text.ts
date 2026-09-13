@@ -8,6 +8,7 @@
 
 import { prisma } from "../lib/db/prisma";
 import { resolveSite, reportSiteError } from "../lib/scripts/resolve-site";
+import { numberArg, reportArgError } from "../lib/scripts/argv";
 import { fetchServedInventory } from "../lib/publisher/inventory";
 import { generateForCluster } from "../lib/ai/cluster-generate";
 import { SpendCapExceededError } from "../lib/ai/anthropic";
@@ -48,7 +49,7 @@ async function main() {
     return { path, zips, keyword: best?.keyword ?? "?", volume: best?.volume ?? 0 };
   }).sort((a, b) => b.volume - a.volume);
 
-  const limit = Number(process.argv[2] ?? clusters.length);
+  const limit = numberArg(0, clusters.length);
   console.log(`${clusters.length} cụm, chạy ${Math.min(limit, clusters.length)} theo volume giảm dần\n`);
 
   let done = 0, failed = 0, cached = 0, cost = 0, capped = false;
@@ -74,4 +75,7 @@ async function main() {
   console.log(`\nsinh mới ${done} | đã có ${cached} | trượt ${failed} | chạm trần ${capped} | chi phí $${cost.toFixed(4)}`);
   await prisma.$disconnect();
 }
-main();
+main().catch((err) => {
+  if (reportArgError(err)) return;
+  throw err;
+});

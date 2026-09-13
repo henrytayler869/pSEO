@@ -1401,6 +1401,55 @@ trang chi tiết.
 6. Lấy API key ở Cài đặt → gọi thử `/api/v1/niches` để chắc chắn kết nối được
 7. Dựng trang từ dataset (ưu tiên zip có `governmentData` và `score` cao)
 8. Kết nối website vào `/publisher`
+9. **Công bố `GET /api/inventory`** (§3.9) — HQ cần nó để biết ZIP nào đã
+   có trang và trang đó là riêng hay cụm
+10. **Sinh lớp AI ở HQ** — xem bên dưới, đây là bước duy nhất tốn tiền
+
+### Bước 10: sinh lớp AI, sau khi site đã chạy
+
+Thứ tự này bắt buộc, không phải sở thích. HQ đọc `/api/inventory` để biết
+cụm gồm những ZIP nào — quy tắc gộp sống ở site, HQ không tính lại (§3.7c).
+Chạy trước khi site lên thì HQ không có gì để đọc.
+
+```bash
+npm run cluster:generate -- --site <host>     # đoạn cấp cụm
+```
+
+`--site` bắt buộc từ site thứ hai trở đi. Với một site thì bỏ được, nhưng
+nếu có nhiều site mà không nêu, script **dừng lại và liệt kê** thay vì đoán:
+đoán sai ở đây nghĩa là tiêu tiền sinh đoạn cho cụm của niche khác, và đoạn
+đó vẫn qua validator — số thật, nguồn thật, của nơi khác.
+
+Sinh theo **volume giảm dần**, nên nếu chạm trần ngân sách giữa chừng thì
+thứ đã sinh là thứ đáng nhất. Chạm trần không hỏng gì: cụm chưa sinh giữ
+nguyên trạng thái "chưa có", và endpoint trả `404` — site render không có
+đoạn, đúng hành vi đã mô tả ở §3.7c.
+
+**Ngân sách, đo trên niche đầu tiên** (`moving-services`, sổ `aiSpend`,
+13/9/2026):
+
+| | |
+|---|---|
+| Trọn niche: 127 trang riêng + 31 trang cụm | **$7,65** |
+| Mỗi đoạn cụm hoàn chỉnh | ~$0,047 |
+| Mỗi lượt gọi | ~$0,02 |
+
+$7,65 là **tổng đã tính cả lần trượt** — 401 dòng sổ chi cho 337 đoạn nằm
+trong cache, tức khoảng $0,95 trả cho những lần model viết sai rồi bị từ
+chối. Đừng lập ngân sách theo số đoạn nhân đơn giá: mọi đoạn không đạt
+ngay lần đầu, và trần đặt sát sẽ dừng đúng lúc đang viết lại.
+
+Trần chỉnh ở `AppConfig` key `ai`, trường `spendCapUsd`. Trần hiện tại
+**$15**, đã tiêu **$7,65**.
+
+### Kiểm bước 10 đã xong
+
+```bash
+npm run cluster:generate -- --site <host> 0    # 0 = không sinh, chỉ đếm
+```
+
+In ra "N cụm". Số đó phải bằng số trang cụm trên site. Không có gì tự báo
+nếu lệch — xem đoạn mở đầu §3.7c.
 
 ---
 

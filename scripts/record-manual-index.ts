@@ -18,6 +18,7 @@
 import { readFileSync } from "node:fs";
 import { prisma } from "../lib/db/prisma";
 import { resolveSite, reportSiteError } from "../lib/scripts/resolve-site";
+import { positionals } from "../lib/scripts/argv";
 import { fetchUrlIndexStatus } from "../lib/google/search-console";
 
 const PROVIDER = "gsc-manual";
@@ -35,13 +36,12 @@ async function main() {
   const raw =
     fileIdx >= 0 && process.argv[fileIdx + 1]
       ? readFileSync(process.argv[fileIdx + 1], "utf-8").split(/\r?\n/)
-      : process.argv.slice(2);
+      : positionals();
 
   const base = site.url.replace(/\/+$/, "");
   const urls = raw
     .map((u) => u.trim())
     .filter(Boolean)
-    .filter((u) => !u.startsWith("--"))
     // Nhận cả đường dẫn lẫn URL đầy đủ: người bấm tay copy từ thanh địa chỉ
     // hoặc từ bảng ưu tiên, và bắt họ nhớ dạng nào là mời gõ sai.
     .map((u) => (u.startsWith("http") ? u : `${base}${u.startsWith("/") ? "" : "/"}${u}`));
