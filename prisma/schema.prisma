@@ -511,6 +511,46 @@ model AiGeneration {
   @@index([factsFingerprint])
 }
 
+/// Đoạn diễn giải cho một CỤM, không phải cho một ZIP.
+///
+/// Bảng riêng chứ không thêm cột nullable vào AiGeneration: mỗi hàng ở bảng
+/// kia nói về đúng một ZIP, và nới `zip` thành nullable buộc mọi truy vấn đã
+/// viết phải cân nhắc một trạng thái chúng chưa từng gặp. Hai thứ khác nhau
+/// về hình dạng fact (dải vs giá trị đơn) và khác cả bộ luật kiểm.
+model AiClusterGeneration {
+  id       String @id @default(cuid())
+  vertical String
+
+  /// Hash của tập ZIP thành viên đã sắp xếp.
+  ///
+  /// KHÔNG dùng đường dẫn trang hay khoá từ khoá làm danh tính: guide §3.5 ghi
+  /// rõ mainKeyword đổi được, và một đợt sửa mẫu đã đổi chuỗi của 233/582
+  /// market. Tập ZIP đổi khi và chỉ khi cụm thật sự đổi — mà lúc đó dải cũng
+  /// đổi và văn bản cần viết lại.
+  clusterId  String
+  /// Đường dẫn trang cụm lúc sinh. Chỉ để tra cứu, không phải khoá.
+  label      String
+  memberZips String[]
+
+  factsFingerprint String
+
+  prompt String
+  text   String
+
+  model       String
+  inputTokens Int
+  outputTokens Int
+  costUsd     Float
+
+  validationPassed Boolean
+  validationNotes  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([vertical, clusterId])
+  @@index([factsFingerprint])
+}
+
 model AiSpend {
   id String @id @default(cuid())
 
