@@ -17,7 +17,8 @@
     "audit:intent": "tsx scripts/audit-intent-match.ts",
     "index:priority": "tsx scripts/index-priority.ts",
     "omega:submit": "tsx scripts/omega-submit.ts",
-    "index:experiment": "tsx scripts/index-experiment.ts"
+    "index:experiment": "tsx scripts/index-experiment.ts",
+    "index:manual": "tsx scripts/record-manual-index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",

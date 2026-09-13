@@ -571,6 +571,8 @@ model IndexSubmission {
   url String
 
   /// "submitted" = đã gửi cho dịch vụ. "control" = cố tình KHÔNG gửi.
+  /// "manual" = bấm tay trong Search Console; đã nhận can thiệp nên KHÔNG
+  /// được xuất hiện ở hai nhánh kia.
   arm String
 
   /// Tên dịch vụ. Nhiều dịch vụ cùng loại tồn tại, và trộn chúng vào một
