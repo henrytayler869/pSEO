@@ -12,8 +12,9 @@
 //
 // Dùng: tsx scripts/verify-integration-guide.ts
 
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fetchServedInventory } from "../lib/publisher/inventory";
+import { clusterIdOf } from "../lib/ai/cluster-facts";
 import { prisma } from "../lib/db/prisma";
 
 const GUIDE = "docs/SITE_INTEGRATION_GUIDE.md";
@@ -82,6 +83,49 @@ const checks: Check[] = [
     run: async () => {
       const doc = readFileSync(GUIDE, "utf-8");
       return doc.includes("search_intent") && doc.includes("TỪNG thị trường") ? null : "chưa có";
+    },
+  },
+  {
+    name: "guide mô tả /cluster-interpretation, và route đó tồn tại thật",
+    run: async () => {
+      const doc = readFileSync(GUIDE, "utf-8");
+      if (!doc.includes("cluster-interpretation")) return "guide chưa nhắc endpoint trang cụm";
+      // Kiểm route có thật, không chỉ kiểm chữ trong tài liệu. Mục 3.7c ra
+      // đời vì site đầu tiên bỏ sót trang cụm mà KHÔNG có lỗi nào báo; một
+      // check chỉ đọc tài liệu sẽ mắc đúng bệnh đó ở tầng khác.
+      return existsSync("app/api/v1/niches/[vertical]/cluster-interpretation/route.ts")
+        ? null
+        : "guide mô tả một endpoint không tồn tại";
+    },
+  },
+  {
+    name: "guide nói khớp cụm là ĐÚNG TOÀN BỘ TẬP, và code cũng vậy",
+    run: async () => {
+      const doc = readFileSync(GUIDE, "utf-8");
+      if (!/Khớp phải đúng toàn bộ tập/i.test(doc)) return "guide chưa nêu ràng buộc khớp đủ tập";
+      // clusterIdOf băm TẬP ZIP đã sắp xếp. Nếu ai đó đổi sang khoá theo
+      // nhãn hay theo từ khoá, thiếu một ZIP sẽ không còn đổi clusterId —
+      // và trang 22 ZIP nhận đoạn của cụm 23 ZIP: dải có hai đầu mà trang
+      // không chứa. Số đúng, nguồn đúng, vẫn sai.
+      const a = clusterIdOf("moving-services", ["11201", "11203", "11204"]);
+      const shuffled = clusterIdOf("moving-services", ["11204", "11201", "11203"]);
+      const missing = clusterIdOf("moving-services", ["11201", "11203"]);
+      if (a !== shuffled) return "xáo thứ tự lại ra clusterId khác — site sẽ phải tự sắp, guide nói là không cần";
+      if (a === missing) return "thiếu một ZIP vẫn ra cùng clusterId — trang cụm sẽ nhận đoạn của cụm khác";
+      return null;
+    },
+  },
+  {
+    name: "mọi cụm đã sinh đều đọc được — số trang cụm khớp số đoạn",
+    run: async () => {
+      const passed = await prisma.aiClusterGeneration.count({ where: { validationPassed: true } });
+      if (passed === 0) return "chưa có đoạn cụm nào — trang cụm sẽ không có chữ AI";
+      const doc = readFileSync(GUIDE, "utf-8");
+      const m = doc.match(/\*\*(\d+)\/(\d+)\*\*\. Nếu site có/);
+      if (!m) return "guide không còn nêu số cụm để đối chiếu";
+      return Number(m[1]) === passed
+        ? null
+        : `guide ghi ${m[1]} đoạn cụm, thực tế ${passed}`;
     },
   },
 ];
