@@ -14,6 +14,7 @@
 //   tsx scripts/omega-submit.ts --limit 20 --drip 7
 
 import { prisma } from "../lib/db/prisma";
+import { resolveSite, reportSiteError } from "../lib/scripts/resolve-site";
 import { fetchServedInventory } from "../lib/publisher/inventory";
 import { fetchSitemapCounts } from "../lib/sitemap/count";
 import { fetchUrlIndexStatus } from "../lib/google/search-console";
@@ -31,8 +32,13 @@ async function main() {
   const limit = Number(arg("limit", "20"));
   const drip = Number(arg("drip", "7"));
 
-  const site = await prisma.website.findFirst();
-  if (!site) { console.error("Không có website nào."); process.exitCode = 1; return; }
+  let site: { id: string; url: string; vertical: string; gscPropertyUrl: string };
+  try {
+    site = await resolveSite<{ id: string; url: string; vertical: string; gscPropertyUrl: string }>({ select: { gscPropertyUrl: true } });
+  } catch (err) {
+    if (reportSiteError(err)) return;
+    throw err;
+  }
 
   const [inv, sm] = await Promise.all([fetchServedInventory(site.url), fetchSitemapCounts(site.url)]);
 

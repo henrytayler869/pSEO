@@ -10,11 +10,17 @@
 // Dùng: tsx scripts/interpretations-shown.ts
 
 import { prisma } from "../lib/db/prisma";
+import { resolveSite, reportSiteError } from "../lib/scripts/resolve-site";
 import { fetchServedInventory } from "../lib/publisher/inventory";
 
 async function main() {
-  const site = await prisma.website.findFirst({ select: { url: true, vertical: true } });
-  if (!site) { console.error("Không có website nào."); process.exitCode = 1; return; }
+  let site: { id: string; url: string; vertical: string };
+  try {
+    site = await resolveSite<{ id: string; url: string; vertical: string }>();
+  } catch (err) {
+    if (reportSiteError(err)) return;
+    throw err;
+  }
 
   const inv = await fetchServedInventory(site.url);
   const gens = await prisma.aiGeneration.findMany({
