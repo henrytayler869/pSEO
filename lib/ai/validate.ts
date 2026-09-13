@@ -147,7 +147,7 @@ function sameNumber(a: number, b: number): boolean {
   return Math.abs(a - b) <= scale * 1e-9;
 }
 
-function extractNumbers(text: string): { raw: string; value: number }[] {
+export function extractNumbers(text: string): { raw: string; value: number }[] {
   const out: { raw: string; value: number }[] = [];
   // Matches -1,234 / 1234.5 / 22.6% / $549,400 — the shapes that carry
   // claims. The optional minus matters: net migration is genuinely negative
@@ -161,7 +161,7 @@ function extractNumbers(text: string): { raw: string; value: number }[] {
   return out;
 }
 
-function matchesFact(value: number, facts: Fact[]): Fact | null {
+export function matchesFact(value: number, facts: Fact[]): Fact | null {
   // Compared on magnitude. "-11,517" and "a net loss of 11,517 households"
   // both state the same measured fact, and rejecting the second would push
   // the model toward clumsier phrasing for no gain in truthfulness.
@@ -273,7 +273,7 @@ const WORDED_PROPORTION =
  * would be a guess dressed as a check. The whole value of this rule is that it
  * only speaks when it knows.
  */
-function checkUnitWords(text: string, facts: Fact[]): ValidationIssue[] {
+export function checkUnitWords(text: string, facts: Fact[]): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   for (const m of text.matchAll(/(-?\$?[\d,]+(?:\.\d+)?%?)\s+([A-Za-z][A-Za-z-]{2,24})/g)) {
     const written = Number(m[1].replace(/[$,%]/g, ""));
