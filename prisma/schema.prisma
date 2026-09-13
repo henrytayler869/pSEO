@@ -551,6 +551,44 @@ model AiClusterGeneration {
   @@index([factsFingerprint])
 }
 
+/// Một URL đã gửi tới dịch vụ index bên thứ ba — hoặc CỐ TÌNH không gửi.
+///
+/// Hàng `arm: "control"` là phần quan trọng nhất của bảng này. Dịch vụ hứa
+/// "indexed in 24 hours or refunded", nhưng một trang mới cuối cùng cũng được
+/// index dù có gửi hay không — nên "đã gửi rồi thấy index" KHÔNG chứng minh
+/// gì. Chỉ có chênh lệch giữa nhóm gửi và nhóm giữ lại mới chứng minh được,
+/// và nhóm giữ lại phải chọn TRƯỚC khi gửi, không phải chọn sau khi nhìn kết
+/// quả.
+///
+/// API của họ trả về đúng chuỗi "done" — không campaign id, không trạng thái
+/// từng URL. Nên bảng này ghi lại phía mình đã gửi gì; câu trả lời "đã index
+/// chưa" lấy từ URL Inspection của Google, không lấy từ họ.
+model IndexSubmission {
+  id        String @id @default(cuid())
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  url String
+
+  /// "submitted" = đã gửi cho dịch vụ. "control" = cố tình KHÔNG gửi.
+  arm String
+
+  /// Tên dịch vụ. Nhiều dịch vụ cùng loại tồn tại, và trộn chúng vào một
+  /// phép đo sẽ cho ra một con số không nói về dịch vụ nào.
+  provider String
+
+  campaignName String?
+  dripfeedDays Int?
+
+  /// Trạng thái index ĐO ĐƯỢC lúc gửi, để so với lần đo sau. Null = chưa đo.
+  indexedAtSubmit Boolean?
+
+  submittedAt DateTime @default(now())
+
+  @@unique([websiteId, url, provider])
+  @@index([websiteId, arm])
+}
+
 model AiSpend {
   id String @id @default(cuid())
 
@@ -878,6 +916,7 @@ model Website {
   articles     Article[]
   articleJobs  ArticleJob[]
   templates    ArticleTemplate[]
+  indexSubmissions IndexSubmission[]
 
   // Search Console property identity, e.g. "sc-domain:example.com" or
   // "https://example.com/" (URL-prefix form) — GSC requires the exact
