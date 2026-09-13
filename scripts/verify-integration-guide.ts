@@ -16,6 +16,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { fetchServedInventory } from "../lib/publisher/inventory";
 import { clusterIdOf } from "../lib/ai/cluster-facts";
 import { prisma } from "../lib/db/prisma";
+import { resolveSite } from "../lib/scripts/resolve-site";
 
 const GUIDE = "docs/SITE_INTEGRATION_GUIDE.md";
 
@@ -30,8 +31,7 @@ const checks: Check[] = [
     run: async () => {
       const doc = readFileSync(GUIDE, "utf-8");
       if (!doc.includes("GET /api/inventory")) return "guide không mô tả /api/inventory";
-      const site = await prisma.website.findFirst({ select: { url: true } });
-      if (!site) return "không có website nào để kiểm";
+      const site = await resolveSite();
       const inv = await fetchServedInventory(site.url);
       return inv.byZip.size > 0 ? null : "endpoint trả 0 ZIP";
     },
@@ -39,8 +39,7 @@ const checks: Check[] = [
   {
     name: "inventory trả cả kind — guide dựa vào nó để nói zip nào hiện đoạn AI",
     run: async () => {
-      const site = await prisma.website.findFirst({ select: { url: true } });
-      if (!site) return "không có website nào";
+      const site = await resolveSite();
       const inv = await fetchServedInventory(site.url);
       const kinds = new Set(inv.kindByZip.values());
       if (kinds.size === 0) return "không ZIP nào có kind";
@@ -61,8 +60,7 @@ const checks: Check[] = [
   {
     name: "số trang guide nêu (158) còn khớp site",
     run: async () => {
-      const site = await prisma.website.findFirst({ select: { url: true } });
-      if (!site) return "không có website nào";
+      const site = await resolveSite();
       const inv = await fetchServedInventory(site.url);
       const doc = readFileSync(GUIDE, "utf-8");
       if (!doc.includes(String(inv.pageCount))) {

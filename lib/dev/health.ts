@@ -43,28 +43,52 @@ async function checkDb(): Promise<DevCheck> {
   }
 }
 
-async function checkWordPress(): Promise<DevCheck | null> {
-  const site = await prisma.website.findFirst({ select: { url: true, wpApiBaseUrl: true } }).catch(() => null);
+async function checkWordPress(): Promise<DevCheck[]> {
+  // Mọi site, không phải findFirst. Với một site thì hai cách giống nhau;
+  // với hai site thì findFirst kiểm một cái tuỳ ý và banner báo "bình
+  // thường" trong khi WordPress của site kia đang chết. Một tín hiệu sức
+  // khoẻ nói sai về thứ nó không kiểm còn tệ hơn không có banner.
+  const sites = await prisma.website
+    .findMany({ select: { url: true, wpApiBaseUrl: true }, orderBy: { createdAt: "asc" } })
+    .catch(() => []);
   // Không có website nào thì không có WordPress để hỏi — và một dòng "hỏng"
   // lúc đó sẽ là lỗi bịa cho một thứ chưa tồn tại.
-  if (!site) return null;
+  if (sites.length === 0) return [];
 
-  const base = site.wpApiBaseUrl ?? deriveWpApiBaseUrl(site.url);
-  try {
-    const res = await fetch(`${base}/posts?per_page=1`, { signal: AbortSignal.timeout(2500) });
-    if (!res.ok) {
-      return { id: "wp", label: "WordPress", ok: false, detail: `Trả HTTP ${res.status}.`, fix: "npm run wp:tunnel" };
-    }
-    return { id: "wp", label: "WordPress", ok: true, detail: "Đọc được qua tunnel 8090.", fix: "" };
-  } catch (err) {
-    return {
-      id: "wp",
-      label: "WordPress",
-      ok: false,
-      detail: err instanceof Error ? err.message : "Không tới được.",
-      fix: "npm run wp:tunnel",
-    };
-  }
+  const many = sites.length > 1;
+  return Promise.all(
+    sites.map(async (site): Promise<DevCheck> => {
+      const host = (() => {
+        try {
+          return new URL(site.url).host.replace(/^www\./, "");
+        } catch {
+          return site.url;
+        }
+      })();
+      // Nhãn kèm host chỉ khi có nhiều site: với một site thì "WordPress"
+      // đọc gọn hơn, và thêm host vào là nhiễu không mang tin gì.
+      const label = many ? `WordPress · ${host}` : "WordPress";
+      const id = many ? `wp:${host}` : "wp";
+      const base = site.wpApiBaseUrl ?? deriveWpApiBaseUrl(site.url);
+      try {
+        const res = await fetch(`${base}/posts?per_page=1`, { signal: AbortSignal.timeout(2500) });
+        if (!res.ok) {
+          return { id, label, ok: false, detail: `${base} trả HTTP ${res.status}.`, fix: "npm run wp:tunnel" };
+        }
+        return { id, label, ok: true, detail: `Đọc được qua ${base}.`, fix: "" };
+      } catch (err) {
+        return {
+          id,
+          label,
+          ok: false,
+          // Kèm base vào detail: với nhiều site, "không tới được" mà không
+          // nói tới cái gì thì không sửa được.
+          detail: `${base} — ${err instanceof Error ? err.message : "không tới được"}`,
+          fix: "npm run wp:tunnel",
+        };
+      }
+    })
+  );
 }
 
 export async function devHealth(): Promise<DevCheck[]> {
@@ -73,8 +97,8 @@ export async function devHealth(): Promise<DevCheck[]> {
   // Không hỏi WordPress khi database đã hỏng: danh tính site nằm trong
   // database, nên câu trả lời lúc đó chỉ là hệ quả của lỗi bên trên và sẽ
   // khiến một nguyên nhân trông như hai.
-  const wp = db.ok ? await checkWordPress() : null;
-  const checks = [db, ...(wp ? [wp] : [])];
+  const wp = db.ok ? await checkWordPress() : [];
+  const checks = [db, ...wp];
   cache = { at: Date.now(), checks };
   return checks;
 }

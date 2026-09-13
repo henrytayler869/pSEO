@@ -14,6 +14,7 @@
 // Dùng: tsx scripts/index-priority.ts [số URL mỗi ngày]
 
 import { prisma } from "../lib/db/prisma";
+import { resolveSite, reportSiteError } from "../lib/scripts/resolve-site";
 import { fetchServedInventory } from "../lib/publisher/inventory";
 import { fetchSitemapCounts } from "../lib/sitemap/count";
 
@@ -23,8 +24,13 @@ interface Lead {
 }
 
 async function main() {
-  const site = await prisma.website.findFirst();
-  if (!site) { console.error("Không có website nào."); process.exitCode = 1; return; }
+  let site: { id: string; url: string; vertical: string };
+  try {
+    site = await resolveSite<{ id: string; url: string; vertical: string }>();
+  } catch (err) {
+    if (reportSiteError(err)) return;
+    throw err;
+  }
 
   const [inv, sm] = await Promise.all([fetchServedInventory(site.url), fetchSitemapCounts(site.url)]);
 

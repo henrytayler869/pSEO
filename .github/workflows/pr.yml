@@ -152,6 +152,13 @@ jobs:
       - name: Luật JSON-LD, và bộ vector của chúng còn từ chối được
         run: npx tsx scripts/verify-technical-rules.ts
 
+      # Không mạng, không DB: chooseSite là hàm thuần, danh sách site truyền
+      # vào từ test. Nhánh nó canh — TỪ CHỐI khi có nhiều site thay vì lấy
+      # cái đầu — không chạm tới được trên máy dev chỉ có một site, nên nếu
+      # không chạy ở đây thì nó không chạy ở đâu cả.
+      - name: Script không được tự đoán chạy trên site nào
+        run: npx tsx scripts/test-resolve-site.ts
+
       # Schema phải có trước khi script chạm Prisma. Không dữ liệu nào được
       # nạp: xem chú thích ở khối `services` về việc DB rỗng kiểm được gì và
       # KHÔNG kiểm được gì.

@@ -18,6 +18,7 @@ import { renderArticle, assertTemplate, templateProse, placeholders } from "../l
 import { DEFAULT_TEMPLATES } from "../lib/article-template/defaults";
 import { fetchServedInventory } from "../lib/publisher/inventory";
 import { prisma } from "../lib/db/prisma";
+import { resolveSite, reportSiteError } from "../lib/scripts/resolve-site";
 
 const PLACEHOLDER =
   "Records for the area show how many households arrive and leave each year, what homes are worth and what households earn. " +
@@ -26,8 +27,13 @@ const PLACEHOLDER =
   "Ask each company to put the figure in writing before you book.";
 
 async function main() {
-  const website = await prisma.website.findFirst({ where: { vertical: "moving-services" } });
-  if (!website) { console.error("Không có website moving-services."); process.exitCode = 1; return; }
+  let website: { id: string; url: string; vertical: string };
+  try {
+    website = await resolveSite<{ id: string; url: string; vertical: string }>({ vertical: "moving-services" });
+  } catch (err) {
+    if (reportSiteError(err)) return;
+    throw err;
+  }
 
   const inv = await fetchServedInventory(website.url);
   const all = await discoverCandidates(website.vertical, { servedZips: new Set(inv.byZip.keys()) });
