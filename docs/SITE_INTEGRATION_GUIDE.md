@@ -374,7 +374,7 @@ Gộp chung thành một nhãn "bỏ qua" sẽ khiến chẩn đoán sai nguyên
 
 ---
 
-## 3.4 ⚠️ Cụm zip trùng lặp — lớp AI là BẮT BUỘC, không phải tuỳ chọn
+## 3.4 ⚠️ Cụm zip trùng lặp — đọc cả phần ĐÍNH CHÍNH cuối mục
 
 Đây là hạn chế quan trọng nhất của dataset. Phải hiểu trước khi dựng trang
 hàng loạt.
@@ -503,6 +503,42 @@ for (const m of buildable) {
 4. Cân nhắc **không dựng cả cụm**: 23 trang cho 23 zip Brooklyn cùng phục
    vụ một từ khoá có thể thua một trang Brooklyn tốt. Số zip nhiều không
    đồng nghĩa nên có nhiều trang.
+
+> ### ⚠️ ĐÍNH CHÍNH 13/9/2026 — mục 2 và 3 ở trên ĐÃ LỖI THỜI
+>
+> Site đầu tiên (`atmovingservices.com`) chọn **mục 4**, và lựa chọn đó làm
+> mục 2–3 không còn áp dụng. Đo trên site đang chạy:
+>
+> | | |
+> |---|---|
+> | Market trong manifest | 256 |
+> | Trang riêng (`clusterSize <= 1`) | 127 |
+> | Trang **cụm** (mỗi cụm một trang) | 31 |
+> | **Tổng trang** | **158** |
+>
+> Một cụm = **một** trang, không phải một trang mỗi zip. Nên trong cụm
+> **không có gì để phân biệt giữa các zip** — và `cluster-view.tsx` của site
+> đó **không render lớp AI lấy một lần**.
+>
+> Hệ quả đã trả tiền mới biết: Head Quarter vẫn sinh lớp AI cho zip nằm
+> trong cụm theo mục 2. Đo 13/9/2026: **161 zip có đoạn văn, 127 hiện trên
+> trang, 34 KHÔNG trang nào hiện.** Khoảng $0.20 trong một lô sinh lại rơi
+> vào nhóm này.
+>
+> **Nếu bạn dựng publisher mới:**
+>
+> - Chọn trước một trong hai hình dạng, và ghi lại lựa chọn đó ở repo site.
+> - Chọn **một trang mỗi cụm** (khuyến nghị — nó xoá vấn đề trùng lặp thay
+>   vì làm loãng nó): thì **đừng sinh lớp AI cho zip trong cụm**. Nếu muốn
+>   trang cụm có đoạn diễn giải, nó phải là đoạn **cấp cụm**, viết về cả
+>   Brooklyn — không phải đoạn của một zip thành viên.
+> - Chọn **một trang mỗi zip**: mục 2–3 ở trên áp dụng nguyên vẹn.
+>
+> Kiểm bên HQ trước khi tiêu tiền:
+>
+> ```bash
+> tsx scripts/interpretations-shown.ts   # zip nào có đoạn văn mà không trang nào hiện
+> ```
 
 ---
 
@@ -927,6 +963,76 @@ với thợ lợp, nhưng bên chuyển nhà không bảo hành nhà bạn).
 
 ---
 
+## 3.7b ⚠️ Ý định tìm kiếm phải ĐO, và đo theo TỪNG thị trường
+
+Lớp diễn giải chạy 227 lần trước khi ai hỏi "nó viết cho ai". Câu trả lời
+là: cho một người duy nhất, vì prompt không biết ý định tồn tại.
+
+Đo 12/9/2026 trên chính văn bản đã sinh — tỷ lệ đoạn mang ngôn ngữ so sánh
+báo giá:
+
+| Nhóm ý định | n | "so sánh" |
+|---|---|---|
+| commercial | 142 | 94% |
+| informational | 54 | 93% |
+| navigational | 16 | 94% |
+| transactional | 15 | **100%** |
+
+Không biến thiên. Nhóm `commercial` đúng là **do tình cờ** — brief mặc định
+vốn là giọng so sánh. Nhóm `transactional` lệch nặng nhất: người gõ `movers
+pflugerville` để **đặt** dịch vụ nhận một trang bảo họ đi **so sánh**.
+
+### Ý định lấy từ đâu
+
+`dataforseo_labs/google/search_intent/live` — cùng nhà cung cấp đã dùng cho
+volume, nhận tối đa 1000 từ khoá một lần. Chi phí đo được: **$0.03576 cho 198
+từ khoá**.
+
+Endpoint `related_keywords` cũng trả `search_intent_info` ở **mọi** item, và
+adapter cũ vứt nó đi ở bước `.map()`. Nếu bạn viết adapter từ khoá mới, giữ
+trường đó lại.
+
+### Đo theo THỊ TRƯỜNG, không theo ngành
+
+Đây là chỗ dễ sai nhất. Kho từ khoá của `moving-services` chỉ có **ba mẫu
+câu** — `moving services {city}`, `movers {city}`, `moving companies {city}`
+— nên rất dễ kết luận "cả ngành một ý định". Đo 198 chuỗi thật:
+
+| Ý định | Từ khoá | Ví dụ |
+|---|---|---|
+| commercial | 133 | moving companies new york |
+| informational | 41 | **movers chicago** |
+| navigational | 13 | movers loganville |
+| transactional | 11 | **movers pflugerville** |
+
+**Khác nhau không nằm ở mẫu câu.** Cùng `movers {city}`: Chicago là
+informational, Pflugerville là transactional. Một nhãn chung cho cả ngành là
+áp nhãn của đa số lên 65 thị trường không thuộc nhóm đó.
+
+### Ba ràng buộc khi đưa ý định vào prompt
+
+1. **Không nới quy tắc nào.** Không ý định nào cho phép nói về giá cước, lịch
+   trống hay mức bận của hãng — không nguồn nào đo những thứ đó, và một ý
+   định "sẵn sàng đặt" không làm dữ liệu xuất hiện.
+2. **Chưa đo được thì nói thẳng là chưa biết**, giữ giọng trung tính. Rơi về
+   `commercial` là cách 54 thị trường informational nhận giọng so sánh mà
+   không ai thấy.
+3. **Ý định phải vào fingerprint.** Nếu không, đo xong ý định mà trang vẫn
+   trả về đoạn viết theo brief cũ — im lặng, vì cache vẫn "hợp lệ".
+
+### Kiểm
+
+```bash
+tsx scripts/audit-intent-match.ts    # thoát khác 0 nếu còn đoạn lệch
+```
+
+Phép đo phải bắt theo **cấu trúc câu**, không theo từ. Bản đầu của tôi bắt cả
+chữ `quote` và báo 5/27 đoạn còn lệch; đọc cả 5 thì không đoạn nào lệch —
+chúng dùng `quote` theo nghĩa *hỏi giá ở hãng đã chọn*. Cùng lỗi đó làm nhóm
+`informational` trông như 93% lệch, trong khi thật ra là 22% và chỉ 8 đoạn.
+**Sai theo hướng phóng đại cũng tốn tiền**: nó biến việc $0.21 thành việc
+trông như phải xin thêm ngân sách $0.95.
+
 ## 3.8 `/api/v1/content-rules` — hợp đồng nội dung, và cách CHỨNG MINH bạn tuân thủ
 
 Endpoint này chưa từng có trong tài liệu cho tới 2026-09-10, dù nó đã chạy
@@ -1002,6 +1108,94 @@ ra ngoại lệ: ví dụ đang có là `stay-in-trade` cấm hứa bảo hành,
 có trang đó. Scanner nào tự suy sẽ suy khác nhau.
 
 ---
+
+## 3.9 ⚠️ Site PHẢI công bố `GET /api/inventory` — nếu không, HQ đoán và đoán sai
+
+Head Quarter cần trả lời "market này đã có trang chưa" để không mời viết
+trùng. Nó **không tự suy ra được**, và đây là lý do:
+
+- Site dùng nhiều dạng URL cho một market: `/vertical/state/city` (trang cụm
+  hoặc thành phố một zip) và `/vertical/state/city-zip` (trang riêng).
+- Trang **cụm** đặt tên theo **TỪ KHOÁ**, không theo tên thành phố. Những zip
+  sau `/moving-services/ny/brooklyn` đều mang `city: "New York"` trong dữ
+  liệu HQ — **không phép ghép nào theo tên thành phố tìm ra chúng**.
+- Quy tắc cụm (`isPublishable`) sống ở repo site. Sao chép nó sang HQ là tạo
+  định nghĩa thứ hai về việc trang nào tồn tại.
+
+Đo 12/9/2026 khi HQ còn đoán bằng tên thành phố: danh sách mời viết **174
+bài, và cả 174 đã có trang** — 127 dạng `/city-zip`, 47 được trang cụm phủ.
+Sau khi đọc `/api/inventory`: **0 ứng viên**, đúng thực tế.
+
+**Hợp đồng:**
+
+```jsonc
+GET /api/inventory
+{
+  "generatedAt": "2026-09-07T12:46:37.067Z",
+  "zipCount": 256,     // số ZIP — nhiều zip dùng chung một trang cụm
+  "pageCount": 158,    // số TRANG — khác zipCount có chủ ý
+  "entries": [
+    { "zip": "11212", "path": "/moving-services/ny/brooklyn", "kind": "cluster" },
+    { "zip": "32822", "path": "/moving-services/fl/orlando-32822", "kind": "market" }
+  ]
+}
+```
+
+- `kind: "market"` = trang riêng. `kind: "cluster"` = trang gộp.
+- **Dựng từ chính hàm quyết định route** (`publishedMarkets` / `clusters`),
+  không phải từ một danh sách viết tay — nếu không nó sẽ lệch với thứ thật
+  sự resolve, và lệch âm thầm.
+- Không đặt `export const dynamic` nếu site bật `cacheComponents` — build sẽ
+  từ chối. Route chỉ đọc manifest ở module scope thì vốn đã tĩnh.
+
+Phía HQ đọc theo **ZIP**, không theo đường dẫn, và coi `entries` rỗng là
+**lỗi** chứ không phải "site chưa có trang nào".
+
+## 3.10 ⚠️ Ba bẫy đã đo được khi site đọc WordPress và tự revalidate
+
+Ba lỗi này đều **im lặng** — không dòng log nào, và triệu chứng trông hệt như
+"chưa có nội dung".
+
+### `per_page` của WordPress tối đa 100, và nó TỪ CHỐI chứ không cắt bớt
+
+`app/sitemap.ts` của site đầu gọi `getPosts(200)`. WordPress trả:
+
+```json
+{"code":"rest_invalid_param","message":"Invalid parameter(s): per_page",
+ "per_page must be between 1 (inclusive) and 100 (inclusive)"}
+```
+
+Lớp fetch xử lý `!res.ok` bằng `return null`, hàm gọi đổi `null` thành `[]`
+— nên **bài viết chưa bao giờ vào được sitemap**, và không nơi nào ghi lại.
+Đăng 125 bài thì cả 125 vắng mặt, còn danh sách rỗng trông y hệt "chưa có
+bài nào".
+
+Phân trang theo lô 100, và **chặn ngay trong hàm** chứ đừng trông vào nơi
+gọi nhớ giới hạn — lỗi này sinh ra đúng vì nơi gọi không nhớ.
+
+### "Không tới được" khác "bị từ chối", đừng gộp
+
+| | Nghĩa | Xử lý |
+|---|---|---|
+| `unreachable` | WordPress tắt, mạng hỏng, chưa cấu hình | Suy biến về rỗng, im lặng — **đúng**, một blog tắt không được kéo theo 300 trang địa phương |
+| `rejected` (4xx/5xx) | WordPress trả lời, và trả lời là "không" | **Lỗi lập trình phía gọi.** Ghi một dòng stderr rồi mới suy biến |
+
+Suy biến về rỗng là đúng. Thứ phải bỏ là **sự im lặng**, không phải sự chịu
+đựng.
+
+### `/api/revalidate` phải nhận được cả LÔ
+
+Nếu bước cuối của nó là purge toàn zone Cloudflare, thì gọi 35 lần cho 35 zip
+là 35 lần xoá sạch edge — 34 lần đầu vô nghĩa, và Cloudflare giới hạn tần
+suất purge. Head Quarter sinh lại nội dung **theo lô**, nên hợp đồng phải là:
+
+```jsonc
+{ "type": "interpretation", "zips": ["10002", "11201", "60634"] }
+```
+
+Từ chối cả lô khi có phần tử sai định dạng, đừng lọc bỏ phần sai rồi chạy
+tiếp: một lô 36 zip mà 3 cái gõ sai thì 33 cái kia được revalidate và **không
+ai biết 3 cái bị bỏ**.
 
 ## 4. Nguồn dữ liệu chính phủ hiện có
 

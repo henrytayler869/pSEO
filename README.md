@@ -243,6 +243,43 @@ not found`, confirming the signing/encoding is correct; full request/response
 shapes for GSC and GA4 were verified against Google's current docs, but
 no real website/property exists yet to test an authenticated call against.
 
+## Local dev talks to PRODUCTION, over two SSH tunnels
+
+`.env` points `DATABASE_URL` at `127.0.0.1:55433`, which is an SSH tunnel to
+the VPS. **Every command in this repo reads and writes production**, including
+`prisma migrate deploy`. There is no local database in the normal workflow.
+
+WordPress is the same story: it listens on `127.0.0.1:8090` on the VPS and is
+closed to the internet. The only public route is behind Basic Auth at nginx,
+which HQ cannot use — WordPress Application Passwords also use the
+`Authorization` header and two layers of Basic Auth do not stack.
+
+| Tunnel | Local | Remote | Why that port |
+|---|---|---|---|
+| Database | **55433** | 5433 | Deliberately different. Two databases exist; identical URLs cost this project an admin password set on a laptop while everyone believed it went to the server. |
+| WordPress | **8090** | 8090 | Deliberately the same. Only one WordPress exists, so mirroring makes the `wpApiBaseUrl` stored in the database work unchanged on the VPS and on a laptop. |
+
+```bash
+npm run dev            # predev opens both tunnels
+npm run db:tunnel      # foreground, reconnects when it drops
+npm run wp:tunnel
+./scripts/install-tunnel-agents.sh            # launchd: open at login, KeepAlive
+./scripts/install-tunnel-agents.sh --uninstall
+```
+
+The LaunchAgents run `/usr/bin/ssh` directly rather than these scripts.
+Measured 12/9/2026: pointing a plist at `scripts/wp-tunnel.sh` exits **126**
+with `Operation not permitted` — macOS TCC blocks launchd from reading
+`~/Documents`, where this repo lives. Granting Full Disk Access to `bash`
+would work and is a far wider permission than the job needs; `ssh` only reads
+`~/.ssh`, which TCC does not guard. Both plists are generated from
+`scripts/tunnel-config.sh` so host, port and key have one definition.
+
+If a page shows stale or missing data in dev, the banner at the top of the app
+says which dependency is unreachable and has a button that reopens the
+tunnels. `[dep-fail]` lines in the server log record the same thing for
+production, where there are no tunnels and the loopbacks are real.
+
 ## Stack
 
 - Next.js 16 (App Router) + TypeScript
@@ -411,7 +448,16 @@ zip on file, and DataForSEO bills per call, so this isn't a "process
 everything" script by default.
 
 **After editing `prisma/schema.prisma`:** run `npx prisma generate` and
-restart `next dev`. Turbopack's dev server caches the previously-generated
+restart `next dev`.
+
+> ⚠️ **The symptom is not always an error.** This note used to promise an
+> "Unknown argument" crash. Measured 12/9/2026 with a new nullable column:
+> the running server returned the field as `undefined`, code doing
+> `if (!row.newField) continue` skipped every row, and the page rendered a
+> perfectly reasonable empty state — "no search intent measured for this
+> niche" — while the database held the data. A silent wrong answer, not a
+> crash. Restart the dev server after every `prisma generate`, including
+> when nothing appears to be broken. Turbopack's dev server caches the previously-generated
 Prisma Client in memory — a `prisma migrate` alone updates the database but
 not the running server's client, and you'll get a confusing "Unknown
 argument" error at the exact line that touches the new field instead of a
