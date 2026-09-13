@@ -1033,6 +1033,102 @@ chúng dùng `quote` theo nghĩa *hỏi giá ở hãng đã chọn*. Cùng lỗi
 **Sai theo hướng phóng đại cũng tốn tiền**: nó biến việc $0.21 thành việc
 trông như phải xin thêm ngân sách $0.95.
 
+## 3.7c ⚠️ Trang CỤM có endpoint riêng — `/cluster-interpretation`
+
+Mục 3.7 nói về đoạn diễn giải của **một ZIP**. Trang cụm gộp nhiều ZIP thì
+không dùng được endpoint đó, và đây là chỗ dễ bỏ sót nhất khi dựng site
+mới — vì bỏ sót nó **không gây lỗi nào**: trang cụm vẫn build, vẫn lên
+sitemap, chỉ là không có chữ AI nào trên đó.
+
+Đo trên site đầu tiên trước khi có endpoint này: **161 ZIP đã có đoạn AI,
+127 hiện ra trên trang, 34 nằm im** — chúng là thành viên của cụm, và trang
+cụm không hỏi đoạn của từng thành viên. Không log, không 404, không cảnh
+báo. Chỉ là 34 đoạn văn đã trả tiền để sinh mà không ai đọc được.
+
+### Vì sao không ghép đoạn của từng ZIP lại
+
+Vì trang cụm nói về một **dải**, không phải một điểm. Brooklyn có 23 ZIP;
+ghép 23 đoạn "tỷ lệ sở hữu nhà ở 11201 là 10,9%" lại với nhau cho ra một
+trang không ai đọc hết và lặp cấu trúc 23 lần. Đoạn cấp cụm nói thứ khác
+hẳn — nó nêu hai đầu dải và **ZIP nào nằm ở mỗi đầu**:
+
+> Brooklyn's 23 ZIP codes are far from interchangeable: homeownership ranges
+> from 10.9% at the low end to 67.3% at the high end, median home values from
+> $549,400 to $1.67 million…
+
+Đó là câu chỉ viết được khi nhìn cả cụm, và cũng là lý do trang cụm không
+phải thin content: nó trả lời một câu hỏi mà 23 trang riêng lẻ không trả
+lời được.
+
+### Hợp đồng
+
+```
+GET /api/v1/niches/{vertical}/cluster-interpretation?zips=11201,11203,...
+```
+
+Nhận **tập ZIP**, không nhận mã cụm. Hai bên không có chung tên cho cụm:
+quy tắc gộp sống ở site (`clusterKey` theo từ khoá), HQ chỉ biết tập ZIP.
+Và §3.5 đã ghi `mainKeyword` **đổi được** — một đợt sửa mẫu đã đổi chuỗi của
+233/582 market — nên mã cụm dạng chuỗi từ khoá sẽ hỏng lặng lẽ vào lần sửa
+tiếp theo. Tập ZIP đổi khi và chỉ khi cụm thật sự đổi.
+
+**200** — đo thật trên production 13/9/2026:
+
+```json
+{
+  "clusterId": "25da2925675d8295ad309b70",
+  "memberZips": ["11201", "11203", "…"],
+  "text": "Brooklyn's 23 ZIP codes are far from interchangeable: …",
+  "textFingerprint": "2e6c2ca65bd1440e"
+}
+```
+
+`textFingerprint` cùng ý nghĩa với endpoint per-zip (§3.5): so nó để biết
+đoạn văn đã đổi mà không phải so cả chuỗi.
+
+### Bốn hành vi đã đo, đừng đoán lại
+
+| Gửi | Nhận | |
+|---|---|---|
+| Đủ 23 ZIP | `200` | |
+| **Xáo trộn thứ tự** 23 ZIP đó | `200`, **cùng** `clusterId` | tập ZIP được sắp xếp trước khi băm — site không cần tự sắp |
+| **Thiếu 1 ZIP** (22/23) | `404`, `clusterId` **khác** | đây là tính năng, không phải lỗi — xem dưới |
+| 1 ZIP, hoặc ZIP sai định dạng | `400` | từ chối cả lô, không lọc bỏ rồi chạy tiếp |
+
+Ô thứ ba là ô quan trọng. **Khớp phải đúng toàn bộ tập.** Bỏ một ZIP đi là
+hỏi về *một cụm khác* — và nếu API trả về đoạn của cụm 23 ZIP cho câu hỏi
+về cụm 22 ZIP, trang sẽ nêu một dải có hai đầu mà trang đó không chứa. Số
+đúng, nguồn đúng, và vẫn sai. Cùng lý do đó, `?zips=11201,ABCDE` bị từ chối
+cả lô thay vì lọc bỏ `ABCDE`: lọc bỏ im lặng biến câu hỏi thành câu hỏi
+khác mà người gọi không biết.
+
+Hệ quả cho site: **tập ZIP gửi lên phải đúng bằng tập ZIP trang đó render.**
+Nếu site lọc thành viên (bỏ ZIP thiếu dữ liệu, chẳng hạn) thì phải lọc
+*trước* khi gọi, và gọi bằng tập đã lọc.
+
+### ⚠️ KHÔNG có `?generate=1`
+
+Endpoint per-zip có `?generate=1` (§3.7). Endpoint này **chỉ đọc**. Sinh
+một đoạn cụm tốn $0,02–0,08 và cần fact set dạng dải, nên nó là việc chủ
+động ở HQ:
+
+```bash
+tsx scripts/generate-cluster-text.ts
+```
+
+Một trang bị crawl nhiều lần không được phép biến thành hoá đơn.
+
+`404` nghĩa là **chưa sinh**, không phải lỗi. Site render trang không có
+đoạn — đúng như hành vi hôm nay — và báo về HQ để sinh.
+
+### Kiểm khi dựng xong
+
+Đếm trang cụm trên site, đếm đoạn cụm ở HQ, hai số phải bằng nhau. Hiện tại
+**31/31**. Nếu site có 31 trang cụm mà chỉ gọi thành công 28 lần thì 3 trang
+đang thiếu chữ — và như đã nói ở đầu mục, không có gì báo cho bạn biết.
+
+---
+
 ## 3.8 `/api/v1/content-rules` — hợp đồng nội dung, và cách CHỨNG MINH bạn tuân thủ
 
 Endpoint này chưa từng có trong tài liệu cho tới 2026-09-10, dù nó đã chạy
