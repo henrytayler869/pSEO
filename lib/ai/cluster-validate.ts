@@ -43,8 +43,21 @@ const RANGE_SIGNAL =
 export function validateClusterText(text: string, set: ClusterFactSet): ClusterValidationResult {
   const issues: ClusterValidationIssue[] = [];
 
+  // ZIP thành viên là số HỢP LỆ, dù nó không phải giá trị của fact nào.
+  //
+  // Đo 13/9/2026: cụm Chicago trượt cả 3 lần vì model viết "60632" — một ZIP
+  // thành viên. Nêu tên ZIP ở đầu dải là chính thứ fact set cung cấp trong
+  // nhãn ("thấp nhất trong 14 ZIP (ZIP 60632)"), nên cấm model nhắc lại nó
+  // là cấm đúng thứ mình vừa đưa cho.
+  //
+  // CHỈ ZIP thành viên, không phải mọi số 5 chữ số: cho qua cả nhóm sẽ để
+  // model bịa ra một ZIP không thuộc cụm, và một ZIP sai trông y hệt một ZIP
+  // đúng.
+  const memberZipValues = new Set(set.memberZips.map((z) => Number(z)));
+
   // --- Rule 1: mọi con số phải truy được về một fact ---
   for (const { raw, value } of extractNumbers(text)) {
+    if (memberZipValues.has(value)) continue;
     if (matchesFact(value, set.facts)) continue;
     issues.push({
       rule: "unsupported_number",
@@ -66,6 +79,7 @@ export function validateClusterText(text: string, set: ClusterFactSet): ClusterV
     for (const sentence of text.split(/(?<=[.!?])\s+/)) {
       if (RANGE_SIGNAL.test(sentence)) continue;
       for (const { raw, value } of extractNumbers(sentence)) {
+        if (memberZipValues.has(value)) continue;
         // matchesFact chứ KHÔNG phải so `===`. Fact lưu 10.892, văn bản viết
         // "10.9%" — model được phép bỏ chữ số thập phân, và luật này từng
         // không kêu lần nào vì so thẳng hai số đó. Bộ test bắt được, không
