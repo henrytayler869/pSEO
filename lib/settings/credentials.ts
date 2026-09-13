@@ -15,6 +15,14 @@ export interface CredentialField {
  * plus wiring the relevant resolve*() function to call getCredential(). */
 export const CREDENTIAL_FIELDS: CredentialField[] = [
   {
+    name: "OMEGA_INDEXER_API_KEY",
+    label: "Omega Indexer — API key",
+    group: "Đẩy index (tuỳ chọn)",
+    secret: true,
+    helpText:
+      "Dịch vụ bên thứ ba, KHÔNG bắt buộc. Lấy trong dashboard omegaindexer.com. API của họ chỉ trả chuỗi \"done\" — không trạng thái từng URL — nên câu \"đã index chưa\" vẫn hỏi Google qua URL Inspection. Chạy có nhóm đối chứng: tsx scripts/omega-submit.ts --dry",
+  },
+  {
     name: "DATAFORSEO_LOGIN",
     label: "DataForSEO — Login",
     group: "Thị trường (số liệu từ khóa)",

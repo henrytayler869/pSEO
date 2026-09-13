@@ -15,7 +15,9 @@
     "wp:tunnel:stop": "pkill -f '8090:127.0.0.1:8090' || true",
     "verify:guide": "tsx scripts/verify-integration-guide.ts",
     "audit:intent": "tsx scripts/audit-intent-match.ts",
-    "index:priority": "tsx scripts/index-priority.ts"
+    "index:priority": "tsx scripts/index-priority.ts",
+    "omega:submit": "tsx scripts/omega-submit.ts",
+    "index:experiment": "tsx scripts/index-experiment.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
