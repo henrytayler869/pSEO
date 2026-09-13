@@ -76,6 +76,16 @@ const CASES: { name: string; text: string; expect: string | null }[] = [
     expect: null,
   },
   {
+    name: "nêu ZIP THÀNH VIÊN -> KHÔNG trượt (fact set đã đưa tên ZIP trong nhãn)",
+    text: "Homeownership ranges from 10.9% in ZIP 11212 to 67.3% in ZIP 11234.",
+    expect: null,
+  },
+  {
+    name: "nêu ZIP KHÔNG thuộc cụm -> unsupported_number",
+    text: "Homeownership ranges from 10.9% to 67.3%, and ZIP 90210 sits in between.",
+    expect: "unsupported_number",
+  },
+  {
     name: "sai từ đơn vị -> wrong_unit",
     text: "Homeownership ranges from 10.9 households to 67.3% across these ZIP codes.",
     expect: "wrong_unit",
