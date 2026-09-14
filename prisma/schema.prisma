@@ -587,6 +587,8 @@ model IndexSubmission {
 
   submittedAt DateTime @default(now())
 
+  checks IndexCheck[]
+
   @@unique([websiteId, url, provider])
   @@index([websiteId, arm])
 }
@@ -978,4 +980,32 @@ model Website {
   /// sai cho câu hỏi người ta thực sự hỏi.
   aiBudgetUsd Float?
 
+}
+
+/// Một lần ĐO trạng thái index của một URL.
+///
+/// Bảng riêng chứ không phải hai cột trên IndexSubmission, vì câu hỏi thật
+/// là "nó đi theo hướng nào", không phải "bây giờ thế nào". Hai cột
+/// lastCheckedAt/indexedNow trả lời được câu thứ hai và xoá mất câu thứ
+/// nhất: mỗi lần đo ghi đè lần trước, nên không ai thấy được một URL từng
+/// vào chỉ mục rồi rơi ra.
+model IndexCheck {
+  id           String @id @default(cuid())
+  submissionId String
+  submission   IndexSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  /// verdict của GSC: PASS, NEUTRAL, FAIL, ERROR.
+  verdict String
+
+  /// coverageState nguyên văn. Giữ chuỗi thô chứ không quy về boolean:
+  /// "Crawled - currently not indexed" và "Discovered - currently not
+  /// indexed" đều là "chưa index" nhưng dẫn tới hai hành động khác nhau.
+  coverageState String
+
+  /// lastCrawlTime của Google, nếu có. Null = Google chưa từng crawl.
+  lastCrawlAt DateTime?
+
+  checkedAt DateTime @default(now())
+
+  @@index([submissionId, checkedAt])
 }

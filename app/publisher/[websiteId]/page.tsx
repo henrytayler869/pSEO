@@ -63,6 +63,12 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
           Tạo bài viết
         </Link>
 <Link
+          href={`/publisher/${websiteId}/index-log`}
+          className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
+        >
+          Theo dõi index
+        </Link>
+        <Link
           href={`/publisher/${websiteId}/templates`}
           className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
         >
