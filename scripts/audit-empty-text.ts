@@ -55,7 +55,38 @@ async function main() {
     console.log(`  ⚠ ${k}  ${f.join(", ")}  [${r.outputTokens} token, ${r.createdAt.toISOString().slice(0, 10)}]`);
     if (r.text.trim().length > 0) console.log(`      …${r.text.trim().slice(-90)}`);
   }
-  console.log(`\n${served.size} đoạn đang phục vụ — ${bad} có vấn đề.`);
+  console.log(`\n${served.size} đoạn đang phục vụ — ${bad} có vấn đề.\n`);
+
+  // Phân theo niche, vì con số tổng che mất một chuyện: "0 có vấn đề" cho
+  // một niche KHÔNG CÓ DÒNG NÀO là kết luận rỗng, không phải kết luận tốt.
+  // Cột "đã lưu" nói ra điều đó — niche có 0 dòng lưu thì nó chưa từng sinh
+  // gì, và audit này không nói được gì về nó.
+  const byVertical = new Map<string, { served: number; bad: number; stored: number }>();
+  for (const r of all) {
+    const e = byVertical.get(r.vertical) ?? { served: 0, bad: 0, stored: 0 };
+    e.stored++;
+    byVertical.set(r.vertical, e);
+  }
+  for (const [k, r] of served) {
+    const v = k.split("|")[0];
+    const e = byVertical.get(v)!;
+    e.served++;
+    if (flags(r.text).length > 0) e.bad++;
+  }
+  console.log("  niche                       đã lưu  phục vụ  vấn đề");
+  for (const [v, e] of [...byVertical].sort((a, b) => b[1].served - a[1].served)) {
+    const mark = e.bad > 0 ? "⚠" : e.served === 0 ? "·" : " ";
+    console.log(`  ${mark} ${v.padEnd(26)} ${String(e.stored).padStart(5)} ${String(e.served).padStart(8)} ${String(e.bad).padStart(7)}`);
+  }
+
+  // Niche đã nghiên cứu nhưng CHƯA sinh đoạn nào: audit không phủ chúng, và
+  // nói ra điều đó quan trọng hơn việc báo một con số 0 trông yên tâm.
+  const researched = await prisma.marketIdentity.findMany({ distinct: ["vertical"], select: { vertical: true } });
+  const untouched = researched.map((r) => r.vertical).filter((v) => !byVertical.has(v));
+  if (untouched.length > 0) {
+    console.log(`\n  ${untouched.length} niche đã nghiên cứu nhưng chưa sinh đoạn nào — audit KHÔNG phủ:`);
+    console.log(`    ${untouched.join(", ")}`);
+  }
 
   const storedBad = all.filter((r) => !r.validationPassed && flags(r.text).length > 0).length;
   console.log(`(${all.length} bản đã lưu; ${storedBad} bản TRƯỢT cũng có vấn đề — nằm trong bảng làm bằng chứng, không lên trang)`);
