@@ -46,10 +46,13 @@ export interface BudgetStatus {
    * SỐ DÒNG sổ gắn đích danh, không phải số tiền.
    *
    * Có mặt vì $0,0000 một mình không phân biệt được hai chuyện khác hẳn
-   * nhau: "site này chưa tiêu gì" và "sổ chi chưa từng ghi site nào". Đến
-   * 14/9/2026 mọi dòng đều thuộc vế thứ hai — 401/401 có websiteId NULL —
-   * nên ô tiền hiện $0,0000 và đọc ra như thể đường ống chưa chạy, trong
-   * khi $7,40 đã ra khỏi ví.
+   * nhau: "site này chưa tiêu gì" và "sổ chi chưa từng ghi site nào".
+   *
+   * Lúc viết (14/9/2026) mọi dòng đều thuộc vế thứ hai — 401/401 có
+   * websiteId NULL. Cùng ngày, scripts/backfill-cluster-spend-site.ts gắn
+   * lại 60 dòng của đoạn cấp cụm bằng cách ghép (vertical, inputTokens,
+   * outputTokens), nên hiện là 60 dòng / $1,4489 gắn đích danh. Nhánh
+   * ownRows === 0 vẫn cần: publisher mới bắt đầu từ đó.
    */
   ownRows: number;
   /** Dòng sổ của cùng niche nhưng không gắn site nào — cache dùng chung. */
