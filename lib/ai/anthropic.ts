@@ -101,10 +101,23 @@ export interface GenerationResult {
  * for care up front is usually cheaper than paying for the retry. Set
  * `useThinking: false` in the AppConfig "ai" key to turn it off.
  */
-/** Model tính tiền nhưng không trả chữ nào. Tách thành lớp riêng để vòng
- * lặp gọi phân biệt được nó với lỗi mạng — cái này thử lại thì có ích, và
- * nó KHÔNG được lặng lẽ trở thành một bài viết rỗng. */
-export class EmptyGenerationError extends Error {}
+/**
+ * Model dừng trước khi viết xong.
+ *
+ * Gộp HAI dạng của cùng một nguyên nhân, vì tách chúng ra đã bỏ sót dạng
+ * nguy hiểm hơn:
+ *   - RỖNG: thinking ăn hết trần, không còn chỗ cho khối text.
+ *   - CỤT: có chữ nhưng chạm trần giữa câu.
+ *
+ * Bản vá đầu (14/9/2026) chỉ bắt dạng rỗng. Soi lại toàn bộ kho văn thì có
+ * 3 đoạn CỤT đang phục vụ trên site — "...ask now about certific" — mỗi đoạn
+ * đúng 1024 token. Chúng qua mọi cổng vì không nêu số nào sai, và nhìn
+ * thoáng qua thì bình thường. Dạng cụt khó thấy hơn dạng rỗng, nên nó sống
+ * lâu hơn.
+ *
+ * Tách thành lớp riêng để vòng lặp gọi phân biệt được với lỗi mạng.
+ */
+export class IncompleteGenerationError extends Error {}
 
 export async function generateWithClaude(params: {
   system: string;
@@ -174,7 +187,7 @@ export async function generateWithClaude(params: {
     },
   });
 
-  // Văn bản RỖNG là lỗi, không phải một kết quả.
+  // Văn bản RỖNG hoặc CỤT là lỗi, không phải một kết quả.
   //
   // Ném ở đây chứ không trả về "" cho từng nơi tự lo: mọi cổng kiểm phía sau
   // đều ĐẠT trên chuỗi rỗng — validator sự thật không thấy con số nào sai vì
@@ -184,12 +197,16 @@ export async function generateWithClaude(params: {
   //
   // Ném SAU khi ghi sổ chi: tiền đã tiêu rồi, và một sổ chi chỉ ghi lần
   // thành công sẽ báo thiếu đúng lúc mọi thứ đang hỏng.
-  if (text.length === 0) {
-    throw new EmptyGenerationError(
-      `Model không sinh khối text nào (stop_reason: ${stopReason ?? "không rõ"}, output ${outputTokens} token). ` +
-        (stopReason === "max_tokens"
-          ? "Chạm trần output — khối thinking đã ăn hết chỗ. Nâng MAX_OUTPUT_TOKENS."
-          : "Không phải do chạm trần; xem lại prompt.")
+  if (text.length === 0 || stopReason === "max_tokens") {
+    throw new IncompleteGenerationError(
+      text.length === 0
+        ? `Model không sinh khối text nào (stop_reason: ${stopReason ?? "không rõ"}, output ${outputTokens} token). ` +
+          (stopReason === "max_tokens"
+            ? "Chạm trần output — khối thinking đã ăn hết chỗ. Nâng MAX_OUTPUT_TOKENS."
+            : "Không phải do chạm trần; xem lại prompt.")
+        : `Model chạm trần output ${outputTokens} token và bị cắt giữa chừng. ` +
+          `Văn bản cụt qua được mọi cổng kiểm vì nó không nêu số nào SAI — nó chỉ thiếu. ` +
+          `Kết thúc: "…${text.slice(-60)}"`
     );
   }
 

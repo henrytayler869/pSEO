@@ -2,7 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { buildFactSet, type FactSet, type Fact } from "./facts";
 import { judgeDistinctness, avoidBlock, MAX_SHARED_RUN_WORDS } from "./distinctness";
 import { validateGeneratedText, type ValidationResult } from "./validate";
-import { generateWithClaude, EmptyGenerationError } from "./anthropic";
+import { generateWithClaude, IncompleteGenerationError } from "./anthropic";
 import crypto from "node:crypto";
 
 const MAX_ATTEMPTS = 2; // one retry: a second failure is a prompt problem, not luck
@@ -342,7 +342,7 @@ Your previous attempt reused this exact run of ${lastVerdict.worstWords} words: 
       // Rỗng = một lần thử trượt, không phải sự cố cần nổ ra ngoài. Vòng lặp
       // còn lượt thì thử lại; hết lượt thì trả thất bại như mọi kiểu trượt
       // khác. Để nó ném xuyên qua sẽ làm một lô 153 ZIP chết ở ZIP thứ nhất.
-      if (!(err instanceof EmptyGenerationError)) throw err;
+      if (!(err instanceof IncompleteGenerationError)) throw err;
       emptyNote = err.message;
       failure = "empty";
       continue;
@@ -482,7 +482,7 @@ export async function getOrGenerateInterpretation(vertical: string, zip: string)
     } catch (err) {
       // Cùng lỗ với đường sinh lại, và nó có ở đây TRƯỚC: 277 đoạn đã đi qua
       // hàm này. Chỉ chưa gặp vì trần output cũ hiếm khi bị thinking ăn hết.
-      if (!(err instanceof EmptyGenerationError)) throw err;
+      if (!(err instanceof IncompleteGenerationError)) throw err;
       lastValidation = { passed: false, issues: [] };
       continue;
     }
