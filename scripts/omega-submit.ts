@@ -14,6 +14,7 @@
 //   tsx scripts/omega-submit.ts --limit 20 --drip 7
 
 import { prisma } from "../lib/db/prisma";
+import { getGoogleAccessToken } from "../lib/google/service-account";
 import { resolveSite, reportSiteError } from "../lib/scripts/resolve-site";
 import { fetchServedInventory } from "../lib/publisher/inventory";
 import { fetchSitemapCounts } from "../lib/sitemap/count";
@@ -25,6 +26,43 @@ const PROVIDER = "omega-indexer";
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 && process.argv[i + 1] ? process.argv[i + 1] : fallback;
+}
+
+
+/**
+ * Trạng thái index hiện tại của từng URL, để chia hai nhánh cho cân.
+ *
+ * Hỏi Google chứ không suy từ sitemap: "có trong sitemap" nói ta đã nộp gì,
+ * không nói Google nhận gì. Đo 14/9: 39/194 URL trong sitemap vẫn ở trạng
+ * thái "unknown to Google".
+ *
+ * URL hỏi không được rơi vào tầng riêng "(không hỏi được)" thay vì bị đoán
+ * là "chưa index": một sự cố quota không được phép âm thầm dồn URL về một
+ * nhánh.
+ */
+async function fetchIndexStates(propertyUrl: string, urls: string[]): Promise<Map<string, string>> {
+  const token = await getGoogleAccessToken(["https://www.googleapis.com/auth/webmasters.readonly"]);
+  const out = new Map<string, string>();
+  const CONCURRENCY = 4;
+  for (let i = 0; i < urls.length; i += CONCURRENCY) {
+    await Promise.all(
+      urls.slice(i, i + CONCURRENCY).map(async (u) => {
+        try {
+          const res = await fetch("https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ inspectionUrl: u, siteUrl: propertyUrl }),
+          });
+          if (!res.ok) { out.set(u, "(không hỏi được)"); return; }
+          const b = (await res.json()) as { inspectionResult?: { indexStatusResult?: { coverageState?: string } } };
+          out.set(u, b.inspectionResult?.indexStatusResult?.coverageState ?? "(không rõ)");
+        } catch {
+          out.set(u, "(không hỏi được)");
+        }
+      })
+    );
+  }
+  return out;
 }
 
 async function main() {
@@ -93,18 +131,65 @@ async function main() {
 
   if (candidates.length < 2) { console.log("Không đủ URL để chia hai nhóm."); return; }
 
+  // Chia theo TRẠNG THÁI INDEX trước, rồi mới theo volume trong từng nhóm.
+  //
+  // Chia thuần theo volume đã đo được là lệch: lô 20 URL cho ra "Google chưa
+  // biết tới" 4 bên gửi / 1 bên đối chứng. Nhóm đó vừa là nhóm dịch vụ dễ
+  // giúp nhất vừa là nhóm index chậm nhất tự nhiên, nên 4–1 làm kết quả cuối
+  // không đọc được theo cả hai chiều: nhóm gửi chậm hơn thì không rõ do dịch
+  // vụ kém hay do nó gánh nhiều URL khó hơn.
+  //
+  // Phân tầng rồi xen kẽ TRONG từng tầng giữ cân cả hai biến cùng lúc.
+  const stateOf = await fetchIndexStates(site.gscPropertyUrl, candidates);
+  const byState = new Map<string, string[]>();
+  for (const u of candidates) {
+    const k = stateOf.get(u) ?? "(không hỏi được)";
+    byState.set(k, [...(byState.get(k) ?? []), u]);
+  }
+
   const submitted: string[] = [];
   const control: string[] = [];
-  candidates.forEach((u, i) => (i % 2 === 0 ? submitted : control).push(u));
+  let volS = 0;
+  let volC = 0;
+  const v = (u: string) => volByPath.get(new URL(u).pathname) ?? 0;
+
+  // MỘT lượt duyệt toàn bộ theo volume giảm dần, không duyệt từng tầng.
+  //
+  // Duyệt tầng-này-rồi-tầng-kia đẩy lệch volume từ 6,4% lên 14,4%: các trang
+  // lớn của tầng sau không còn cơ hội bù cho tầng trước, vì lúc đó tầng
+  // trước đã chia xong. Xếp tất cả theo volume rồi gán trang nặng nhất
+  // trước vào nhánh đang nhẹ hơn thì mỗi lần gán đều là một lần sửa lệch.
+  //
+  // Trần theo tầng vẫn giữ: một tầng không được dồn quá ceil(n/2) về một
+  // nhánh, nên cân bằng trạng thái không bị volume nuốt mất.
+  const capOf = new Map([...byState].map(([k, g]) => [k, Math.ceil(g.length / 2)]));
+  const nS = new Map<string, number>();
+  const nC = new Map<string, number>();
+
+  for (const u of [...candidates].sort((a, b) => v(b) - v(a))) {
+    const st = stateOf.get(u) ?? "(không hỏi được)";
+    const cap = capOf.get(st)!;
+    const s0 = nS.get(st) ?? 0;
+    const c0 = nC.get(st) ?? 0;
+    const toSubmitted = s0 >= cap ? false : c0 >= cap ? true : volS <= volC;
+    if (toSubmitted) { submitted.push(u); volS += v(u); nS.set(st, s0 + 1); }
+    else { control.push(u); volC += v(u); nC.set(st, c0 + 1); }
+  }
+
+  console.log("cân bằng theo trạng thái index:");
+  for (const [state, group] of byState) {
+    const g = group.filter((u) => submitted.includes(u)).length;
+    console.log(`  ${state.padEnd(40)} gửi ${String(g).padStart(2)} | đối chứng ${String(group.length - g).padStart(2)}`);
+  }
+  console.log();
 
   console.log(`${candidates.length} URL: gửi ${submitted.length}, đối chứng ${control.length}, drip ${drip} ngày\n`);
   // In xen kẽ theo cặp, không gộp nhóm. Điều cần kiểm bằng mắt là hai nhánh
   // có CÂN về độ quan trọng không; in gộp thì hai cột volume nằm cách nhau
   // năm dòng và không so được. Xen kẽ thì lệch cặp nào đập ngay vào mắt.
-  const vol = (u: string) => volByPath.get(new URL(u).pathname) ?? 0;
   for (let i = 0; i < Math.min(5, submitted.length); i++) {
-    console.log(`  GỬI       ${submitted[i].replace(site.url, "").padEnd(44)} ${String(vol(submitted[i])).padStart(6)} lượt`);
-    if (control[i]) console.log(`  đối chứng ${control[i].replace(site.url, "").padEnd(44)} ${String(vol(control[i])).padStart(6)} lượt`);
+    console.log(`  GỬI       ${submitted[i].replace(site.url, "").padEnd(44)} ${String(v(submitted[i])).padStart(6)} lượt`);
+    if (control[i]) console.log(`  đối chứng ${control[i].replace(site.url, "").padEnd(44)} ${String(v(control[i])).padStart(6)} lượt`);
   }
   if (candidates.length > 10) console.log(`  … và ${candidates.length - 10} URL nữa`);
 
@@ -113,7 +198,7 @@ async function main() {
   // một trang lớn bất thường, chênh lệch có thật. In ra để thấy, vì nếu hai
   // nhánh lệch nhiều thì kết quả đọc được là chênh lệch độ quan trọng chứ
   // không phải tác dụng của dịch vụ.
-  const sum = (a: string[]) => a.reduce((t, u) => t + vol(u), 0);
+  const sum = (a: string[]) => a.reduce((t, u) => t + v(u), 0);
   const [sv, cv] = [sum(submitted), sum(control)];
   const skew = sv + cv === 0 ? 0 : Math.abs(sv - cv) / ((sv + cv) / 2);
   console.log(`\ntổng volume — gửi ${sv}, đối chứng ${cv} (lệch ${(skew * 100).toFixed(1)}%)`);
