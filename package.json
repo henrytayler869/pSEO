@@ -27,7 +27,8 @@
     "regen:niche": "tsx scripts/regenerate-niche.ts",
     "regen:measure": "tsx scripts/measure-regen-distinctness.ts",
     "test:empty": "tsx scripts/test-incomplete-generation.ts",
-    "audit:empty": "tsx scripts/audit-empty-text.ts"
+    "audit:empty": "tsx scripts/audit-empty-text.ts",
+    "index:status": "tsx scripts/index-status.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
