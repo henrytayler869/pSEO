@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
-import { formatBudgetPercent, type BudgetStatus } from "@/lib/ai/budget";
+import { formatBudgetPercent, type BudgetStatus } from "@/lib/ai/budget-core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Play, Square, Send, Check, X, ListPlus } from "lucide-react";

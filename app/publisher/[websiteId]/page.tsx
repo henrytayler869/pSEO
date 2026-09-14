@@ -90,6 +90,12 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
         }
       />
 
+      {/* Ngay dưới tiêu đề, TRƯỚC mọi thẻ khác.
+          Lần trước nó nằm sau bốn thẻ và phải cuộn mới thấy — đo bằng cách
+          mở trang ra. Một cảnh báo chi tiêu chỉ đọc được sau khi cuộn là
+          cảnh báo cho người đã đi tìm nó. */}
+      {budget && <AiBudgetCard websiteId={website.id} status={budget} />}
+
       <Card>
         <CardHeader>
           <CardTitle>Mục tiêu &amp; việc nên làm tiếp</CardTitle>
@@ -170,11 +176,6 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
           <WpAdminLinkCell link={wpAdmin} />
         </CardContent>
       </Card>
-
-      {/* Đặt TRƯỚC các thẻ thiết lập khác: khi vượt ngân sách thì đó là
-          thứ đáng đọc trước, và một cảnh báo nằm cuối trang dài là một
-          cảnh báo người ta cuộn qua. */}
-      {budget && <AiBudgetCard websiteId={website.id} status={budget} />}
 
       <Card>
         <CardHeader>

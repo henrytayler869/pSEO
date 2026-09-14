@@ -53,7 +53,6 @@ export default async function PublisherPage() {
                   <TableHead>URL trong sitemap</TableHead>
                   <TableHead>Tỷ lệ index (ước tính)</TableHead>
                   <TableHead>Total traffic (28 ngày)</TableHead>
-                  <TableHead>Ngân sách AI</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -65,6 +64,28 @@ export default async function PublisherPage() {
                         {row.website.name}
                       </Link>
                       <div className="text-xs text-muted-foreground">{row.website.url}</div>
+                      {/* Ngân sách nằm ở CỘT ĐẦU, không phải cột riêng.
+                          Cột riêng đẩy nó ra ngoài khung nhìn: ô WP Admin
+                          chứa cả câu giải thích lẫn lệnh ssh nên bảng vốn đã
+                          tràn ngang, và một highlight phải cuộn ngang mới
+                          thấy thì không highlight gì cả. Đo bằng cách mở
+                          trang ra xem. */}
+                      {(() => {
+                        const b = budgets.get(row.website.id);
+                        if (!b || b.verdict === "no-budget") return null;
+                        if (b.verdict === "over")
+                          return (
+                            <div className="mt-1 inline-flex items-center gap-1 rounded-md border border-red-500/60 bg-red-100/70 px-1.5 py-0.5 text-xs font-medium text-red-800 tabular-nums dark:bg-red-950/40 dark:text-red-300">
+                              <AlertTriangle className="h-3 w-3" />
+                              AI ${b.totalUsd.toFixed(2)} / ${b.budgetUsd!.toFixed(2)}
+                            </div>
+                          );
+                        return (
+                          <div className="mt-1 text-xs tabular-nums text-muted-foreground">
+                            AI ${b.totalUsd.toFixed(2)} / ${b.budgetUsd!.toFixed(2)} ({formatBudgetPercent(b.percent)})
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     {/*
                       WP Admin hiện KỂ CẢ khi hàng lỗi. Link đó suy ra từ cấu
@@ -96,29 +117,7 @@ export default async function PublisherPage() {
                         <TableCell>{row.totalUsers?.toLocaleString()} users</TableCell>
                       </>
                     )}
-                    {/* Ba trạng thái, ba cách hiện. "chưa đặt" xám chứ không xanh:
-                        xanh cho một ngân sách không tồn tại là câu trả lời sai. */}
-                    <TableCell>
-                      {(() => {
-                        const b = budgets.get(row.website.id);
-                        if (!b) return <span className="text-xs text-muted-foreground">—</span>;
-                        if (b.verdict === "no-budget")
-                          return <span className="text-xs text-muted-foreground">chưa đặt</span>;
-                        if (b.verdict === "over")
-                          return (
-                            <span className="inline-flex items-center gap-1 rounded-md border border-red-500/60 bg-red-100/70 px-2 py-0.5 text-xs font-medium text-red-800 tabular-nums dark:bg-red-950/40 dark:text-red-300">
-                              <AlertTriangle className="h-3 w-3" />
-                              ${b.totalUsd.toFixed(2)} / ${b.budgetUsd!.toFixed(2)}
-                            </span>
-                          );
-                        return (
-                          <span className="text-xs tabular-nums text-muted-foreground">
-                            ${b.totalUsd.toFixed(2)} / ${b.budgetUsd!.toFixed(2)} ({formatBudgetPercent(b.percent)})
-                          </span>
-                        );
-                      })()}
-                    </TableCell>
-                    <TableCell>
+                                        <TableCell>
                       <div className="flex items-center gap-2">
                         <Link href={`/publisher/${row.website.id}`} className="text-xs text-primary hover:underline">
                           Xem chi tiết
