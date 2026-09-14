@@ -78,12 +78,26 @@ export function AiBudgetCard({ websiteId, status }: { websiteId: string; status:
         <dl className="grid gap-1 text-sm">
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">Gắn đích danh site này</dt>
-            <dd className="tabular-nums">{usd(status.ownUsd)}</dd>
+            {/* Không in "$0,0000" khi chưa có dòng nào: con số đó đọc ra là
+                "site này chưa tiêu gì", trong khi sự thật là sổ chi chưa
+                từng ghi site. Hai chuyện khác hẳn nhau và ô tiền không nói
+                được sự khác biệt đó. */}
+            <dd className="tabular-nums">
+              {status.ownRows === 0 ? <span className="text-muted-foreground">chưa có khoản nào</span> : usd(status.ownUsd)}
+            </dd>
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">
               Cache dùng chung của niche
-              {status.sharedWithSites > 1 && (
+              {status.ownRows === 0 && (
+          <p className="text-xs text-muted-foreground">
+            Chưa khoản chi nào gắn đích danh site này. Đoạn diễn giải theo ZIP được cache theo niche và phục vụ mọi
+            publisher trong niche, nên nó không thuộc site nào — chỉ đoạn cấp cụm mới có chủ, và 31 đoạn hiện có đã sinh
+            xong trước khi sổ chi bắt đầu ghi site. Hàng này sẽ có số từ lần sinh đoạn cụm kế tiếp.
+          </p>
+        )}
+
+        {status.sharedWithSites > 1 && (
                 <span className="ml-1 text-amber-700 dark:text-amber-500">· {status.sharedWithSites} publisher cùng dùng</span>
               )}
             </dt>

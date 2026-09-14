@@ -81,5 +81,19 @@ check("chưa đặt ngân sách → không có chữ tỷ lệ nào", () => {
   eq(formatBudgetPercent(null), null, "percent");
 });
 
+check("ownRows 0 khác ownUsd 0 — hai chuyện, giao diện phải phân biệt được", () => {
+  // $0,0000 một mình không nói được "chưa tiêu gì" hay "sổ chi chưa ghi
+  // site". Nếu ownRows biến mất khỏi kiểu, giao diện quay lại in $0,0000
+  // cho cả hai và ca này đỏ.
+  const chuaGhi = judgeBudget({ ...base, budgetUsd: 25, sharedUsd: 7.4, ownUsd: 0, ownRows: 0 });
+  const daTieuRoi = judgeBudget({ ...base, budgetUsd: 25, sharedUsd: 7.4, ownUsd: 0.05, ownRows: 2 });
+  eq(chuaGhi.ownRows, 0, "ownRows khi chưa ghi");
+  eq(daTieuRoi.ownRows, 2, "ownRows khi đã ghi");
+});
+
+check("ownRows vắng mặt → 0, không phải undefined lọt xuống giao diện", () => {
+  eq(judgeBudget({ ...base, budgetUsd: 10 }).ownRows, 0, "ownRows");
+});
+
 console.log(`\n${pass}/${pass + fails.length} đúng.`);
 if (fails.length > 0) { console.error(`\nTRƯỢT:\n  ${fails.join("\n  ")}`); process.exitCode = 1; }
