@@ -171,6 +171,17 @@ jobs:
       - name: Ngân sách AI theo publisher — ba trạng thái còn phân biệt được
         run: npx tsx scripts/test-budget.ts
 
+      # Ca đầu tiên là mạch 47 từ ĐO ĐƯỢC khi sinh lại với cùng prompt. Cổng
+      # này không bắt được nó thì cả đường sinh lại chỉ là nút bấm tốn tiền.
+      - name: Văn sinh lại phải khác văn đã publish
+        run: npx tsx scripts/test-distinctness.ts
+
+      # Ca thật 14/9: model tiêu hết trần output vào thinking, trả về chuỗi
+      # rỗng, và MỌI cổng phía sau đạt trên chuỗi rỗng. Đoạn rỗng đã được
+      # lưu là ĐẠT rồi phục vụ trên site.
+      - name: Lần sinh rỗng phải bị chặn
+        run: npx tsx scripts/test-empty-generation.ts
+
       # Schema phải có trước khi script chạm Prisma. Không dữ liệu nào được
       # nạp: xem chú thích ở khối `services` về việc DB rỗng kiểm được gì và
       # KHÔNG kiểm được gì.

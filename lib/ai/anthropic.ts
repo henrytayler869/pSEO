@@ -14,7 +14,18 @@ const PRICING_PER_MTOK: Record<string, { input: number; output: number }> = {
 
 const DEFAULT_MODEL = "claude-opus-5";
 const DEFAULT_SPEND_CAP_USD = 5.0;
-const MAX_OUTPUT_TOKENS = 1024; // one 200-400 word paragraph; not a long-form job
+/**
+ * Trần output cho một lần gọi.
+ *
+ * 4000 chứ không phải 1024, và con số cũ là một lỗi ĐÃ XẢY RA: token của
+ * khối thinking tính chung vào max_tokens, nên một lượt suy nghĩ dài ăn hết
+ * 1024 và model không còn chỗ sinh khối text nào. Đo 14/9/2026 trên ZIP
+ * 02301: outputTokens = 1024 đúng bằng trần, text trả về RỖNG.
+ *
+ * Không làm tăng chi phí thường: tiền tính theo token thực sinh, và system
+ * prompt vẫn đòi 4-6 câu. Nó chỉ để dành chỗ cho phần suy nghĩ.
+ */
+const MAX_OUTPUT_TOKENS = 4000;
 
 export class SpendCapExceededError extends Error {
   constructor(
@@ -90,6 +101,11 @@ export interface GenerationResult {
  * for care up front is usually cheaper than paying for the retry. Set
  * `useThinking: false` in the AppConfig "ai" key to turn it off.
  */
+/** Model tính tiền nhưng không trả chữ nào. Tách thành lớp riêng để vòng
+ * lặp gọi phân biệt được nó với lỗi mạng — cái này thử lại thì có ích, và
+ * nó KHÔNG được lặng lẽ trở thành một bài viết rỗng. */
+export class EmptyGenerationError extends Error {}
+
 export async function generateWithClaude(params: {
   system: string;
   prompt: string;
@@ -136,6 +152,8 @@ export async function generateWithClaude(params: {
     .join("")
     .trim();
 
+  const stopReason = message.stop_reason;
+
   const inputTokens = message.usage.input_tokens;
   const outputTokens = message.usage.output_tokens;
   const cost = costUsd(config.model, inputTokens, outputTokens);
@@ -155,6 +173,26 @@ export async function generateWithClaude(params: {
       costUsd: cost,
     },
   });
+
+  // Văn bản RỖNG là lỗi, không phải một kết quả.
+  //
+  // Ném ở đây chứ không trả về "" cho từng nơi tự lo: mọi cổng kiểm phía sau
+  // đều ĐẠT trên chuỗi rỗng — validator sự thật không thấy con số nào sai vì
+  // không có con số nào, cổng trùng lặp thấy chuỗi ngắn hơn ngưỡng nên trả
+  // null. Ngày 14/9/2026 một đoạn rỗng đã đi qua cả hai cổng và được lưu là
+  // ĐẠT, rồi phục vụ cho ZIP 02301 trên site thật.
+  //
+  // Ném SAU khi ghi sổ chi: tiền đã tiêu rồi, và một sổ chi chỉ ghi lần
+  // thành công sẽ báo thiếu đúng lúc mọi thứ đang hỏng.
+  if (text.length === 0) {
+    throw new EmptyGenerationError(
+      `Model không sinh khối text nào (stop_reason: ${stopReason ?? "không rõ"}, output ${outputTokens} token). ` +
+        (stopReason === "max_tokens"
+          ? "Chạm trần output — khối thinking đã ăn hết chỗ. Nâng MAX_OUTPUT_TOKENS."
+          : "Không phải do chạm trần; xem lại prompt.")
+    );
+  }
+
 
   return { text, model: config.model, inputTokens, outputTokens, costUsd: cost };
 }
