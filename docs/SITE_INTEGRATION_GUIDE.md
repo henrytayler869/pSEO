@@ -1181,9 +1181,27 @@ Một trang bị crawl nhiều lần không được phép biến thành hoá đ
 
 ### Kiểm khi dựng xong
 
-Đếm trang cụm trên site, đếm đoạn cụm ở HQ, hai số phải bằng nhau. Hiện tại
-**31/31**. Nếu site có 31 trang cụm mà chỉ gọi thành công 28 lần thì 3 trang
-đang thiếu chữ — và như đã nói ở đầu mục, không có gì báo cho bạn biết.
+Bảng `AiClusterGeneration` giờ chứa **ba loại** đoạn, phân biệt bằng tập ZIP
+chứ không bằng một cột loại — vì cả ba là cùng một bài toán và cùng một
+validator:
+
+| loại | tập ZIP | nói gì |
+|---|---|---|
+| trang cụm | nhiều ZIP chung từ khoá + hạt | dải trong cụm |
+| hub bang | mọi ZIP bang đó publish | dải trong bang |
+| hub bang một ZIP | đúng 1 ZIP | ZIP đó đứng đâu trong TOÀN BỘ tập đã publish |
+
+Đo 14/9/2026: **55 đoạn đạt** — 31 cụm + 17 hub bang + 7 hub một-ZIP.
+
+Kiểm: đếm trang cần đoạn trên site, đếm đoạn ở HQ, hai số phải bằng nhau.
+Nếu site có 31 trang cụm mà chỉ gọi thành công 28 lần thì 3 trang đang thiếu
+chữ — và như đã nói ở đầu mục, không có gì báo cho bạn biết.
+
+⚠️ Hub một-ZIP có tập ZIP MỘT phần tử, và nó không được nhận đoạn của trang
+market cùng ZIP đó: hai trang nằm cách nhau một cú bấm, nên trùng nhau là
+trùng ở chỗ dễ thấy nhất. HQ chặn bằng một phép đo độ trùng giữa hai văn bản
+(đo được 5-9 từ, trần 16), không phải bằng niềm tin rằng prompt khác nhau
+thì văn khác nhau.
 
 ---
 
