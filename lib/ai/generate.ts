@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db/prisma";
 import { buildFactSet, type FactSet, type Fact } from "./facts";
+import { judgeDistinctness, avoidBlock, MAX_SHARED_RUN_WORDS } from "./distinctness";
 import { validateGeneratedText, type ValidationResult } from "./validate";
-import { generateWithClaude } from "./anthropic";
+import { generateWithClaude, EmptyGenerationError } from "./anthropic";
 import crypto from "node:crypto";
 
 const MAX_ATTEMPTS = 2; // one retry: a second failure is a prompt problem, not luck
@@ -127,7 +128,10 @@ Stay neutral: describe what the figures show and what they do not. Do not urge t
   );
 }
 
-function systemPromptFor(vertical: string, searchIntent: string | null): string {
+/** Xuất ra cho scripts/measure-regen-distinctness.ts dựng ĐÚNG prompt mà
+ * đường sinh thật dùng. Script đo mà tự ghép prompt riêng sẽ đo một thứ
+ * khác với thứ đang chạy, và con số nó cho ra sẽ sai một cách khó thấy. */
+export function systemPromptFor(vertical: string, searchIntent: string | null): string {
   const brief = VERTICAL_BRIEFS[vertical];
   if (!brief) {
     // No brief means no way to keep the copy on-topic, and a generic prompt
@@ -148,7 +152,7 @@ Never write about: ${brief.offLimits}
 The figures below describe the local area. Use them to say something useful about hiring this specific trade here — not about the buildings themselves.`;
 }
 
-function renderFactsForPrompt(factSet: FactSet): string {
+export function renderFactsForPrompt(factSet: FactSet): string {
   const lines = factSet.facts.map((f) => {
     const scope =
       f.scope === "ZIP"
@@ -262,6 +266,161 @@ export async function getCachedInterpretation(vertical: string, zip: string): Pr
 }
 
 /**
+ * Số lần thử khi ép sinh lại.
+ *
+ * Nhiều hơn MAX_ATTEMPTS của đường thường (2), vì ở đây có HAI cổng phải
+ * qua cùng lúc — đúng sự thật và khác văn cũ — và hai cổng thì hỏng theo
+ * hai kiểu. Vẫn có trần: nếu bốn lần đều trùng thì vấn đề nằm ở prompt hoặc
+ * ở chỗ fact set quá hẹp để diễn đạt cách khác, và người ta cần biết điều
+ * đó chứ không cần thêm một hoá đơn.
+ */
+const MAX_REGEN_ATTEMPTS = 4;
+
+export interface RegenerateOutcome extends GenerateOutcome {
+  /** Mạch trùng dài nhất so với mọi bản cũ, ở bản được trả về. */
+  sharedRunWords: number;
+  sharedPhrase: string | null;
+  /** Số bản cũ đã đối chiếu. 0 nghĩa là ZIP này chưa từng có văn. */
+  comparedWith: number;
+  /** Thông điệp khi model không trả chữ nào. Null nếu không gặp. */
+  emptyNote?: string | null;
+  /** Vì sao thất bại, nếu thất bại.
+   *
+   * "empty" tách riêng khỏi "facts": model không trả chữ nào là hỏng ở tầng
+   * gọi API, không phải viết sai sự thật. Gộp hai thứ sẽ khiến người đọc báo
+   * cáo đi sửa prompt cho một vấn đề nằm ở max_tokens. */
+  failure: "facts" | "not-distinct" | "empty" | null;
+}
+
+/**
+ * Sinh lại đoạn diễn giải cho một ZIP, BỎ QUA cache và bắt buộc khác văn cũ.
+ *
+ * Dùng khi dựng lại site trong cùng ngành: cache khoá theo (vertical, zip,
+ * factsFingerprint) nên site mới sẽ nhận lại đúng đoạn cũ — thứ có thể vẫn
+ * đang nằm trong chỉ mục Google của site đã bỏ.
+ *
+ * Ba phần, và thiếu một là tự lừa mình: bỏ qua cache, đưa văn cũ vào prompt
+ * làm ví dụ phản, và ĐO độ trùng để chặn. Phần thứ ba là phần không được
+ * bỏ — đo 14/9/2026 cho thấy sinh lại với cùng prompt vẫn cho mạch trùng 47
+ * từ, nên "đã sinh lại" mà không đo là một khẳng định không ai kiểm.
+ */
+export async function regenerateInterpretation(vertical: string, zip: string): Promise<RegenerateOutcome | null> {
+  const factSet = await buildFactSet(vertical, zip);
+  if (!factSet) return null;
+
+  // MỌI bản từng đạt, không lọc theo factsFingerprint. Một bản viết cho bộ
+  // số cũ vẫn có thể đang nằm trong chỉ mục, và trùng với nó cũng là trùng.
+  const priors = await prisma.aiGeneration.findMany({
+    where: { vertical, zip, validationPassed: true },
+    orderBy: { createdAt: "desc" },
+    select: { text: true },
+  });
+  const priorTexts = priors.map((p) => p.text);
+
+  const basePrompt = renderFactsForPrompt(factSet);
+  let totalCost = 0;
+  let lastValidation: ValidationResult = { passed: false, issues: [] };
+  let lastVerdict = { worstPhrase: null as string | null, worstWords: 0, comparedWith: priorTexts.length };
+  let failure: "facts" | "not-distinct" | "empty" | null = null;
+  let emptyNote: string | null = null;
+
+  for (let attempt = 1; attempt <= MAX_REGEN_ATTEMPTS; attempt++) {
+    // Lần thử sau nhận thêm chính mạch vừa bị bắt. Chỉ lặp lại "viết khác
+    // đi" thì model không biết chỗ nào là chỗ sai.
+    const caught =
+      lastVerdict.worstPhrase && attempt > 1
+        ? `
+
+Your previous attempt reused this exact run of ${lastVerdict.worstWords} words: "${lastVerdict.worstPhrase}". Rewrite that part from scratch.`
+        : "";
+    const prompt = `${basePrompt}${avoidBlock(priorTexts)}${caught}`;
+
+    let result;
+    try {
+      result = await generateWithClaude({ system: systemPromptFor(vertical, factSet.searchIntent), prompt, vertical, zip });
+    } catch (err) {
+      // Rỗng = một lần thử trượt, không phải sự cố cần nổ ra ngoài. Vòng lặp
+      // còn lượt thì thử lại; hết lượt thì trả thất bại như mọi kiểu trượt
+      // khác. Để nó ném xuyên qua sẽ làm một lô 153 ZIP chết ở ZIP thứ nhất.
+      if (!(err instanceof EmptyGenerationError)) throw err;
+      emptyNote = err.message;
+      failure = "empty";
+      continue;
+    }
+    totalCost += result.costUsd;
+
+    const validation = validateGeneratedText(result.text, factSet);
+    lastValidation = validation;
+    const verdict = judgeDistinctness(result.text, priorTexts);
+    lastVerdict = verdict;
+
+    const passed = validation.passed && verdict.ok;
+    failure = !validation.passed ? "facts" : !verdict.ok ? "not-distinct" : null;
+
+    // Lưu MỌI lần thử, đạt hay không — kể cả lần trượt vì trùng văn. Một
+    // bản bị loại vì trùng là bằng chứng về prompt; bỏ nó đi là giấu một
+    // vấn đề hệ thống sau một lần thử may mắn.
+    //
+    // validationPassed để FALSE khi trượt vì trùng, dù nó đúng sự thật: cột
+    // đó quyết định cái gì được phục vụ, và phục vụ một bản trùng là đúng
+    // thứ hàm này sinh ra để chặn.
+    await prisma.aiGeneration.create({
+      data: {
+        vertical,
+        zip,
+        factsFingerprint: factSet.fingerprint,
+        prompt,
+        text: result.text,
+        model: result.model,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        costUsd: result.costUsd,
+        validationPassed: passed,
+        validationNotes: passed
+          ? null
+          : !validation.passed
+            ? validation.issues.map((i) => `[${i.rule}] ${i.detail}`).join(" | ")
+            : `[not-distinct] trùng ${verdict.worstWords} từ liên tiếp (trần ${MAX_SHARED_RUN_WORDS}) với bản cũ: "${verdict.worstPhrase}"`,
+      },
+    });
+
+    if (passed) {
+      return {
+        text: result.text,
+        cached: false,
+        validation,
+        factsFingerprint: factSet.fingerprint,
+        facts: factSet.facts,
+        attempts: attempt,
+        costUsd: totalCost,
+        sharedRunWords: verdict.worstWords,
+        sharedPhrase: verdict.worstPhrase,
+        comparedWith: verdict.comparedWith,
+        failure: null,
+      };
+    }
+  }
+
+  // Trả về thất bại kèm LÝ DO, không trả văn bản. Phục vụ một đoạn trùng
+  // với thứ Google đã index là đúng điều cần tránh, và "gần đạt" không phải
+  // một trạng thái dùng được.
+  return {
+    text: "",
+    cached: false,
+    validation: lastValidation,
+    factsFingerprint: factSet.fingerprint,
+    facts: factSet.facts,
+    attempts: MAX_REGEN_ATTEMPTS,
+    costUsd: totalCost,
+    sharedRunWords: lastVerdict.worstWords,
+    sharedPhrase: lastVerdict.worstPhrase,
+    comparedWith: lastVerdict.comparedWith,
+    failure,
+    emptyNote,
+  };
+}
+
+/**
  * ⚠️ DỰNG LẠI SITE CÙNG NGÀNH: "sinh lại" KHÔNG đủ để có văn khác.
  *
  * Khoá cache là (vertical, zip, factsFingerprint) — không có websiteId, nên
@@ -312,12 +471,21 @@ export async function getOrGenerateInterpretation(vertical: string, zip: string)
   let totalCost = 0;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const result = await generateWithClaude({
-      system: systemPromptFor(vertical, factSet.searchIntent),
-      prompt,
-      vertical,
-      zip,
-    });
+    let result;
+    try {
+      result = await generateWithClaude({
+        system: systemPromptFor(vertical, factSet.searchIntent),
+        prompt,
+        vertical,
+        zip,
+      });
+    } catch (err) {
+      // Cùng lỗ với đường sinh lại, và nó có ở đây TRƯỚC: 277 đoạn đã đi qua
+      // hàm này. Chỉ chưa gặp vì trần output cũ hiếm khi bị thinking ăn hết.
+      if (!(err instanceof EmptyGenerationError)) throw err;
+      lastValidation = { passed: false, issues: [] };
+      continue;
+    }
     totalCost += result.costUsd;
     const validation = validateGeneratedText(result.text, factSet);
     lastValidation = validation;

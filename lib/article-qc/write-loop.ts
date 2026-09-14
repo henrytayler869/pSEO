@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { generateWithClaude } from "@/lib/ai/anthropic";
+import { generateWithClaude, EmptyGenerationError } from "@/lib/ai/anthropic";
 import { runQc, rewriteInstructions, type ArticleDraft, type QcContext, type QcReport } from "./checklist";
 import { loadActiveRules } from "./rules";
 import { buildContentRules } from "@/lib/content-rules/registry";
@@ -192,14 +192,27 @@ export async function writeArticle(params: {
   let costUsd = 0;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    const result = await generateWithClaude({
-      system: SYSTEM,
-      prompt: buildPrompt(params.candidate, params.ctx, previous),
-      vertical: params.candidate.vertical,
-      zip: null,
-      websiteId: params.websiteId,
-      articleId: params.articleId,
-    });
+    let result;
+    try {
+      result = await generateWithClaude({
+        system: SYSTEM,
+        prompt: buildPrompt(params.candidate, params.ctx, previous),
+        vertical: params.candidate.vertical,
+        zip: null,
+        websiteId: params.websiteId,
+        articleId: params.articleId,
+      });
+    } catch (err) {
+      // Model không trả chữ nào. Đoạn rỗng đi qua MỌI luật trong checklist —
+      // không câu nào vi phạm vì không có câu nào — nên nó phải bị chặn ở
+      // đây, trước khi renderArticle ghép nó vào template.
+      if (!(err instanceof EmptyGenerationError)) throw err;
+      previous = {
+        paragraph: "",
+        report: { passed: false, checks: [{ id: "empty-text", label: "Model trả về đoạn văn", passed: false, detail: err.message }] },
+      };
+      continue;
+    }
     // Added before anything can throw: the call was billed whether or not the
     // text is usable, and a cost figure that only counts usable responses
     // under-reports exactly when the model is misbehaving.
