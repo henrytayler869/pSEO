@@ -179,8 +179,12 @@ jobs:
       # Ca thật 14/9: model tiêu hết trần output vào thinking, trả về chuỗi
       # rỗng, và MỌI cổng phía sau đạt trên chuỗi rỗng. Đoạn rỗng đã được
       # lưu là ĐẠT rồi phục vụ trên site.
-      - name: Lần sinh rỗng phải bị chặn
-        run: npx tsx scripts/test-empty-generation.ts
+      - name: Lần sinh rỗng hoặc cụt phải bị chặn
+        run: npx tsx scripts/test-incomplete-generation.ts
+
+      # scripts/audit-empty-text.ts KHÔNG chạy ở đây: nó soi kho văn thật và
+      # DB của CI thì rỗng, nên nó sẽ luôn xanh mà chẳng kiểm gì. Chạy tay
+      # sau mỗi đợt sinh: npm run audit:empty
 
       # Schema phải có trước khi script chạm Prisma. Không dữ liệu nào được
       # nạp: xem chú thích ở khối `services` về việc DB rỗng kiểm được gì và

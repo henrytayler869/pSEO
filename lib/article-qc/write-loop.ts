@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { generateWithClaude, EmptyGenerationError } from "@/lib/ai/anthropic";
+import { generateWithClaude, IncompleteGenerationError } from "@/lib/ai/anthropic";
 import { runQc, rewriteInstructions, type ArticleDraft, type QcContext, type QcReport } from "./checklist";
 import { loadActiveRules } from "./rules";
 import { buildContentRules } from "@/lib/content-rules/registry";
@@ -206,7 +206,7 @@ export async function writeArticle(params: {
       // Model không trả chữ nào. Đoạn rỗng đi qua MỌI luật trong checklist —
       // không câu nào vi phạm vì không có câu nào — nên nó phải bị chặn ở
       // đây, trước khi renderArticle ghép nó vào template.
-      if (!(err instanceof EmptyGenerationError)) throw err;
+      if (!(err instanceof IncompleteGenerationError)) throw err;
       previous = {
         paragraph: "",
         report: { passed: false, checks: [{ id: "empty-text", label: "Model trả về đoạn văn", passed: false, detail: err.message }] },
