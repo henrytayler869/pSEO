@@ -2,10 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Sparkles } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PageHeader } from "@/components/page-header";
 import { getTrafficRankedMarkets } from "@/lib/queries/traffic-research";
-import { formatVertical, formatNumber } from "@/lib/format";
+import { formatVertical } from "@/lib/format";
+import { NicheMarketTable } from "@/components/niche-market-table";
 
 export default async function TrafficVerticalPage({ params }: { params: Promise<{ vertical: string }> }) {
   const { vertical } = await params;
@@ -27,33 +27,10 @@ export default async function TrafficVerticalPage({ params }: { params: Promise<
       <Card>
         <CardHeader>
           <CardTitle>Bảng xếp hạng</CardTitle>
-          <CardDescription>Thị trường chưa có số liệu từ khóa sẽ hiện &ldquo;—&rdquo; và xếp cuối bảng.</CardDescription>
+          <CardDescription>Bấm vào một thị trường để xem từng từ khoá của nó. Thị trường chưa có số liệu từ khóa sẽ hiện &ldquo;—&rdquo; và xếp cuối bảng.</CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Thị trường</TableHead>
-                <TableHead>Lượng tìm kiếm</TableHead>
-                <TableHead>Độ khó (KD)</TableHead>
-                <TableHead>CPC</TableHead>
-                <TableHead>Điểm traffic</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((r) => (
-                <TableRow key={r.marketIdentityId}>
-                  <TableCell>
-                    {r.city ? `${r.city}, ${r.state}` : r.state} <span className="text-muted-foreground">{r.zip}</span>
-                  </TableCell>
-                  <TableCell>{r.searchVolume !== null ? formatNumber(r.searchVolume) : "—"}</TableCell>
-                  <TableCell>{r.keywordDifficulty !== null ? r.keywordDifficulty.toFixed(0) : "—"}</TableCell>
-                  <TableCell>{r.cpc !== null ? `$${r.cpc.toFixed(2)}` : "—"}</TableCell>
-                  <TableCell className="font-medium">{r.score !== null ? r.score.toFixed(1) : "—"}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <NicheMarketTable rows={rows} />
         </CardContent>
       </Card>
     </div>

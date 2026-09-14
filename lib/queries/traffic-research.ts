@@ -105,6 +105,38 @@ export interface TrafficRankedRow {
   cpc: number | null;
   score: number | null;
   scoreVersion: number | null;
+  /**
+   * Từng từ khoá của thị trường này, đã khử trùng lặp bằng latestPerKeyword.
+   *
+   * DÙNG CHUNG tập đã khử với các cột tổng hợp phía trên, không truy vấn
+   * lại: KeywordMetric không bao giờ ghi đè — mỗi lần đo thêm một dòng mới —
+   * nên một danh sách thô sẽ hiện "moving services dallas" ba lần và cộng
+   * lại KHÔNG bằng con số ở cột Lượng tìm kiếm. Bảng con lệch bảng mẹ là
+   * cách nhanh nhất khiến người ta ngừng tin cả hai.
+   */
+  keywords: KeywordRow[];
+  /**
+   * Từ khoá cấp HẠT phủ thị trường này (guide §3.6).
+   *
+   * KHÔNG cộng vào các cột tổng hợp phía trên, và đó là chủ ý: cột Lượng tìm
+   * kiếm là cầu của chính ZIP này. Một từ khoá cấp hạt như "movers brooklyn"
+   * (6.600 lượt) phủ hàng chục ZIP cùng lúc — cộng nó vào từng ZIP sẽ đếm
+   * cùng một nhu cầu nhiều lần và làm mọi xếp hạng sai.
+   *
+   * Hiện ra vì nó CÓ thật và đang vô hình: 5 từ khoá cấp hạt của
+   * moving-services không xuất hiện ở bất cứ đâu trong giao diện.
+   */
+  countyKeywords: KeywordRow[];
+}
+
+export interface KeywordRow {
+  keyword: string;
+  searchVolume: number;
+  keywordDifficulty: number;
+  cpc: number;
+  /** Null = lần đo đó chưa lấy trường này, KHÔNG phải "không có ý định". */
+  mainIntent: string | null;
+  fetchedAt: Date;
 }
 
 export async function getTrafficRankedMarkets(vertical: string): Promise<TrafficRankedRow[]> {
@@ -124,6 +156,17 @@ export async function getTrafficRankedMarkets(vertical: string): Promise<Traffic
     select: { zip: true, county: true, countyFips: true, lat: true, lon: true, metro: true, cbsaCode: true },
   });
   const locationByZip = new Map(locations.map((l) => [l.zip, l]));
+
+  // Lớp từ khoá cấp hạt, tra theo FIPS. Một truy vấn cho cả niche chứ không
+  // theo từng thị trường: số dòng nhỏ và nhiều ZIP dùng chung một hạt.
+  const countyKw = await prisma.countyKeywordMetric.findMany({ where: { vertical } });
+  const countyByFips = new Map<string, KeywordRow[]>();
+  for (const k of latestPerKeyword(countyKw)) {
+    countyByFips.set(k.countyFips, [
+      ...(countyByFips.get(k.countyFips) ?? []),
+      { keyword: k.keyword, searchVolume: k.searchVolume, keywordDifficulty: k.keywordDifficulty, cpc: k.cpc, mainIntent: null, fetchedAt: k.fetchedAt },
+    ]);
+  }
 
   const rows: TrafficRankedRow[] = identities.map((identity) => {
     const metrics = latestPerKeyword(identity.keywordMetrics);
@@ -151,6 +194,17 @@ export async function getTrafficRankedMarkets(vertical: string): Promise<Traffic
       cpc: avgCpc,
       score: latestScore?.score ?? null,
       scoreVersion: latestScore?.version ?? null,
+      keywords: [...metrics]
+        .sort((a, b) => b.searchVolume - a.searchVolume)
+        .map((k) => ({
+          keyword: k.keyword,
+          searchVolume: k.searchVolume,
+          keywordDifficulty: k.keywordDifficulty,
+          cpc: k.cpc,
+          mainIntent: k.mainIntent,
+          fetchedAt: k.fetchedAt,
+        })),
+      countyKeywords: location?.countyFips ? (countyByFips.get(location.countyFips) ?? []) : [],
     };
   });
 
