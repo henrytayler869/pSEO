@@ -39,7 +39,12 @@ function factsBlock(set: ClusterFactSet): string {
 }
 
 function buildPrompt(set: ClusterFactSet, previous: { text: string; issues: string[] } | null): string {
-  const base = `AREA: ${set.label} — one page covering ${set.memberZips.length} ZIP codes${set.county ? ` in ${set.county}` : ""}.
+  // Nêu BANG trong dòng AREA. Nhãn là một đường dẫn ("/moving-services/ca"),
+  // và một mình nó không nói cho model biết đây là nơi nào — nó phải đoán từ
+  // ZIP. Đoán sai tên nơi chốn là lỗi validator không bắt được, vì tên không
+  // phải một con số.
+  const where = [set.county, set.state].filter(Boolean).join(", ");
+  const base = `AREA: ${set.label} — one page covering ${set.memberZips.length} ZIP codes${where ? ` in ${where}` : ""}.
 READER INTENT: ${set.searchIntent ?? "not measured"}
 
 FACTS — the only numbers you may use. Most are the LOW and HIGH end of a range across those ZIP codes:
