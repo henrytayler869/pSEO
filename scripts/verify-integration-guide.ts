@@ -18,6 +18,13 @@ import { clusterIdOf } from "../lib/ai/cluster-facts";
 import { prisma } from "../lib/db/prisma";
 import { resolveSite } from "../lib/scripts/resolve-site";
 
+/** Số truy vấn cache aiGeneration trong lib/ai/generate.ts.
+ *
+ * Cố định để một truy vấn MỚI xuất hiện cũng làm check đỏ: nó có thể là
+ * đường đọc cache thứ ba, và một đường không ai soi là đường duy nhất cần
+ * soi. */
+const EXPECTED_CACHE_QUERIES = 2;
+
 const GUIDE = "docs/SITE_INTEGRATION_GUIDE.md";
 
 interface Check {
@@ -124,6 +131,31 @@ const checks: Check[] = [
       return Number(m[1]) === passed
         ? null
         : `guide ghi ${m[1]} đoạn cụm, thực tế ${passed}`;
+    },
+  },
+  {
+    name: "guide cảnh báo đoạn theo ZIP cache theo NGÀNH, không theo site",
+    run: async () => {
+      const doc = readFileSync(GUIDE, "utf-8");
+      if (!/cache theo NGÀNH, không theo site/i.test(doc)) return "guide chưa cảnh báo";
+      // Kiểm CODE chứ không chỉ kiểm chữ. Ngày nào đó ai đó thêm websiteId
+      // vào khoá cache thì cảnh báo này thành sai — và một cảnh báo sai
+      // hướng người ta tránh một vấn đề không còn tồn tại, hoặc tệ hơn,
+      // làm họ nghi ngờ những cảnh báo còn đúng.
+      //
+      // Đòi MỌI truy vấn cache, không phải "có một cái sạch". Bản đầu của
+      // check này chỉ tìm một truy vấn khớp mẫu, nên khi đột biến thêm
+      // websiteId vào truy vấn THỨ NHẤT, regex không khớp nó nữa và check
+      // vẫn xanh nhờ truy vấn thứ hai. Một check bỏ qua đúng thứ nó canh.
+      const src = readFileSync("lib/ai/generate.ts", "utf-8");
+      const queries = src.match(/prisma\.aiGeneration\.findFirst\(\{[\s\S]*?\n  \}\)/g) ?? [];
+      if (queries.length !== EXPECTED_CACHE_QUERIES) {
+        return `đếm được ${queries.length} truy vấn cache aiGeneration, trước đây là ${EXPECTED_CACHE_QUERIES} — đọc lại lib/ai/generate.ts rồi cập nhật check`;
+      }
+      const tainted = queries.filter((q) => q.includes("websiteId"));
+      return tainted.length > 0
+        ? `${tainted.length}/${queries.length} truy vấn cache đã có websiteId — cảnh báo trong guide không còn đúng`
+        : null;
     },
   },
 ];
