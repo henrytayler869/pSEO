@@ -5,7 +5,7 @@ import { updateAiBudgetAction, type ActionResult } from "@/app/publisher/actions
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { AlertTriangle, Wallet } from "lucide-react";
-import { formatBudgetPercent, type BudgetStatus } from "@/lib/ai/budget";
+import { formatBudgetPercent, type BudgetStatus } from "@/lib/ai/budget-core";
 
 const initialState: ActionResult = { ok: false, message: "" };
 const usd = (n: number) => `$${n.toFixed(4)}`;
