@@ -1343,6 +1343,55 @@ Từ chối cả lô khi có phần tử sai định dạng, đừng lọc bỏ 
 tiếp: một lô 36 zip mà 3 cái gõ sai thì 33 cái kia được revalidate và **không
 ai biết 3 cái bị bỏ**.
 
+## 3.11 ⚠️ Ba cái bẫy của Cloudflare, đo trên site đầu tiên
+
+Cả ba đều không gây lỗi lúc build và chỉ hiện ra trong báo cáo thu thập.
+
+### `/cdn-cgi/l/email-protection` — trang 4xx bạn không viết
+
+Bật Email Address Obfuscation (mặc định BẬT trên Cloudflare), mọi
+`<a href="mailto:...">` bị viết lại thành
+`/cdn-cgi/l/email-protection#<mã>`. Truy cập thẳng URL đó trả **404**: địa
+chỉ thật nằm sau dấu `#`, chỉ JavaScript đọc được.
+
+Đo 14/9/2026 trên `atmovingservices.com`, 194 trang: đây là trang 4xx **duy
+nhất**, VÀ cũng chính là **"1 trang thiếu thẻ canonical"** — cùng một URL,
+hai dòng trong bảng lỗi, vì trang 404 không render layout nên không có
+canonical để đếm.
+
+Cách chữa — chặn ở `robots.txt`, đừng tắt Email Obfuscation:
+
+```ts
+// app/robots.ts
+disallow: ["/api/", "/cdn-cgi/"],
+```
+
+Tắt tính năng kia là phơi địa chỉ email cho trình quét. Googlebot vốn đã bỏ
+qua `/cdn-cgi/`; trình thu thập bên thứ ba (DataForSEO, Screaming Frog) thì
+không.
+
+### robots.txt thật KHÔNG phải thứ `app/robots.ts` sinh ra
+
+Cloudflare chèn một khối "Managed content" **phía trên** khối của site, kèm
+`Content-Signal` và một danh sách `Disallow: /` cho các bot AI. Kết quả là
+file có **hai** nhóm `User-agent: *`.
+
+Chuẩn REP nói các nhóm khớp cùng một user-agent được gộp lại, nên luật của
+bạn vẫn có hiệu lực. Nhưng hệ quả thực tế: **đừng kiểm robots bằng cách đọc
+code**. Đọc `curl https://<domain>/robots.txt` — thứ crawler thật sự nhận.
+Một thiết lập ở Cloudflare có thể thêm luật mà repo không biết gì.
+
+### Cache biên giữ HTML tới 24 giờ
+
+`s-maxage=86400`. Sau khi gọi `/api/revalidate` và nhận `200`, trang vẫn có
+thể trả nội dung cũ trong vài phút cho tới khi purge lan hết.
+
+"revalidate trả 200" KHÔNG đồng nghĩa "người đọc thấy bản mới". Kiểm bằng
+một tham số truy vấn để né cache biên (`?cb=123`) — nếu URL có tham số đúng
+mà URL trần sai thì đó là cache, không phải lỗi site.
+
+---
+
 ## 4. Nguồn dữ liệu chính phủ hiện có
 
 Mỗi nguồn được gắn nhãn niche (`relevantVerticals`) để biết dùng cho việc gì.
