@@ -65,6 +65,13 @@ async function get(url: string, redirect: RequestRedirect = "manual") {
 const attr = (html: string, re: RegExp): string | null => (html.match(re) ?? [])[1] ?? null;
 const all = (html: string, re: RegExp): string[] => [...html.matchAll(re)].map((m) => m[1]);
 
+/** Toàn bộ chuỗi khớp, không phải nhóm bắt số 1.
+ *
+ * Tách riêng khỏi `all()` vì trộn hai ngữ nghĩa vào một tên đã gây một lỗi:
+ * một regex không có nhóm bắt truyền vào `all()` trả về một mảng toàn
+ * `undefined`, và lỗi chỉ nổ ở chỗ dùng chứ không nổ ở chỗ gọi. */
+const allMatches = (html: string, re: RegExp): string[] => [...html.matchAll(re)].map((m) => m[0]);
+
 /** Bỏ script/style trước khi lấy text: giá trị thô trong JSON-LD nằm trong
  * <script>, nên nếu không bỏ thì phép so "số này có hiển thị không" luôn đúng
  * và không kiểm được gì. */
@@ -522,6 +529,94 @@ async function main() {
    * một-trang. Cái nó KHÔNG làm được: phân biệt "thừa kế" với "cố ý đặt giống".
    * Nên đây là cảnh báo, không phải lỗi.
    */
+  /**
+   * Tài nguyên CHẶN HIỂN THỊ — nêu tên, không chỉ đếm.
+   *
+   * DataForSEO báo `has_render_blocking_resources` cho 193/194 trang mà không
+   * nói cái gì chặn. Một con số như thế đọc ra là "cả site chậm", và người
+   * đọc sẽ đi tối ưu thứ không cần tối ưu.
+   *
+   * Đo 14/9/2026 trên atmovingservices: đúng MỘT tài nguyên, và nó là
+   * <script noModule> — polyfill Next.js sinh tự động cho trình duyệt không
+   * hiểu ES module. Trình duyệt hiện đại KHÔNG tải nó về. Trang nén 11 KB,
+   * TTFB 155 ms.
+   *
+   * Nên phép kiểm này phân biệt hai thứ mà con số kia gộp làm một:
+   *   - noModule polyfill → ghi nhận, không phải việc phải làm
+   *   - bất cứ script/stylesheet chặn nào KHÁC → cảnh báo thật
+   *
+   * Giữ nhánh cảnh báo dù hôm nay không ai chạm tới: ngày nào đó có người
+   * thêm một thẻ <script src> đồng bộ hoặc một stylesheet bên thứ ba, và lúc
+   * đó con số của DataForSEO vẫn là "193" y như bây giờ — không phân biệt
+   * được. Đây là chỗ phân biệt được.
+   */
+  for (const p of pages) {
+    const head = p.html.slice(p.html.indexOf("<head"), p.html.indexOf("</head>"));
+    const blocking: string[] = [];
+    let polyfills = 0;
+    for (const tag of allMatches(head, /<script[^>]*\ssrc=[^>]*>/gi)) {
+      if (/\s(async|defer)[\s=>]/i.test(tag)) continue;
+      if (/\snomodule[\s=>]/i.test(tag)) { polyfills++; continue; }
+      blocking.push(tag.slice(0, 120));
+    }
+    for (const tag of allMatches(head, /<link[^>]+rel="stylesheet"[^>]*>/gi)) {
+      // Stylesheet ngoài origin chặn hiển thị và không nằm trong tầm kiểm
+      // soát của deploy. Stylesheet cùng origin do Next phát ra thì không
+      // tính — gỡ nó đi là gỡ CSS của trang.
+      const href = attr(tag, /href="([^"]+)"/i) ?? "";
+      if (href.startsWith("http") && !href.startsWith(origin)) blocking.push(tag.slice(0, 120));
+    }
+    if (blocking.length > 0) {
+      add({
+        id: "render-blocking-resource",
+        severity: "warning",
+        where: p.url,
+        detail: `${blocking.length} tài nguyên chặn hiển thị KHÔNG phải polyfill: ${blocking.join(" | ")}`,
+        why: "Script đồng bộ hoặc CSS bên thứ ba trong <head> chặn parser. Khác với polyfill noModule, thứ này trình duyệt hiện đại CÓ tải.",
+      });
+    } else if (polyfills > 0 && p.url === pages[0].url) {
+      add({
+        id: "render-blocking-polyfill-only",
+        severity: "info",
+        where: origin,
+        detail: `Chỉ có ${polyfills} thẻ <script noModule> (polyfill Next.js). Trình duyệt hiện đại không tải nó.`,
+        why: "DataForSEO đếm nó là tài nguyên chặn hiển thị, nên báo cáo OnPage sẽ hiện gần như mọi trang. Đây là ghi nhận để không ai điều tra lại, không phải việc phải làm.",
+      });
+    }
+  }
+
+  /**
+   * Tỷ lệ nội dung — tách phần RSC payload ra trước khi kết luận.
+   *
+   * DataForSEO tính chữ / HTML THÔ. Với App Router, 61% HTML là payload
+   * `self.__next_f.push(...)` — chính những câu văn đó được serialize lần
+   * thứ hai để hydrate. Đo trên /moving-services/ny/brooklyn: 88 KB HTML,
+   * 54 KB payload, 1.182 từ thật, tỷ lệ thô 4,4% nhưng tỷ lệ trên markup
+   * thật ~18%.
+   *
+   * Nên "low content rate" ở đây KHÔNG có nghĩa trang mỏng. Kiểm lại bằng
+   * SỐ TỪ, thứ đo đúng cái người ta lo: trang có đủ chữ để đọc không.
+   */
+  for (const p of pages) {
+    const rsc = allMatches(p.html, /self\.__next_f\.push\([\s\S]*?\)<\/script>/g).reduce((t, m) => t + m.length, 0);
+    const text = p.html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const words = text.split(" ").filter(Boolean).length;
+    if (words < 300) {
+      add({
+        id: "thin-content",
+        severity: "warning",
+        where: p.url,
+        detail: `${words} từ hiển thị (HTML ${Math.round(p.html.length / 1024)} KB, trong đó ${Math.round(rsc / 1024)} KB là RSC payload)`,
+        why: "Đếm TỪ chứ không đếm tỷ lệ chữ/HTML: tỷ lệ thô bị RSC payload làm loãng và luôn thấp với App Router, nên nó không phân biệt được trang mỏng với trang dày.",
+      });
+    }
+  }
+
   const homeTitle = attr(homeHtml, /<title[^>]*>([\s\S]*?)<\/title>/i)?.trim();
   if (homeTitle) {
     for (const p of pages) {
