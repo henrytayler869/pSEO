@@ -75,35 +75,44 @@ export function AiBudgetCard({ websiteId, status }: { websiteId: string; status:
             site. Gộp vào một số duy nhất sẽ làm người đọc tưởng site mình
             tiêu ngần ấy, trong khi hai publisher cùng niche nhìn thấy đúng
             cùng một con số. */}
+        {/* Hai dòng, tên gọi theo THỨ NGƯỜI TA NHÌN THẤY trên site, không
+            theo cách sổ sách phân loại. Nhãn cũ là "gắn đích danh site này"
+            và "cache dùng chung của niche" — đúng về kế toán và vô nghĩa với
+            người đọc, vì không nhãn nào trỏ tới một trang có thật. */}
         <dl className="grid gap-1 text-sm">
           <div className="flex justify-between gap-4">
-            <dt className="text-muted-foreground">Gắn đích danh site này</dt>
+            <dt className="text-muted-foreground">
+              Đoạn cho <span className="text-foreground">trang cụm</span> — chỉ site này dùng được
+            </dt>
             {/* Không in "$0,0000" khi chưa có dòng nào: con số đó đọc ra là
-                "site này chưa tiêu gì", trong khi sự thật là sổ chi chưa
-                từng ghi site. Hai chuyện khác hẳn nhau và ô tiền không nói
-                được sự khác biệt đó. */}
+                "site này chưa tiêu gì", khác hẳn "sổ chi chưa từng ghi
+                site". Ô tiền không nói được sự khác biệt đó. */}
             <dd className="tabular-nums">
               {status.ownRows === 0 ? <span className="text-muted-foreground">chưa có khoản nào</span> : usd(status.ownUsd)}
             </dd>
           </div>
           <div className="flex justify-between gap-4">
             <dt className="text-muted-foreground">
-              Cache dùng chung của niche
-              {status.ownRows === 0 && (
-          <p className="text-xs text-muted-foreground">
-            Chưa khoản chi nào gắn đích danh site này. Đoạn diễn giải theo ZIP được cache theo niche và phục vụ mọi
-            publisher trong niche, nên nó không thuộc site nào — chỉ đoạn cấp cụm mới có chủ, và 31 đoạn hiện có đã sinh
-            xong trước khi sổ chi bắt đầu ghi site. Hàng này sẽ có số từ lần sinh đoạn cụm kế tiếp.
-          </p>
-        )}
-
-        {status.sharedWithSites > 1 && (
-                <span className="ml-1 text-amber-700 dark:text-amber-500">· {status.sharedWithSites} publisher cùng dùng</span>
+              Đoạn cho <span className="text-foreground">từng ZIP</span> — mọi site cùng ngành dùng lại
+              {status.sharedWithSites > 1 && (
+                <span className="ml-1 text-amber-700 dark:text-amber-500">· {status.sharedWithSites} site đang dùng</span>
               )}
             </dt>
             <dd className="tabular-nums">{usd(status.sharedUsd)}</dd>
           </div>
         </dl>
+
+        <p className="text-xs text-muted-foreground">
+          {status.ownRows === 0 ? (
+            <>
+              Chưa có đoạn trang cụm nào tính cho site này — 31 đoạn hiện có đã sinh xong trước khi sổ chi bắt đầu ghi
+              site. Hàng trên sẽ có số từ lần sinh đoạn cụm kế tiếp.{" "}
+            </>
+          ) : null}
+          Đoạn cho từng ZIP viết một lần rồi cache theo ngành, nên một site thứ hai cùng ngành không phải trả lại khoản
+          đó — nó chỉ tốn thêm phần đoạn trang cụm của riêng nó. Tách hai dòng là để thấy được điều đó; gộp một số thì
+          không.
+        </p>
 
         {status.sharedWithSites > 1 && (
           <p className="text-xs text-muted-foreground">
