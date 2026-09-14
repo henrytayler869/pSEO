@@ -158,6 +158,21 @@ const checks: Check[] = [
         : null;
     },
   },
+  {
+    name: "guide cảnh báo /cdn-cgi/, và site thật đang chặn nó",
+    run: async () => {
+      const doc = readFileSync(GUIDE, "utf-8");
+      if (!doc.includes("/cdn-cgi/l/email-protection")) return "guide chưa cảnh báo";
+      // Kiểm robots.txt THẬT, không kiểm code: Cloudflare chèn khối riêng
+      // phía trên khối của site, nên file crawler nhận được khác thứ
+      // app/robots.ts sinh ra. Đây cũng chính là điều mục 3.11 dặn.
+      const site = await resolveSite();
+      const res = await fetch(`${site.url}/robots.txt`, { signal: AbortSignal.timeout(10000) });
+      if (!res.ok) return `robots.txt trả HTTP ${res.status}`;
+      const body = await res.text();
+      return /Disallow:\s*\/cdn-cgi\//i.test(body) ? null : "robots.txt thật KHÔNG chặn /cdn-cgi/";
+    },
+  },
 ];
 
 async function main() {
