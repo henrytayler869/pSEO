@@ -28,7 +28,8 @@
     "regen:measure": "tsx scripts/measure-regen-distinctness.ts",
     "test:empty": "tsx scripts/test-incomplete-generation.ts",
     "audit:empty": "tsx scripts/audit-empty-text.ts",
-    "index:status": "tsx scripts/index-status.ts"
+    "index:status": "tsx scripts/index-status.ts",
+    "test:onpage": "tsx scripts/test-onpage-summary.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",

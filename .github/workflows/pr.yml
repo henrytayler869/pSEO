@@ -182,6 +182,13 @@ jobs:
       - name: Lần sinh rỗng hoặc cụt phải bị chặn
         run: npx tsx scripts/test-incomplete-generation.ts
 
+      # Không mạng: nạp hình dạng phản hồi thật của DataForSEO. Canh hai lỗi
+      # đã sống trong code — đọc pages_crawled sai đường (mọi phép trừ tự tắt
+      # trong im lặng), và đọc họ *_check ngược (193 trang ĐẠT hiện thành 193
+      # trang LỖI).
+      - name: Đọc phản hồi OnPage — check dạng ĐẠT không được đọc ngược
+        run: npx tsx scripts/test-onpage-summary.ts
+
       # scripts/audit-empty-text.ts KHÔNG chạy ở đây: nó soi kho văn thật và
       # DB của CI thì rỗng, nên nó sẽ luôn xanh mà chẳng kiểm gì. Chạy tay
       # sau mỗi đợt sinh: npm run audit:empty
