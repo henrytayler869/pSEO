@@ -261,6 +261,28 @@ export async function getCachedInterpretation(vertical: string, zip: string): Pr
   };
 }
 
+/**
+ * ⚠️ DỰNG LẠI SITE CÙNG NGÀNH: "sinh lại" KHÔNG đủ để có văn khác.
+ *
+ * Khoá cache là (vertical, zip, factsFingerprint) — không có websiteId, nên
+ * một site dựng lại trong cùng ngành nhận lại đúng đoạn văn cũ, thứ có thể
+ * vẫn đang nằm trong chỉ mục Google của site đã bỏ.
+ *
+ * Phản xạ tự nhiên là thêm một đường ép sinh lại. ĐO 14/9/2026 cho thấy nó
+ * không giải quyết được vấn đề: sinh lại ZIP 95020 với CÙNG fact set, CÙNG
+ * prompt, temperature mặc định 1.0 — bản mới chia sẻ một mạch 47 TỪ LIÊN
+ * TIẾP với bản cũ trên tổng 180 từ, khoảng 26% nguyên văn. Cùng dữ kiện và
+ * cùng chỉ dẫn thì model viết lại gần như cùng câu; nhiệt độ không cứu được.
+ *
+ * Muốn thật sự khác thì cần cả ba, thiếu một là tự lừa mình:
+ *   1. đường ép bỏ qua cache (chưa có),
+ *   2. đưa văn bản CŨ vào prompt kèm lệnh không dùng lại cách diễn đạt,
+ *   3. một phép ĐO độ trùng chặn kết quả — longestSharedPhrase() trong
+ *      lib/article-qc/checklist.ts đã làm đúng việc này cho no-template-echo.
+ *
+ * Riêng (3) là phần không được bỏ: không có nó thì "đã sinh lại" là một
+ * khẳng định không ai kiểm, và 47 từ trùng sẽ đi thẳng lên site mới.
+ */
 export async function getOrGenerateInterpretation(vertical: string, zip: string): Promise<GenerateOutcome | null> {
   const factSet = await buildFactSet(vertical, zip);
   if (!factSet) return null;
