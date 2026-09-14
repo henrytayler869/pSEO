@@ -130,6 +130,11 @@ const UNIT_WORDS: Record<string, string> = {
   // Empty on purpose: the number IS a year, and "1980 year" is worse than
   // "1980" in every context.
   year: "",
+  // Empty on purpose: nhãn của fact đã nói đang đếm CÁI GÌ ("Số ZIP … thấp
+  // hơn ZIP 43215"), nên thêm một từ đơn vị ở đây là lặp. Khai báo tường
+  // minh thay vì để rơi vào nhánh cảnh báo: một cảnh báo nổ trong lúc chạy
+  // bình thường dạy người đọc bỏ qua cảnh báo.
+  count: "",
   // Empty on purpose: every label using this already says "in the last 10
   // years", and repeating it reads as a second, different figure.
   "count/10yr": "",
