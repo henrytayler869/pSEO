@@ -109,9 +109,10 @@ export function AiBudgetCard({ websiteId, status }: { websiteId: string; status:
               site. Hàng trên sẽ có số từ lần sinh đoạn cụm kế tiếp.{" "}
             </>
           ) : null}
-          Đoạn cho từng ZIP viết một lần rồi cache theo ngành, nên một site thứ hai cùng ngành không phải trả lại khoản
-          đó — nó chỉ tốn thêm phần đoạn trang cụm của riêng nó. Tách hai dòng là để thấy được điều đó; gộp một số thì
-          không.
+          Đoạn cho từng ZIP cache theo <span className="font-medium">ngành</span>, không theo site: hai publisher cùng
+          ngành nhận <span className="font-medium">đúng từng chữ một</span> cùng đoạn văn. Nên site thứ hai cùng ngành
+          không tốn thêm khoản này — nhưng cái giá là 127 đoạn trùng khớp tuyệt đối giữa hai tên miền, đúng ở phần được
+          viết ra để khác biệt. Publisher mới nên ở ngành khác.
         </p>
 
         {status.sharedWithSites > 1 && (

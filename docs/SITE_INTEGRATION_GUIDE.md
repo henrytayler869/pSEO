@@ -984,6 +984,35 @@ với thợ lợp, nhưng bên chuyển nhà không bảo hành nhà bạn).
 
 ---
 
+### ⚠️⚠️ Đoạn theo ZIP cache theo NGÀNH, không theo site
+
+Khoá cache là `(vertical, zip, factsFingerprint)`. Không có `websiteId`.
+
+Hệ quả: **hai publisher cùng ngành nhận đúng từng chữ một cùng một đoạn
+văn** cho cùng một ZIP. Không phải "tương tự" — giống hệt.
+
+Điều này an toàn khi mỗi ngành có một publisher, và đó là tình trạng hôm
+nay (`moving-services` có một site). Nó trở thành vấn đề đúng vào lúc bạn
+dựng site thứ hai cho cùng ngành: 127 đoạn diễn giải sẽ trùng khớp tuyệt
+đối giữa hai tên miền. Template khác nhau nên trang không giống hệt —
+nhưng **đúng phần được viết ra để khác biệt thì lại giống**, và đó là phần
+duy nhất Google không thể giải thích bằng "hai site cùng dùng một mẫu".
+
+Cách rẻ nhất để tránh: **publisher mới ở ngành khác.** 13 ngành đã nghiên
+cứu, và ngành mới không tốn gì thêm ở tầng cache.
+
+Nếu bắt buộc phải có hai site cùng ngành, phải sửa ở HQ trước khi dựng —
+thêm `websiteId` vào khoá cache và sinh lại toàn bộ cho site thứ hai
+(~$7,40 cho 127 đoạn, đo trên `moving-services`). Đừng dựng trước rồi
+tính sau: lúc đó hai site đã publish nội dung trùng nhau và Google đã
+crawl.
+
+> Thẻ "Ngân sách AI" trong `/publisher` nói khoản đoạn-theo-ZIP là thứ
+> site thứ hai **không phải trả lại**. Đúng về tiền, và đó chính là cái
+> bẫy: khoản tiết kiệm đó chỉ tồn tại vì hai site dùng chung một đoạn văn.
+
+---
+
 ## 3.7b ⚠️ Ý định tìm kiếm phải ĐO, và đo theo TỪNG thị trường
 
 Lớp diễn giải chạy 227 lần trước khi ai hỏi "nó viết cho ai". Câu trả lời
