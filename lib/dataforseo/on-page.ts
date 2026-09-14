@@ -130,6 +130,10 @@ export interface OnPageSummary {
   pagesInQueue: number;
   onPageScore: number | null;
   issues: OnPageIssue[];
+  /** True khi không đọc được tổng số trang crawl, nên mọi check dạng "số
+   * trang ĐẠT" không suy ra được số trang lỗi. Giao diện phải nói ra —
+   * im lặng ở đây làm bảng trông sạch hơn sự thật. */
+  countsUnavailable?: boolean;
   /** Checks DataForSEO returned that this code has no label for. Reported, not
    * dropped: a check added by DataForSEO after this file was written would
    * otherwise be invisible, and invisible is indistinguishable from clean. */
@@ -168,6 +172,7 @@ const ISSUE_CHECKS: Record<string, { label: string; severity: OnPageIssue["sever
   title_too_short: { label: "Title quá ngắn", severity: "warning" },
   no_image_alt: { label: "Ảnh thiếu thuộc tính alt", severity: "warning" },
   low_content_rate: { label: "Tỷ lệ nội dung trên mã nguồn thấp", severity: "warning" },
+  low_character_count: { label: "Quá ít chữ trên trang", severity: "warning" },
   high_loading_time: { label: "Thời gian tải cao", severity: "warning" },
   large_page_size: { label: "Trang quá nặng", severity: "warning" },
   size_greater_than_3mb: { label: "Trang lớn hơn 3MB", severity: "warning" },
@@ -189,11 +194,6 @@ const ISSUE_CHECKS: Record<string, { label: string; severity: OnPageIssue["sever
   irrelevant_title: { label: "Title không khớp nội dung", severity: "warning" },
   irrelevant_description: { label: "Description không khớp nội dung", severity: "warning" },
   irrelevant_meta_keywords: { label: "Meta keywords không khớp nội dung", severity: "warning" },
-  seo_friendly_url_characters_check: { label: "URL có ký tự không thân thiện SEO", severity: "warning" },
-  seo_friendly_url_dynamic_check: { label: "URL động", severity: "warning" },
-  seo_friendly_url_keywords_check: { label: "URL thiếu từ khoá", severity: "warning" },
-  seo_friendly_url_relative_length_check: { label: "URL quá dài", severity: "warning" },
-  no_doctype: { label: "Thiếu khai báo doctype", severity: "warning" },
   no_encoding_meta_tag: { label: "Thiếu thẻ khai báo encoding", severity: "warning" },
   no_content_encoding: { label: "Không nén nội dung khi truyền", severity: "warning" },
   low_readability_rate: { label: "Độ dễ đọc thấp", severity: "warning" },
@@ -205,20 +205,45 @@ const ISSUE_CHECKS: Record<string, { label: string; severity: OnPageIssue["sever
   flash: { label: "Còn dùng Flash", severity: "error" },
 };
 
+/**
+ * Checks mà con số là SỐ TRANG ĐẠT, không phải số trang lỗi.
+ *
+ * DataForSEO dùng HAI quy ước ngược nhau trong cùng một object `checks`, và
+ * không có gì trong tên trường nói ra điều đó. Đo 14/9/2026, cùng một lần
+ * crawl:
+ *
+ *   /about  — URL dài 6 ký tự, sạch, không tham số truy vấn
+ *     seo_friendly_url_relative_length_check = true
+ *     seo_friendly_url_dynamic_check         = true
+ *   /       — title 64 ký tự
+ *     title_too_long                         = false
+ *
+ * Một URL 6 ký tự không thể vừa "quá dài" vừa "động". Họ CÓ hậu tố `_check`
+ * cho họ đảo ngược, nhưng dựa vào hậu tố là dựa vào quy ước đặt tên của
+ * người khác — nên liệt kê tên đầy đủ ở đây; khoá lạ vẫn rơi vào
+ * `unclassified` và hiện ra.
+ *
+ * Hậu quả của việc đọc sai: giao diện bảo người dùng đi sửa 193 trang vốn
+ * không sao, và giấu mất trang thật sự hỏng. Số càng to càng giống việc
+ * khẩn, nên sai theo chiều này tốn thời gian người đọc hơn là bỏ sót.
+ */
+const PASS_CHECKS: Record<string, { label: string; severity: OnPageIssue["severity"] }> = {
+  seo_friendly_url_characters_check: { label: "URL có ký tự không thân thiện SEO", severity: "warning" },
+  seo_friendly_url_dynamic_check: { label: "URL động (có tham số truy vấn)", severity: "warning" },
+  seo_friendly_url_keywords_check: { label: "URL thiếu từ khoá", severity: "warning" },
+  seo_friendly_url_relative_length_check: { label: "URL quá dài", severity: "warning" },
+  seo_friendly_url: { label: "URL không thân thiện SEO (tổng hợp)", severity: "warning" },
+  canonical: { label: "Trang thiếu thẻ canonical", severity: "warning" },
+  has_html_doctype: { label: "Thiếu khai báo doctype", severity: "warning" },
+  is_https: { label: "Trang không phục vụ qua HTTPS", severity: "error" },
+};
+
 /** Checks that are neutral counts, not problems. Named so they are excluded on
  * purpose rather than by accident, and so they do not land in `unclassified`. */
 const NEUTRAL_CHECKS = new Set([
-  "is_https",
   "is_www",
   "links_external",
   "links_internal",
-  "seo_friendly_url",
-  "has_html_doctype",
-  // `canonical` đếm số trang CÓ canonical — một phép đếm KHÔNG MẪU SỐ. Để
-  // trần ở đây thì trang thiếu canonical chỉ làm con số nhỏ đi và không gì so
-  // hai số, nên lỗi thật vô hình. Vẫn giữ trong danh sách trung tính vì bản
-  // thân nó không phải vấn đề — cái thiếu là phép TRỪ, làm ở dưới.
-  "canonical",
   "has_meta_refresh_redirect",
   "https_to_http_links",
   "sitemap",
@@ -236,14 +261,59 @@ export async function fetchOnPageSummary(
     throw new DataForSeoError("Task OnPage chưa có kết quả nào (có thể đang khởi tạo).");
   }
 
+  return buildOnPageSummary(result);
+}
+
+/**
+ * Phần SUY LUẬN, tách khỏi phần gọi mạng để kiểm được.
+ *
+ * Hai lỗi đã sống trong hàm này trước khi tách, và cả hai đều là loại "không
+ * bao giờ nổ" chứ không phải loại báo sai:
+ *
+ *   1. `result.pages_crawled` KHÔNG TỒN TẠI — nó nằm ở
+ *      `result.crawl_status.pages_crawled`. Nên pagesCrawled luôn bằng 0, và
+ *      phép trừ tìm trang thiếu canonical (viết theo đúng yêu cầu của
+ *      docs/TECHNICAL_SEO_QC.md §7b) chưa từng chạy một lần nào: điều kiện
+ *      `crawled > 0` không bao giờ đúng.
+ *
+ *   2. Họ `*_check` bị đọc ngược — xem chú thích ở PASS_CHECKS.
+ *
+ * scripts/test-onpage-summary.ts nạp hình dạng phản hồi thật và chứng minh
+ * từng nhánh đỏ được.
+ */
+export function buildOnPageSummary(result: Record<string, unknown>): OnPageSummary {
   const metrics = (result.page_metrics ?? {}) as Record<string, unknown>;
   const checks = (metrics.checks ?? {}) as Record<string, unknown>;
 
+  // Đọc từ crawl_status, có dự phòng về cấp result. Giữ cả hai vì hình dạng
+  // phản hồi là thứ của người khác: nếu họ đổi lại, nhánh dự phòng cứu được,
+  // và nếu cả hai đều vắng thì pagesCrawled = 0 và mọi phép trừ tự tắt —
+  // xem cảnh báo `countsUnavailable` bên dưới, nó nói ra điều đó thay vì để
+  // bảng trông như site không có lỗi nào.
+  const crawlStatus = (result.crawl_status ?? {}) as Record<string, unknown>;
+  const crawled = Number(crawlStatus.pages_crawled ?? result.pages_crawled ?? 0);
+  const inQueue = Number(crawlStatus.pages_in_queue ?? result.pages_in_queue ?? 0);
+
   const issues: OnPageIssue[] = [];
   const unclassified: { key: string; count: number }[] = [];
+
   for (const [key, raw] of Object.entries(checks)) {
     const count = typeof raw === "number" ? raw : 0;
     if (NEUTRAL_CHECKS.has(key)) continue;
+
+    const pass = PASS_CHECKS[key];
+    if (pass) {
+      // Con số là SỐ TRANG ĐẠT. Số trang lỗi = tổng crawl trừ đi nó.
+      //
+      // Không suy được khi chưa biết tổng: bỏ qua chứ KHÔNG coi count là số
+      // lỗi. Coi 193 trang đạt thành "193 trang lỗi" là đúng cái sai đang
+      // sửa ở đây.
+      if (crawled <= 0) continue;
+      const failing = crawled - count;
+      if (failing > 0) issues.push({ key, label: pass.label, severity: pass.severity, count: failing });
+      continue;
+    }
+
     const known = ISSUE_CHECKS[key];
     if (known) {
       // Zero-count checks are dropped here, not rendered as "0 trang" rows: a
@@ -254,38 +324,20 @@ export async function fetchOnPageSummary(
     }
   }
 
-  /**
-   * Trang thiếu canonical, dẫn xuất bằng phép trừ.
-   *
-   * DataForSEO không có check "no_canonical"; nó chỉ đếm trang CÓ. Một phép
-   * đếm không mẫu số không bao giờ trông sai, nên lỗi này rơi vào khoảng giữa:
-   * không phải issue nào cả, và cũng không phải thứ ai nhìn thấy.
-   *
-   * Đo được trên atmovingservices 2026-09-10: trang chủ không có thẻ canonical
-   * (kể cả khi gọi kèm ?utm_source=), trong khi 55 trang còn lại đều tự trỏ.
-   * Không mục nào trong danh sách issue nói điều đó.
-   */
-  const canonicalCount = typeof checks.canonical === "number" ? checks.canonical : null;
-  const crawled = Number(result.pages_crawled ?? 0);
-  if (canonicalCount !== null && crawled > 0 && canonicalCount < crawled) {
-    issues.push({
-      key: "no_canonical",
-      label: "Trang thiếu thẻ canonical",
-      severity: "warning",
-      count: crawled - canonicalCount,
-    });
-  }
-
   const severityRank = { error: 0, warning: 1, info: 2 } as const;
   issues.sort((a, b) => severityRank[a.severity] - severityRank[b.severity] || b.count - a.count);
   unclassified.sort((a, b) => b.count - a.count);
 
   return {
     crawlProgress: typeof result.crawl_progress === "string" ? result.crawl_progress : "không rõ",
-    pagesCrawled: Number(result.pages_crawled ?? 0),
-    pagesInQueue: Number(result.pages_in_queue ?? 0),
+    pagesCrawled: crawled,
+    pagesInQueue: inQueue,
     onPageScore: typeof metrics.onpage_score === "number" ? metrics.onpage_score : null,
     issues,
     unclassified,
+    // Khi không biết tổng số trang crawl, mọi check dạng ĐẠT bị bỏ qua — và
+    // bỏ qua trong im lặng sẽ làm bảng trông sạch hơn sự thật. Cờ này để
+    // giao diện nói ra: "chưa suy được", không phải "không có lỗi".
+    countsUnavailable: crawled <= 0 && Object.keys(checks).some((k) => k in PASS_CHECKS),
   };
 }

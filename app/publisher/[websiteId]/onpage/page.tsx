@@ -118,10 +118,20 @@ export default async function OnPagePage({ params }: { params: Promise<{ website
               <CardDescription>
                 Số bên phải là SỐ TRANG dính lỗi đó, không phải số lần xuất hiện. Danh sách chỉ gồm những mục thật sự
                 là vấn đề — các chỉ số trung tính như &quot;số trang dùng HTTPS&quot; bị loại ra để chúng không chôn
-                vùi phần đáng sửa.
+                vùi phần đáng sửa. Với các mục DataForSEO trả về dạng &quot;số trang ĐẠT&quot; (URL thân thiện,
+                canonical, doctype), con số ở đây là {summary.pagesCrawled} trừ đi số đạt — không phải con số họ trả về.
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Nói ra khi KHÔNG suy được, thay vì để danh sách ngắn đi
+                  trong im lặng. Một bảng thiếu mục vì chưa tính được trông y
+                  hệt một bảng thiếu mục vì site không có lỗi. */}
+              {summary.countsUnavailable && (
+                <p className="mb-3 rounded-md border border-amber-500/50 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+                  Không đọc được tổng số trang đã quét, nên các mục dạng &quot;số trang ĐẠT&quot; bị bỏ qua — danh sách
+                  này đang NGẮN HƠN sự thật, không phải site ít lỗi hơn.
+                </p>
+              )}
               {summary.issues.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
                   {summary.crawlProgress === "finished"
