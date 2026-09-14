@@ -162,6 +162,42 @@ export async function updateMeasurementIdAction(_prev: ActionResult, formData: F
 }
 
 /**
+ * Đặt hoặc xoá ngân sách AI của publisher.
+ *
+ * Ô trống = xoá ngân sách, và đó là một hành động khác hẳn với đặt bằng 0.
+ * Trống nghĩa là "không theo dõi"; 0 nghĩa là "không được tiêu thêm". Gộp
+ * hai cái vào một giá trị sẽ làm người đặt 0 thấy giao diện báo "chưa đặt
+ * ngân sách" và nghĩ mình bấm hụt.
+ */
+export async function updateAiBudgetAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const websiteId = String(formData.get("websiteId") ?? "").trim();
+  const raw = String(formData.get("aiBudgetUsd") ?? "").trim();
+  if (!websiteId) return { ok: false, message: "Thiếu websiteId." };
+
+  let value: number | null = null;
+  if (raw !== "") {
+    // Không dùng Number() trần: Number("") là 0 và Number("12 đô") là NaN.
+    // Cả hai đều lặng lẽ lưu một con số không phải thứ người ta gõ.
+    const parsed = Number(raw.replace(/[$,\s]/g, ""));
+    if (!Number.isFinite(parsed)) return { ok: false, message: `"${raw}" không phải số tiền.` };
+    if (parsed < 0) return { ok: false, message: "Ngân sách không âm được." };
+    value = parsed;
+  }
+
+  try {
+    await prisma.website.update({ where: { id: websiteId }, data: { aiBudgetUsd: value } });
+    revalidatePath(`/publisher/${websiteId}`);
+    revalidatePath("/publisher");
+    return {
+      ok: true,
+      message: value === null ? "Đã xoá ngân sách — không theo dõi nữa." : `Đã đặt ngân sách $${value.toFixed(2)}.`,
+    };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Lưu thất bại." };
+  }
+}
+
+/**
  * Sets or clears the shared secret used to notify a site of a settings change.
  *
  * WRITE-ONLY. The stored value is never sent back to the browser — the form

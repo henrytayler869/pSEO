@@ -12,6 +12,7 @@ import { numberArg, reportArgError } from "../lib/scripts/argv";
 import { fetchServedInventory } from "../lib/publisher/inventory";
 import { generateForCluster } from "../lib/ai/cluster-generate";
 import { SpendCapExceededError } from "../lib/ai/anthropic";
+import { getBudgetStatus } from "../lib/ai/budget";
 
 async function main() {
   let site: { id: string; url: string; vertical: string };
@@ -49,13 +50,23 @@ async function main() {
     return { path, zips, keyword: best?.keyword ?? "?", volume: best?.volume ?? 0 };
   }).sort((a, b) => b.volume - a.volume);
 
+  // Trạng thái ngân sách in TRƯỚC khi tiêu, không phải sau. In sau thì nó
+  // là biên lai; in trước thì nó là thứ người ta còn kịp làm gì đó.
+  const budget = await getBudgetStatus(site.id);
+  if (budget?.verdict === "over") {
+    console.log(`⛔ Publisher này đã VƯỢT ngân sách AI: $${budget.totalUsd.toFixed(4)} / $${budget.budgetUsd!.toFixed(2)} (vượt $${budget.overUsd.toFixed(4)}).`);
+    console.log(`   Vẫn chạy tiếp — ngân sách là mềm. Ctrl-C nếu không định tiêu thêm.\n`);
+  } else if (budget?.verdict === "no-budget") {
+    console.log(`· Chưa đặt ngân sách AI cho publisher này (đã tiêu $${budget.totalUsd.toFixed(4)}). Đặt ở /publisher/${site.id}.\n`);
+  }
+
   const limit = numberArg(0, clusters.length);
   console.log(`${clusters.length} cụm, chạy ${Math.min(limit, clusters.length)} theo volume giảm dần\n`);
 
   let done = 0, failed = 0, cached = 0, cost = 0, capped = false;
   for (const c of clusters.slice(0, limit)) {
     try {
-      const r = await generateForCluster(site.vertical, c.zips, c.path);
+      const r = await generateForCluster(site.vertical, c.zips, c.path, site.id);
       if (!r) { failed++; console.log(`  ✗ ${c.path} — không dựng được fact set (dưới 2 ZIP có dữ liệu)`); continue; }
       cost += r.costUsd;
       if (r.attempts === 0) { cached++; console.log(`  · ${c.path} — đã có, bỏ qua`); continue; }

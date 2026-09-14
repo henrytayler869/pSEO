@@ -93,7 +93,19 @@ export async function getCachedClusterText(vertical: string, memberZips: string[
 export async function generateForCluster(
   vertical: string,
   memberZips: string[],
-  label: string
+  label: string,
+  /**
+   * Publisher chịu chi phí này.
+   *
+   * Đoạn cấp cụm KHÁC đoạn theo ZIP ở chỗ nó thuộc về một site cụ thể:
+   * thành viên cụm lấy từ /api/inventory của chính site đó, nên hai
+   * publisher cùng niche sẽ có cụm khác nhau và cần đoạn khác nhau. Đoạn
+   * theo ZIP thì ngược lại — cache theo niche, phục vụ mọi site.
+   *
+   * Không gắn thì hàng "gắn đích danh site này" trong thẻ ngân sách mãi là
+   * $0,0000: một hàng luôn bằng 0 dạy người đọc bỏ qua nó.
+   */
+  websiteId?: string | null
 ): Promise<ClusterGenerateOutcome | null> {
   const set = await buildClusterFactSet(vertical, memberZips, label);
   if (!set) return null;
@@ -112,7 +124,7 @@ export async function generateForCluster(
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const prompt = buildPrompt(set, previous);
-    const result = await generateWithClaude({ system: SYSTEM, prompt, vertical, zip: null });
+    const result = await generateWithClaude({ system: SYSTEM, prompt, vertical, zip: null, websiteId: websiteId ?? null });
     cost += result.costUsd;
 
     const text = result.text.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();

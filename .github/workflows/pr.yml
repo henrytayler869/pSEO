@@ -165,6 +165,12 @@ jobs:
       - name: Tham số script — cờ không được nuốt số, số sai không được im
         run: npx tsx scripts/test-argv.ts
 
+      # Ba trạng thái, không hai. Ca canh nặng nhất là "chưa đặt ngân sách"
+      # không được rơi vào cùng nhánh với "trong ngân sách" — một ô xanh cho
+      # một ngân sách không tồn tại trả lời sai đúng câu người ta đang hỏi.
+      - name: Ngân sách AI theo publisher — ba trạng thái còn phân biệt được
+        run: npx tsx scripts/test-budget.ts
+
       # Schema phải có trước khi script chạm Prisma. Không dữ liệu nào được
       # nạp: xem chú thích ở khối `services` về việc DB rỗng kiểm được gì và
       # KHÔNG kiểm được gì.

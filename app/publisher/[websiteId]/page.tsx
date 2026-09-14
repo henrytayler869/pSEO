@@ -13,11 +13,15 @@ import { MeasurementIdForm } from "@/components/measurement-id-form";
 import { RevalidateSecretForm } from "@/components/revalidate-secret-form";
 import { WpAdminLinkCell } from "@/components/wp-admin-link";
 import { SitemapSubmit } from "@/components/sitemap-submit";
+import { AiBudgetCard } from "@/components/ai-budget-card";
+import { getBudgetStatus } from "@/lib/ai/budget";
 
 export default async function WebsiteDetailPage({ params }: { params: Promise<{ websiteId: string }> }) {
   const { websiteId } = await params;
   const detail = await getWebsiteDetail(websiteId);
   if (!detail) notFound();
+
+  const budget = await getBudgetStatus(websiteId);
 
   const { website, domain, wpAdmin, requiredPages, requiredPagesError, sitemaps, sitemapsError, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
 
@@ -166,6 +170,11 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
           <WpAdminLinkCell link={wpAdmin} />
         </CardContent>
       </Card>
+
+      {/* Đặt TRƯỚC các thẻ thiết lập khác: khi vượt ngân sách thì đó là
+          thứ đáng đọc trước, và một cảnh báo nằm cuối trang dài là một
+          cảnh báo người ta cuộn qua. */}
+      {budget && <AiBudgetCard websiteId={website.id} status={budget} />}
 
       <Card>
         <CardHeader>

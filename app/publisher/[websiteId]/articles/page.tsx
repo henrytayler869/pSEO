@@ -61,7 +61,7 @@ export default async function ArticlesPage({
     prisma.aiSpend.aggregate({ where: { websiteId }, _sum: { costUsd: true } }),
   ]);
 
-  const budget = await getBudgetAction();
+  const budget = await getBudgetAction(websiteId);
 
   const written = new Set(articles.map((a) => a.candidateId));
 
