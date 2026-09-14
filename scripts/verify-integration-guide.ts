@@ -126,11 +126,14 @@ const checks: Check[] = [
       const passed = await prisma.aiClusterGeneration.count({ where: { validationPassed: true } });
       if (passed === 0) return "chưa có đoạn cụm nào — trang cụm sẽ không có chữ AI";
       const doc = readFileSync(GUIDE, "utf-8");
-      const m = doc.match(/\*\*(\d+)\/(\d+)\*\*\. Nếu site có/);
-      if (!m) return "guide không còn nêu số cụm để đối chiếu";
+      // Bảng chứa BA loại đoạn (cụm, hub bang, hub một-ZIP) nên con số phải
+      // đối chiếu tổng, và guide phải nêu cả ba — nêu mỗi "31 cụm" sẽ đúng
+      // về một loại và sai về bảng.
+      const m = doc.match(/\*\*(\d+) đoạn đạt\*\*/);
+      if (!m) return "guide không còn nêu tổng số đoạn để đối chiếu";
       return Number(m[1]) === passed
         ? null
-        : `guide ghi ${m[1]} đoạn cụm, thực tế ${passed}`;
+        : `guide ghi ${m[1]} đoạn, thực tế ${passed}`;
     },
   },
   {
