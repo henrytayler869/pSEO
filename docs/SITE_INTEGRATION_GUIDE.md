@@ -1143,7 +1143,15 @@ tiếp theo. Tập ZIP đổi khi và chỉ khi cụm thật sự đổi.
 | Đủ 23 ZIP | `200` | |
 | **Xáo trộn thứ tự** 23 ZIP đó | `200`, **cùng** `clusterId` | tập ZIP được sắp xếp trước khi băm — site không cần tự sắp |
 | **Thiếu 1 ZIP** (22/23) | `404`, `clusterId` **khác** | đây là tính năng, không phải lỗi — xem dưới |
-| 1 ZIP, hoặc ZIP sai định dạng | `400` | từ chối cả lô, không lọc bỏ rồi chạy tiếp |
+| **1 ZIP** | `200` | hợp lệ — hub của bang chỉ publish một ZIP dùng đúng đường này |
+| ZIP sai định dạng, hoặc thiếu `zips` | `400` | từ chối cả lô, không lọc bỏ rồi chạy tiếp |
+
+Dòng **1 ZIP** từng là `400`, và đó là một lỗi sống 1 ngày: hub của một bang
+chỉ publish một ZIP cần đúng đường này, vì khẳng định của nó khác hẳn trang
+ZIP bên dưới — "ZIP này đứng đâu trong toàn bộ tập đã publish" thay vì "số
+liệu của ZIP này". Phục vụ đoạn của trang market ở hub là đăng trùng nội
+dung giữa hub và trang con. Bảy đoạn đã sinh xong và nằm trong DB trong khi
+guard cũ trả 400 — tính năng hoàn chỉnh ở mọi tầng trừ một dòng điều kiện.
 
 Ô thứ ba là ô quan trọng. **Khớp phải đúng toàn bộ tập.** Bỏ một ZIP đi là
 hỏi về *một cụm khác* — và nếu API trả về đoạn của cụm 23 ZIP cho câu hỏi
