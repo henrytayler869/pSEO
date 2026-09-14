@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { formatBudgetPercent, type BudgetStatus } from "@/lib/ai/budget";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Play, Square, Send, Check, X, ListPlus } from "lucide-react";
@@ -180,7 +181,7 @@ export function ArticleWorkbench({
   articles: ArticleRow[];
   job: JobRow | null;
   totalSpendUsd: number;
-  budget: { capUsd: number; spentUsd: number; remainingUsd: number };
+  budget: { capUsd: number; spentUsd: number; remainingUsd: number; publisher: BudgetStatus | null };
 }) {
   const [oneState, oneAction, writingOne] = useActionState(writeOneArticleAction, EMPTY);
   const [batchState, batchAction, startingBatch] = useActionState(startArticleBatchAction, EMPTY);
@@ -250,14 +251,46 @@ export function ArticleWorkbench({
         </span>
       </div>
 
-      {/* Ngân sách nói TRƯỚC. Trần là toàn hệ thống chứ không theo publisher,
-          nên nó là thứ mọi publisher chia nhau — và chạm trần giữa lô sẽ DỪNG
-          lô chứ không đánh dấu phần còn lại là trượt. */}
+      {/* HAI dòng, không gộp. Chặn cứng toàn hệ thống DỪNG lô; ngân sách
+          publisher chỉ highlight. Gộp lại thì câu "còn bao nhiêu" không có
+          câu trả lời đúng, vì hai con số dùng để quyết định hai việc khác
+          nhau. */}
+      {budget.publisher && budget.publisher.verdict !== "under" && (
+        <div
+          className={`rounded-lg border p-3 text-sm ${
+            budget.publisher.verdict === "over"
+              ? "border-red-400 bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-300"
+              : "text-muted-foreground"
+          }`}
+        >
+          {budget.publisher.verdict === "over" ? (
+            <>
+              Publisher này đã <span className="font-medium">vượt ngân sách</span>: đã tiêu $
+              {budget.publisher.totalUsd.toFixed(4)} trên ngân sách ${budget.publisher.budgetUsd!.toFixed(2)} (vượt $
+              {budget.publisher.overUsd.toFixed(4)}). Viết bài vẫn chạy — ngân sách là mềm.
+            </>
+          ) : (
+            <>
+              Chưa đặt ngân sách AI cho publisher này (đã tiêu ${budget.publisher.totalUsd.toFixed(4)}). Đặt ở tab Tổng
+              quan thì chỗ này mới cảnh báo được khi vượt.
+            </>
+          )}
+        </div>
+      )}
+
+      {budget.publisher?.verdict === "under" && (
+        <div className="rounded-lg border p-3 text-sm text-muted-foreground">
+          Ngân sách publisher: đã tiêu <span className="font-medium">${budget.publisher.totalUsd.toFixed(4)}</span> trên $
+          {budget.publisher.budgetUsd!.toFixed(2)} ({formatBudgetPercent(budget.publisher.percent)}).
+        </div>
+      )}
+
       <div
         className={`rounded-lg border p-3 text-sm ${budget.remainingUsd < 0.5 ? "border-red-300 bg-red-50 text-red-800" : ""}`}
       >
-        Ngân sách AI toàn hệ thống: còn <span className="font-medium">${budget.remainingUsd.toFixed(4)}</span> trên trần
-        ${budget.capUsd.toFixed(2)} (đã tiêu ${budget.spentUsd.toFixed(4)}).
+        Chặn cứng toàn hệ thống: còn <span className="font-medium">${budget.remainingUsd.toFixed(4)}</span> trên trần
+        ${budget.capUsd.toFixed(2)} (đã tiêu ${budget.spentUsd.toFixed(4)}). Đây là phanh chống chạy loạn cho MỌI
+        publisher, không phải ngân sách biên tập — chạm nó là lô dừng giữa chừng.
         {budget.remainingUsd < 0.5 && " Sắp hết — lô đang chạy sẽ dừng khi chạm trần, phần chưa viết KHÔNG bị đánh dấu trượt."}
       </div>
 

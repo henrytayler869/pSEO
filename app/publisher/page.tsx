@@ -8,9 +8,18 @@ import { WpAdminLinkCell } from "@/components/wp-admin-link";
 import { RemoveWebsiteButton } from "@/components/remove-website-button";
 import { getWebsiteOverviewRows } from "@/lib/queries/publisher";
 import { getVerticalsWithMarkets } from "@/lib/queries/verticals";
+import { getBudgetStatus, formatBudgetPercent } from "@/lib/ai/budget";
+import { AlertTriangle } from "lucide-react";
 
 export default async function PublisherPage() {
   const [rows, verticals] = await Promise.all([getWebsiteOverviewRows(), getVerticalsWithMarkets()]);
+
+  // Ngân sách hiện ở ĐÂY nữa, không chỉ trong trang chi tiết. Một cảnh báo
+  // chỉ thấy được sau khi đã mở đúng site là một cảnh báo dành cho người đã
+  // nghi ngờ — tức là đúng người không cần nó.
+  const budgets = new Map(
+    await Promise.all(rows.map(async (r) => [r.website.id, await getBudgetStatus(r.website.id)] as const))
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -44,6 +53,7 @@ export default async function PublisherPage() {
                   <TableHead>URL trong sitemap</TableHead>
                   <TableHead>Tỷ lệ index (ước tính)</TableHead>
                   <TableHead>Total traffic (28 ngày)</TableHead>
+                  <TableHead>Ngân sách AI</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -86,6 +96,28 @@ export default async function PublisherPage() {
                         <TableCell>{row.totalUsers?.toLocaleString()} users</TableCell>
                       </>
                     )}
+                    {/* Ba trạng thái, ba cách hiện. "chưa đặt" xám chứ không xanh:
+                        xanh cho một ngân sách không tồn tại là câu trả lời sai. */}
+                    <TableCell>
+                      {(() => {
+                        const b = budgets.get(row.website.id);
+                        if (!b) return <span className="text-xs text-muted-foreground">—</span>;
+                        if (b.verdict === "no-budget")
+                          return <span className="text-xs text-muted-foreground">chưa đặt</span>;
+                        if (b.verdict === "over")
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded-md border border-red-500/60 bg-red-100/70 px-2 py-0.5 text-xs font-medium text-red-800 tabular-nums dark:bg-red-950/40 dark:text-red-300">
+                              <AlertTriangle className="h-3 w-3" />
+                              ${b.totalUsd.toFixed(2)} / ${b.budgetUsd!.toFixed(2)}
+                            </span>
+                          );
+                        return (
+                          <span className="text-xs tabular-nums text-muted-foreground">
+                            ${b.totalUsd.toFixed(2)} / ${b.budgetUsd!.toFixed(2)} ({formatBudgetPercent(b.percent)})
+                          </span>
+                        );
+                      })()}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Link href={`/publisher/${row.website.id}`} className="text-xs text-primary hover:underline">

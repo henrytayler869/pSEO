@@ -9,6 +9,7 @@ import { buildQcContext, writeArticle } from "@/lib/article-qc/write-loop";
 import { createPost, type WpCredentials } from "@/lib/wordpress/posts";
 import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
 import { SpendCapExceededError, getTotalSpendUsd, getAiConfig } from "@/lib/ai/anthropic";
+import { getBudgetStatus, type BudgetStatus } from "@/lib/ai/budget";
 import type { FactSet } from "@/lib/ai/facts";
 import type { ArticleTemplateShape } from "@/lib/article-template/render";
 import { DEFAULT_TEMPLATES } from "@/lib/article-template/defaults";
@@ -346,12 +347,37 @@ export async function startArticleBatchAction(
   }
 }
 
-/** Ngân sách còn lại, để trang nói trước thay vì để người dùng phát hiện lúc
- * chạm trần. Trần là toàn hệ thống, không phải theo publisher — nên con số này
- * là thứ MỌI publisher chia nhau, và nói rõ điều đó quan trọng hơn con số. */
-export async function getBudgetAction(): Promise<{ capUsd: number; spentUsd: number; remainingUsd: number }> {
-  const [cfg, spent] = await Promise.all([getAiConfig(), getTotalSpendUsd()]);
-  return { capUsd: cfg.spendCapUsd, spentUsd: spent, remainingUsd: Math.max(0, cfg.spendCapUsd - spent) };
+/**
+ * Hai con số khác nhau, nói cùng lúc vì chúng trả lời hai câu hỏi khác nhau.
+ *
+ * `cap*` là CHẶN CỨNG toàn hệ thống — nó dừng lô giữa chừng, và mọi publisher
+ * chia nhau nó. Nó tồn tại để một vòng lặp hỏng không sinh ra hoá đơn không
+ * đáy, chứ không phải để quản chi phí biên tập.
+ *
+ * `publisher` là NGÂN SÁCH MỀM của riêng site này — không dừng gì cả, chỉ
+ * highlight. Nội dung phụ thuộc hoàn toàn vào AI nên một trần chặn ở đây chỉ
+ * dừng sản phẩm; thứ cần là biết mình đang ở đâu so với dự tính.
+ *
+ * Gộp hai thứ này vào một con số từng là thiết kế cũ, và nó làm câu "còn bao
+ * nhiêu" không có câu trả lời đúng.
+ */
+export async function getBudgetAction(websiteId?: string): Promise<{
+  capUsd: number;
+  spentUsd: number;
+  remainingUsd: number;
+  publisher: BudgetStatus | null;
+}> {
+  const [cfg, spent, publisher] = await Promise.all([
+    getAiConfig(),
+    getTotalSpendUsd(),
+    websiteId ? getBudgetStatus(websiteId) : Promise.resolve(null),
+  ]);
+  return {
+    capUsd: cfg.spendCapUsd,
+    spentUsd: spent,
+    remainingUsd: Math.max(0, cfg.spendCapUsd - spent),
+    publisher,
+  };
 }
 
 export async function stopArticleBatchAction(

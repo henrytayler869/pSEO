@@ -966,4 +966,16 @@ model Website {
   // và `prisma migrate diff` — phép kiểm duy nhất bắt được cột khai nhầm
   // model — sẽ đỏ sẵn, tức là một cổng người ta sẽ tắt.
   @@index([vertical])
+  /// Ngân sách AI của publisher này, USD. Null = chưa đặt.
+  ///
+  /// MỀM, không chặn. Nội dung của publisher phụ thuộc hoàn toàn vào AI,
+  /// nên một trần chặn cứng ở đây chỉ dừng sản phẩm chứ không tiết kiệm
+  /// được gì — thứ cần là biết mình đang ở đâu so với dự tính. Chặn cứng
+  /// chống chạy loạn vẫn còn, ở AppConfig key "ai", và là con số khác hẳn.
+  ///
+  /// Null phải hiện ra là "chưa đặt", không được hiện ra là "đang trong
+  /// ngân sách": một ô xanh cho một ngân sách không tồn tại là câu trả lời
+  /// sai cho câu hỏi người ta thực sự hỏi.
+  aiBudgetUsd Float?
+
 }
