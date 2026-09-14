@@ -110,8 +110,9 @@ export async function getBudgetStatus(websiteId: string): Promise<BudgetStatus |
  *
  * Có mặt ở đây để nó không biến mất: tổng của mọi ngân sách publisher sẽ
  * nhỏ hơn sổ chi thật, và phần chênh đó phải nhìn thấy được ở đâu đó thay
- * vì làm người đọc nghĩ mình đã cộng nhầm. Đo 14/9: $0,1261 trên hai niche
- * chưa có publisher.
+ * vì làm người đọc nghĩ mình đã cộng nhầm. Đo 14/9: $0,2505 trên BỐN
+ * niche chưa có publisher (hvac-repair, roofing-replacement,
+ * solar-installation, water-damage-restoration).
  */
 export async function getUnattributedSpendUsd(): Promise<number> {
   const sites = await prisma.website.findMany({ select: { vertical: true } });
