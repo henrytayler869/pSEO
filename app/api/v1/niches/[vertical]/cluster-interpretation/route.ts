@@ -35,9 +35,20 @@ export async function GET(
   const raw = new URL(request.url).searchParams.get("zips") ?? "";
   const zips = raw.split(",").map((z) => z.trim()).filter(Boolean);
 
-  if (zips.length < 2) {
-    return apiJson({ error: "Cần ít nhất 2 ZIP: ?zips=11201,11212. Một ZIP thì dùng endpoint /markets/{zip}/interpretation." }, { status: 400 });
+  if (zips.length === 0) {
+    return apiJson({ error: "Thiếu tham số zips. Ví dụ: ?zips=11201,11212" }, { status: 400 });
   }
+  // MỘT ZIP là hợp lệ, và guard cũ ở đây từng từ chối nó.
+  //
+  // Lý do cũ: "một ZIP thì dùng /markets/{zip}/interpretation". Lý do đó
+  // đúng cho trang market và SAI cho hub của một bang chỉ publish một ZIP —
+  // hub đó cần một khẳng định KHÁC (ZIP này đứng đâu trong toàn bộ tập đã
+  // publish), và phục vụ đoạn của trang market ở đó là đăng trùng nội dung
+  // giữa hub và trang con của nó.
+  //
+  // Đo 14/9/2026: 7 đoạn hub một-ZIP đã sinh xong và nằm trong DB, nhưng
+  // guard này trả 400 nên không đoạn nào tới được site. Tính năng hoàn chỉnh
+  // ở mọi tầng trừ một dòng điều kiện.
   // Từ chối cả lô khi có ZIP sai định dạng, không lọc bỏ rồi chạy tiếp: bỏ
   // một ZIP đi làm tập thành viên khác đi, tức là hỏi về MỘT CỤM KHÁC — và
   // câu trả lời sẽ mô tả một dải không phải dải của trang đang hỏi.
