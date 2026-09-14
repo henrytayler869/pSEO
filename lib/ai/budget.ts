@@ -14,7 +14,7 @@ export async function getBudgetStatus(websiteId: string): Promise<BudgetStatus |
   if (!site) return null;
 
   const [own, shared, sharedWithSites] = await Promise.all([
-    prisma.aiSpend.aggregate({ _sum: { costUsd: true }, where: { websiteId } }),
+    prisma.aiSpend.aggregate({ _sum: { costUsd: true }, _count: true, where: { websiteId } }),
     // Cùng niche, chưa gắn site nào. Không lấy dòng của site KHÁC trong
     // cùng niche: tiền đó có chủ rồi.
     prisma.aiSpend.aggregate({ _sum: { costUsd: true }, where: { vertical: site.vertical, websiteId: null } }),
@@ -24,6 +24,7 @@ export async function getBudgetStatus(websiteId: string): Promise<BudgetStatus |
   return judgeBudget({
     budgetUsd: site.aiBudgetUsd,
     ownUsd: own._sum.costUsd ?? 0,
+    ownRows: own._count,
     sharedUsd: shared._sum.costUsd ?? 0,
     sharedWithSites,
   });

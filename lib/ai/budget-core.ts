@@ -42,6 +42,16 @@ export interface BudgetStatus {
   budgetUsd: number | null;
   /** Dòng sổ gắn đích danh websiteId này. */
   ownUsd: number;
+  /**
+   * SỐ DÒNG sổ gắn đích danh, không phải số tiền.
+   *
+   * Có mặt vì $0,0000 một mình không phân biệt được hai chuyện khác hẳn
+   * nhau: "site này chưa tiêu gì" và "sổ chi chưa từng ghi site nào". Đến
+   * 14/9/2026 mọi dòng đều thuộc vế thứ hai — 401/401 có websiteId NULL —
+   * nên ô tiền hiện $0,0000 và đọc ra như thể đường ống chưa chạy, trong
+   * khi $7,40 đã ra khỏi ví.
+   */
+  ownRows: number;
   /** Dòng sổ của cùng niche nhưng không gắn site nào — cache dùng chung. */
   sharedUsd: number;
   totalUsd: number;
@@ -63,10 +73,12 @@ export interface BudgetStatus {
 export function judgeBudget(params: {
   budgetUsd: number | null;
   ownUsd: number;
+  ownRows?: number;
   sharedUsd: number;
   sharedWithSites: number;
 }): BudgetStatus {
   const { budgetUsd, ownUsd, sharedUsd, sharedWithSites } = params;
+  const ownRows = params.ownRows ?? 0;
   const totalUsd = ownUsd + sharedUsd;
 
   // Ngân sách 0 là một lựa chọn có nghĩa ("niche này không được tiêu gì
@@ -75,7 +87,7 @@ export function judgeBudget(params: {
   const hasBudget = budgetUsd !== null && budgetUsd !== undefined;
 
   if (!hasBudget) {
-    return { budgetUsd: null, ownUsd, sharedUsd, totalUsd, sharedWithSites, verdict: "no-budget", percent: null, overUsd: 0 };
+    return { budgetUsd: null, ownUsd, ownRows, sharedUsd, totalUsd, sharedWithSites, verdict: "no-budget", percent: null, overUsd: 0 };
   }
 
   // Ngân sách 0: mọi khoản chi đều là vượt. Chia cho 0 ra Infinity nên
@@ -86,6 +98,7 @@ export function judgeBudget(params: {
   return {
     budgetUsd,
     ownUsd,
+    ownRows,
     sharedUsd,
     totalUsd,
     sharedWithSites,
