@@ -85,6 +85,33 @@ export interface ClusterGenerateOutcome {
  * cụm mở rộng vẫn trả về đoạn văn mô tả dải cũ — im lặng, vì cache "hợp lệ".
  */
 export async function getCachedClusterText(vertical: string, memberZips: string[]): Promise<string | null> {
+  // Tập MỘT ZIP: tra theo clusterId, không theo fingerprint.
+  //
+  // buildClusterFactSet trả null khi dưới 2 thành viên — đúng, vì một ZIP
+  // không tạo thành dải. Nhưng hàm này dùng nó để dựng lại fingerprint, nên
+  // với hub bang một-ZIP nó luôn trả null và endpoint trả 404 cho một đoạn
+  // ĐANG NẰM TRONG DB. Bảy đoạn đã trả tiền sinh xong mà không tới được site
+  // vì đúng dòng này.
+  //
+  // Dựng lại fingerprint cho loại đó cần phân bố trên toàn bộ ZIP đã publish
+  // — 256 lần buildFactSet, đo được ~11 phút. Không thể làm trong một
+  // request.
+  //
+  // CÁI MẤT, nói rõ: với tập một ZIP, hàm này không còn phát hiện được "văn
+  // bản cũ so với số liệu mới". Nó chỉ trả bản ĐẠT mới nhất của cụm đó. Phát
+  // hiện lệch chuyển sang lúc SINH: chạy lại generate-solo-state-text thì
+  // fingerprint đổi, một hàng mới ra đời, và hàng mới thắng vì sắp theo
+  // createdAt. Nên lịch chạy lại là thứ giữ cho nó đúng, không phải phép so
+  // ở đây.
+  if (memberZips.length === 1) {
+    const row = await prisma.aiClusterGeneration.findFirst({
+      where: { vertical, clusterId: clusterIdOf(vertical, memberZips), validationPassed: true },
+      orderBy: { createdAt: "desc" },
+      select: { text: true },
+    });
+    return row?.text ?? null;
+  }
+
   const set = await buildClusterFactSet(vertical, memberZips, "");
   if (!set) return null;
   const row = await prisma.aiClusterGeneration.findFirst({
