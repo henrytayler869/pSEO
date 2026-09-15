@@ -410,6 +410,19 @@ export async function buildContentRules(): Promise<ContentRules> {
           "Chưa có publisher nào của nhóm này publish. Vector conformance sẽ do site đầu tiên của ngành cung cấp — ghi rõ ở đây thay vì để trống, vì 'chưa chứng minh' và 'đã chứng minh' là hai trạng thái khác nhau và luật này đang ở trạng thái thứ nhất.",
       },
       {
+        id: "fatal-crash-scope",
+        rule:
+          "Số liệu tai nạn giao thông ở đây đến từ FARS, và FARS CHỈ ghi những vụ CÓ NGƯỜI CHẾT. " +
+          "Một con số mang nhãn 'fatal traffic crashes in a year' không được gọi là accidents, collisions, crashes, wrecks hay incidents nếu thiếu chữ 'fatal' — mỗi từ đó gọi tên một tập lớn hơn hẳn, và bỏ chữ 'fatal' đi là thổi phồng con số nhiều bậc mà câu văn vẫn đọc như đúng. " +
+          "Hai chỉ số FARS KHÔNG thay thế được cho nhau: fars_fatal_crashes_1yr đếm VỤ có người chết, fars_fatalities_1yr đếm NGƯỜI chết, và một vụ giết được nhiều người. " +
+          "Đo trên chính dữ liệu đang phục vụ: 72.207 vụ so với 110.401 người trên cùng 345 địa điểm — lệch 53%. Nhưng ở 56 trong 345 nơi HAI SỐ BẰNG NHAU, vừa đủ để một lần kiểm ngẫu nhiên kết luận chúng là một. Đó là lý do luật này tồn tại thay vì trông chờ người viết tự thấy. " +
+          "KHÁC các luật quanh nó: scope-disclosure đòi khai phạm vi ĐỊA LÝ của một con số (hạt, bang, toàn quốc) — luật này nói về phạm vi của chính SỰ VIỆC được đếm, và một câu khai đúng hạt vẫn sai nếu gọi vụ chết người là 'tai nạn'. no-outcome-claims chặn khẳng định về KẾT QUẢ vụ kiện, không đụng tới cách gọi tên dữ liệu đầu vào.",
+        enforcedBy:
+          "lib/ai/generate.ts — VERTICAL_BRIEFS.offLimits của auto-accident-attorney nêu tường minh; scripts/test-fars-scope-parity.ts ép hai nơi không trôi lệch khỏi nhau. Phía site cần một luật văn bản kiểm trên HTML đã render, vì prompt là phòng ngừa chứ không phải cổng.",
+        provenBy:
+          "Chưa publisher nào của ngành này publish. Con số 72.207 / 110.401 / 56-trong-345 đo ngày 15/9/2026 trên dữ liệu đang phục vụ, không phải ước lượng. Vector conformance sẽ do site đầu tiên của ngành cung cấp.",
+      },
+      {
         id: "stay-in-trade",
         rule: "Đoạn viết cho một ngành không được nói như ngành khác, không hứa bảo hành, không mô tả dịch vụ định kỳ nếu ngành đó không phải vậy. Bắt prompt drift giữa các vertical dùng chung template.",
         enforcedBy: "phía site — niche-other-trade, niche-warranty, niche-routine-service",
