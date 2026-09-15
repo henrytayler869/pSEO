@@ -9,6 +9,7 @@ import { notifySiteConfigChanged } from "@/lib/publisher/notify-site";
 import { normalizeHost } from "@/lib/publisher/link-domain";
 import { getVerticalsWithMarkets } from "@/lib/queries/verticals";
 import { createPublisherKey, revokePublisherKey } from "@/lib/settings/api-key";
+import { pushKeyToSite, isHeaderSafeSecret } from "@/lib/publisher/push-key";
 
 export interface ActionResult {
   ok: boolean;
@@ -219,6 +220,18 @@ export async function updateRevalidateSecretAction(_prev: ActionResult, formData
   const raw = String(formData.get("revalidateSecret") ?? "").trim();
   if (!websiteId) return { ok: false, message: "Thiếu websiteId." };
 
+  // Chặn ở ô nhập, không để nổ ở lúc đẩy. Secret này đi vào header HTTP, mà
+  // header chỉ mang được ASCII — `new Request()` ném TypeError với thông báo
+  // ("character at index 4 has a value of 7853") không chỉ về đâu cả, và nó
+  // nổ cách xa ô đã sinh ra nó.
+  if (raw && !isHeaderSafeSecret(raw)) {
+    return {
+      ok: false,
+      message:
+        "Secret chỉ được dùng chữ/số/dấu câu ASCII, không dấu tiếng Việt và không khoảng trắng — nó phải đặt vừa vào một header HTTP.",
+    };
+  }
+
   try {
     const website = await prisma.website.update({
       where: { id: websiteId },
@@ -292,6 +305,9 @@ export interface CreateKeyResult {
   /** Giá trị đầy đủ, chỉ có trong ĐÚNG phản hồi này. Không endpoint nào đọc
    * lại được — HQ chỉ lưu băm. */
   key?: string;
+  /** Site đã nhận và XÁC NHẬN ghi. Nếu false thì khoá bên dưới phải được đặt
+   * thủ công, và UI phải nói vậy thay vì hiện một dòng thành công. */
+  pushed?: boolean;
 }
 
 export async function createPublisherKeyAction(_prev: CreateKeyResult, formData: FormData): Promise<CreateKeyResult> {
@@ -299,15 +315,27 @@ export async function createPublisherKeyAction(_prev: CreateKeyResult, formData:
   const label = String(formData.get("label") ?? "");
   if (!websiteId) return { ok: false, message: "Thiếu website." };
 
-  const site = await prisma.website.findUnique({ where: { id: websiteId }, select: { vertical: true } });
+  const site = await prisma.website.findUnique({
+    where: { id: websiteId },
+    select: { vertical: true, url: true, revalidateSecret: true },
+  });
   if (!site) return { ok: false, message: "Không tìm thấy website." };
 
   const { key } = await createPublisherKey(websiteId, label);
+
+  // Đẩy luôn, không để thành một nút thứ hai. Một khoá đã tạo mà chưa đẩy là
+  // một hàng trong bảng không tương ứng với gì cả — và nút "đẩy" riêng là nút
+  // người ta sẽ quên bấm, rồi kết luận tính năng hỏng.
+  const push = await pushKeyToSite(site, key);
+
   revalidatePath(`/publisher/${websiteId}`);
   return {
     ok: true,
-    message: `Khoá chỉ đọc được niche "${site.vertical}". Copy ngay — màn hình này là nơi duy nhất nó xuất hiện.`,
+    message: push.ok
+      ? `${push.detail} Site đang dùng khoá mới ngay, không cần sửa .env hay restart. Khoá chỉ đọc được niche "${site.vertical}".`
+      : `Đã tạo khoá (chỉ đọc được niche "${site.vertical}") nhưng CHƯA đẩy sang site được: ${push.detail} Copy khoá bên dưới và đặt thủ công vào HQ_API_KEY, hoặc sửa nguyên nhân rồi tạo khoá khác.`,
     key,
+    pushed: push.ok,
   };
 }
 

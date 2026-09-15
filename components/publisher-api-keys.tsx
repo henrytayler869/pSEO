@@ -38,7 +38,10 @@ export function PublisherApiKeys({
   const [revealed, setRevealed] = useState<string | null>(null);
   if (createState !== handled) {
     setHandled(createState);
-    if (createState.ok && createState.key) setRevealed(createState.key);
+    // Chỉ hiện khoá khi ĐẨY HỤT. Đẩy được rồi thì không ai cần nhìn thấy nó,
+    // và một bí mật hiện ra không lý do là một bí mật sẽ nằm trong ảnh chụp
+    // màn hình.
+    if (createState.ok && createState.key && createState.pushed !== true) setRevealed(createState.key);
   }
 
   const live = keys.filter((k) => !k.revokedAt);
@@ -46,20 +49,29 @@ export function PublisherApiKeys({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-xs text-muted-foreground">
-        Publisher gửi khoá trong header <code className="rounded bg-muted px-1 py-0.5">Authorization: Bearer &lt;key&gt;</code> khi gọi{" "}
-        <code className="rounded bg-muted px-1 py-0.5">/api/v1</code>. Khoá này chỉ đọc được niche{" "}
-        <strong>{vertical}</strong> — gọi niche khác sẽ nhận 403.
+        Bấm <em>Tạo khoá</em> là khoá được sinh ra và <strong>đẩy thẳng sang site</strong> qua revalidate secret — không phải mở{" "}
+        <code className="rounded bg-muted px-1 py-0.5">.env</code>, không phải restart. Khoá chỉ đọc được niche{" "}
+        <strong>{vertical}</strong>; gọi niche khác nhận 403.
       </p>
+
+      {createState.ok && createState.pushed === true && (
+        <div className="rounded-md border border-green-300 bg-green-50 p-3">
+          <p className="text-xs text-green-900">{createState.message}</p>
+          <p className="mt-1 text-xs text-green-900">
+            Khoá đi thẳng từ đây sang site, không hiện ra màn hình và không cần mở <code className="rounded bg-white px-1">.env</code>.
+          </p>
+        </div>
+      )}
 
       {revealed && (
         <div className="rounded-md border border-amber-300 bg-amber-50 p-3">
           <p className="text-xs font-medium text-amber-900">
-            Copy ngay. HQ chỉ lưu bản băm, nên đây là lần duy nhất khoá này hiện ra — mất thì tạo khoá khác, không tìm lại được.
+            Chưa đẩy sang site được, nên phải đặt tay. Copy ngay — HQ chỉ lưu bản băm, đây là lần duy nhất khoá hiện ra.
           </p>
           <code className="mt-2 block break-all rounded bg-white px-2 py-1 font-mono text-xs">{revealed}</code>
           <p className="mt-2 text-xs text-amber-900">
-            Dán vào <code className="rounded bg-white px-1">HQ_API_KEY</code> trong <code className="rounded bg-white px-1">.env</code> của
-            publisher.
+            Dán vào <code className="rounded bg-white px-1">HQ_API_KEY</code> trong <code className="rounded bg-white px-1">.env.production</code>{" "}
+            của publisher rồi restart service.
           </p>
         </div>
       )}
@@ -105,7 +117,9 @@ export function PublisherApiKeys({
         là làm site chết trong quãng giữa.
       </p>
       {createState.message && !createState.ok && <p className="text-xs text-destructive">{createState.message}</p>}
-      {createState.ok && createState.message && <p className="text-xs text-muted-foreground">{createState.message}</p>}
+      {createState.ok && createState.pushed !== true && createState.message && (
+        <p className="text-xs text-amber-700">{createState.message}</p>
+      )}
       {revokeState.message && <p className="text-xs text-muted-foreground">{revokeState.message}</p>}
     </div>
   );
