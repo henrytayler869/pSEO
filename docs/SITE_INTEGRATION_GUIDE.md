@@ -1463,25 +1463,45 @@ Quét DataForSEO OnPage trên `atmovingservices.com`, 194 trang, điểm 97,2.
 Mỗi mục dưới đây là một lỗi THẬT đã nổ, kèm nguyên nhân và luật để site mới
 không lặp lại. Sắp theo số trang dính, không theo mức độ.
 
-### `title_too_long` — 78/194 trang
+### `title_too_long` — 78/194 trang, và nguyên nhân KHÔNG phải cái ai cũng nghĩ
 
-Đây là lỗi lớn nhất và nó **do chính quy tắc chống trùng sinh ra**. Đo trên
-40 trang mẫu: dài nhất 76 ký tự, giữa 63, **29 trang quá 60 ký tự**.
-
-Nguồn gốc: 125/174 tiêu đề từng quá 65 ký tự và 48 trang dùng CHUNG một tiêu
-đề, nên ZIP được đưa vào tiêu đề để phân biệt — và tiêu đề dài thêm 6 ký tự.
-Chống trùng và giữ ngắn kéo ngược nhau; site đầu chọn chống trùng.
-
-**Luật cho site mới:** dựng tiêu đề theo ngân sách ký tự, không theo mẫu cố
-định. Ưu tiên bỏ phần thừa TRƯỚC khi bỏ phần phân biệt:
+Bản đầu của mục này quy lỗi cho việc đưa ZIP vào tiêu đề để chống trùng.
+**Sai.** Đo lại bằng cách đọc 194 tiêu đề thật:
 
 ```
-{Dịch vụ} in {Thành phố}, {Bang} {ZIP}      ← ZIP chỉ thêm khi thành phố trùng
+"Moving Services in Nashville-Davidson, TN — 2 ZIP codes compared | AT Moving Services"
+                                                                  └──────────────────┘
+                                                                   21 ký tự, MỌI trang
 ```
 
-Tên bang viết tắt (`TX` không phải `Texas`), bỏ hậu tố thương hiệu ở trang
-con, và kiểm ĐỘ DÀI lúc build — một tiêu đề 76 ký tự bị Google cắt, nên phần
-phân biệt nằm ở cuối chính là phần biến mất.
+`title.template` ở `app/layout.tsx` nối `" | <tên site>"` vào mọi trang, và
+`generateMetadata` của từng trang không hề biết. Bỏ riêng nó:
+
+| | quá 60 | quá 65 | dài nhất | trùng |
+|---|---|---|---|---|
+| trước | 178 | **78** | 85 | 0 |
+| sau | 3 | **0** | 64 | 0 |
+
+Toàn bộ vấn đề nằm ở một dòng cấu hình, không nằm ở 78 trang. Và nó vô hình
+với người đọc code từng trang — chỗ đặt tiêu đề và chỗ nối hậu tố cách nhau
+cả cây thư mục.
+
+**Luật cho site mới:**
+
+1. Trang pSEO tự khai tiêu đề đầy đủ bằng `title: { absolute: ... }`. Chúng
+   đã tự đủ nghĩa và đã dài; hậu tố chỉ đẩy phần phân biệt ra khỏi chỗ
+   Google cắt.
+2. Trang biên tập (`/about`, `/contact`, `/privacy`) **giữ** template. Hậu
+   tố đáng giá đúng ở đây: `"About"` một mình là tiêu đề vô nghĩa. Bỏ
+   template một cách mù quáng biến nó thành 5 ký tự.
+3. Đo tiêu đề bằng cách **render trang rồi đọc thẻ `<title>`**, đừng đo
+   chuỗi trong `generateMetadata`. Hai thứ đó khác nhau đúng 21 ký tự, và
+   đó là toàn bộ câu chuyện này.
+
+ZIP trong tiêu đề vẫn là chuyện có thật và vẫn đáng cân nhắc — 48 trang từng
+dùng chung một tiêu đề trước khi thêm ZIP — nhưng nó KHÔNG phải nguyên nhân
+của 78 trang này. Sau khi bỏ hậu tố, tiêu đề có ZIP dài 39-53 ký tự và
+không trang nào trùng.
 
 ### `low_content_rate` — 192/194 trang, và 158 trong số đó BỊ BÁO OAN
 
