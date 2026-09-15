@@ -77,7 +77,6 @@ model MarketIdentity {
   zip      String
   vertical String
 
-
   // Descriptive label only, frozen at first sighting. City/state for a given
   // zip essentially never change in practice; if a later import disagrees,
   // that's coverage-file noise, not a reason to treat this as versioned data.
@@ -191,7 +190,6 @@ model KeywordMetric {
 model SemanticKeyword {
   id       String @id @default(cuid())
   vertical String
-
 
   keyword           String
   searchVolume      Int
@@ -482,7 +480,7 @@ model AiGeneration {
   id       String @id @default(cuid())
   vertical String
 
-  zip      String
+  zip String
 
   // Fingerprint of the exact facts the text was generated from. Cache hits
   // require an identical fingerprint, so re-collecting data (new snapshot,
@@ -494,10 +492,10 @@ model AiGeneration {
   prompt String // stored verbatim: without it, a suspect output can't be diagnosed
   text   String
 
-  model            String
-  inputTokens      Int
-  outputTokens     Int
-  costUsd          Float
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  costUsd      Float
 
   // Write-time verdict. Text that fails validation is still stored (with
   // the reason) rather than dropped — a rejected generation is evidence
@@ -537,10 +535,10 @@ model AiClusterGeneration {
   prompt String
   text   String
 
-  model       String
-  inputTokens Int
+  model        String
+  inputTokens  Int
   outputTokens Int
-  costUsd     Float
+  costUsd      Float
 
   validationPassed Boolean
   validationNotes  String?
@@ -564,7 +562,7 @@ model AiClusterGeneration {
 /// từng URL. Nên bảng này ghi lại phía mình đã gửi gì; câu trả lời "đã index
 /// chưa" lấy từ URL Inspection của Google, không lấy từ họ.
 model IndexSubmission {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   websiteId String
   website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
@@ -601,21 +599,20 @@ model AiSpend {
   /**
    * Nullable since 2026-09-11: an editorial article spans many ZIPs, so there
    * is no single one to charge it to.
-   *
    * The row is still written, and that is the point — `getTotalSpendUsd()`
    * sums this table with no filter, so anything that skipped it would spend
    * outside the hard cap. A second ledger for articles would have been the
    * easy shape and would have made the cap silently stop covering the newest
    * way to spend money.
    */
-  zip      String?
+  zip String?
 
   /// Set for article generation, so per-publisher cost is a query rather than
   /// an estimate. Null for market interpretation, which is not per-site.
   websiteId String?
   articleId String?
 
-  model    String
+  model String
 
   inputTokens  Int
   outputTokens Int
@@ -688,12 +685,12 @@ model Domain {
 /// A button offering to add arbitrary new logic as data would be a lie, and
 /// the lie would only surface the day someone relied on a rule that never ran.
 model QcRule {
-  id      String  @id @default(cuid())
+  id String @id @default(cuid())
 
   /// "content" or "technical" — which checklist it belongs to.
   kind    String
   /// Matches a coded check id for built-ins; free text for custom rules.
-  checkId String  @unique
+  checkId String @unique
   label   String
   why     String
 
@@ -724,7 +721,7 @@ model QcRule {
 /// numeric contract enforceable: almost nothing in the page came from a model,
 /// so almost nothing in it can be invented.
 model ArticleTemplate {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   websiteId String
   website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
@@ -750,7 +747,7 @@ model ArticleTemplate {
 
 /// One editorial article, from candidate to WordPress draft.
 model Article {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   websiteId String
   website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
@@ -766,7 +763,6 @@ model Article {
 
   /**
    * Every attempt, not just the last.
-   *
    * A rewrite loop that only kept the winning draft would hide the thing most
    * worth seeing: which check failed, how often, and whether the model fixed
    * it or merely moved the problem. Cost is charged per attempt, so attempts
@@ -794,15 +790,15 @@ model Article {
 
 /// A batch run, so a long generation can be watched and resumed.
 model ArticleJob {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   websiteId String
   website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
 
   intent String
 
-  total   Int @default(0)
-  done    Int @default(0)
-  failed  Int @default(0)
+  total  Int @default(0)
+  done   Int @default(0)
+  failed Int @default(0)
 
   /// "running" | "done" | "stopped". A job left "running" with no progress is
   /// a job whose process died — visible as a stuck bar rather than as silence.
@@ -812,8 +808,8 @@ model ArticleJob {
   currentTitle String?
   error        String?
 
-  startedAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  startedAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([websiteId, status])
 }
@@ -851,55 +847,45 @@ model Website {
 
   /**
    * WordPress Application Password, for WRITING posts from this panel.
-   *
    * Two fields because WP Basic auth needs both, and the username is not
    * derivable — an Application Password is issued TO a user account.
-   *
    * NOT the account password. WordPress issues application passwords per
    * application; they can be revoked one at a time without changing the login,
    * and they are what WP itself documents for REST writes. Head Quarter never
    * holds the account password.
-   *
    * Nullable, and reading still works without it: WP serves published content
    * unauthenticated. So a site with no credential shows a read-only list
    * rather than an error — but it cannot see drafts, and the UI says so
    * instead of showing a shorter list that looks complete.
-   *
    * Stored in the clear, same as `revalidateSecret` above. That is the
    * existing shape of this table and not a decision made here; the panel sits
    * behind Basic Auth on nginx and the database is not reachable from the
    * internet. Worth revisiting together with revalidateSecret if either ever
    * needs to be, not one at a time.
    */
-  wpUsername       String?
-  wpAppPassword    String?
+  wpUsername    String?
+  wpAppPassword String?
 
   /**
    * Shared secret proving a WordPress request came from Head Quarter itself.
-   *
    * Sent as X-Atms-Loopback on every write. The publisher's must-use plugin
    * compares it and only then re-enables Application Passwords, which
    * WordPress disables on non-SSL connections.
-   *
    * Why a secret rather than a network property. Three network-based scopes
    * were tried and each rested on an assumption about the infrastructure:
-   *
-   *   REMOTE_ADDR === 127.0.0.1   never matches — the published port means the
-   *                               container sees the bridge gateway
-   *   absence of X-Forwarded-For  measured false 2026-09-10: mod_remoteip
-   *                               CONSUMES the header, so PHP never sees it and
-   *                               the filter matched every non-SSL request
-   *   REMOTE_ADDR in RFC1918      still rests on mod_remoteip, the very thing
-   *                               we had just proven we misunderstood
-   *
+   * REMOTE_ADDR === 127.0.0.1   never matches — the published port means the
+   * container sees the bridge gateway
+   * absence of X-Forwarded-For  measured false 2026-09-10: mod_remoteip
+   * CONSUMES the header, so PHP never sees it and
+   * the filter matched every non-SSL request
+   * REMOTE_ADDR in RFC1918      still rests on mod_remoteip, the very thing
+   * we had just proven we misunderstood
    * A string comparison rests on nothing. Docker can renumber its subnet, the
    * published port can change, a proxy can be added — none of it moves this.
-   *
    * The threat model is unchanged: whatever can read this secret can already
    * read /opt/pseo/.env on the same host. It is not an escalation path. What it
    * buys is that everyone ELSE — including a public HTTP route someone adds
    * later — is excluded without anyone having to remember why.
-   *
    * Null means the publisher has no such plugin, and writes then fail with 401
    * rather than succeeding through a wider door.
    */
@@ -910,17 +896,17 @@ model Website {
    * Control Panel makes from the same metrics — a site chasing index coverage
    * and a site chasing leads read the same numbers and should be told
    * different things.
-   *
    * Null means nobody has chosen, and the panel says so rather than assuming
    * traffic. An assumed goal produces confident advice for a target the owner
    * never set.
    */
   goal String?
 
-  articles     Article[]
-  articleJobs  ArticleJob[]
-  templates    ArticleTemplate[]
+  articles         Article[]
+  articleJobs      ArticleJob[]
+  templates        ArticleTemplate[]
   indexSubmissions IndexSubmission[]
+  apiKeys          PublisherApiKey[]
 
   // Search Console property identity, e.g. "sc-domain:example.com" or
   // "https://example.com/" (URL-prefix form) — GSC requires the exact
@@ -958,16 +944,8 @@ model Website {
   onPageTaskAt   DateTime?
   onPageMaxPages Int?
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([gscPropertyUrl])
-
-  // Khai ở đây vì migration 20260912000000 đã TẠO index này trên
-  // database. Thiếu dòng này thì schema và migrations lệch nhau vĩnh viễn,
-  // và `prisma migrate diff` — phép kiểm duy nhất bắt được cột khai nhầm
-  // model — sẽ đỏ sẵn, tức là một cổng người ta sẽ tắt.
-  @@index([vertical])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
   /// Ngân sách AI của publisher này, USD. Null = chưa đặt.
   ///
   /// MỀM, không chặn. Nội dung của publisher phụ thuộc hoàn toàn vào AI,
@@ -980,6 +958,12 @@ model Website {
   /// sai cho câu hỏi người ta thực sự hỏi.
   aiBudgetUsd Float?
 
+  @@unique([gscPropertyUrl])
+  // Khai ở đây vì migration 20260912000000 đã TẠO index này trên
+  // database. Thiếu dòng này thì schema và migrations lệch nhau vĩnh viễn,
+  // và `prisma migrate diff` — phép kiểm duy nhất bắt được cột khai nhầm
+  // model — sẽ đỏ sẵn, tức là một cổng người ta sẽ tắt.
+  @@index([vertical])
 }
 
 /// Một lần ĐO trạng thái index của một URL.
@@ -990,7 +974,7 @@ model Website {
 /// nhất: mỗi lần đo ghi đè lần trước, nên không ai thấy được một URL từng
 /// vào chỉ mục rồi rơi ra.
 model IndexCheck {
-  id           String @id @default(cuid())
+  id           String          @id @default(cuid())
   submissionId String
   submission   IndexSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
@@ -1008,4 +992,59 @@ model IndexCheck {
   checkedAt DateTime @default(now())
 
   @@index([submissionId, checkedAt])
+}
+
+/// Khoá API của MỘT publisher, thay cho một khoá dùng chung cho tất cả.
+///
+/// Vì sao đổi: khoá dùng chung cũ nằm NGUYÊN VĂN trong AppConfig, đọc được
+/// mọi niche, và không thu hồi riêng cho ai được — thu hồi nó là làm chết
+/// mọi site cùng lúc. Với một publisher thì đó là bất tiện; với publisher
+/// thứ hai thì đó là lý do không ai dám thu hồi, tức là một khoá không thu
+/// hồi được.
+///
+/// Nhiều hàng còn sống cho cùng một website là CỐ Ý: xoay khoá phải là tạo
+/// khoá mới → đổi bên publisher → thu hồi khoá cũ. Ép mỗi site một khoá thì
+/// mọi lần xoay đều có một quãng site chết.
+model PublisherApiKey {
+  id String @id @default(cuid())
+
+  /// Null = khoá KHÔNG giới hạn niche. Chỉ đúng một hàng như vậy tồn tại:
+  /// khoá dùng chung cũ, được chuyển vào bảng này để đường xác thực chỉ có
+  /// MỘT nhánh thay vì một nhánh mới và một nhánh dự phòng.
+  ///
+  /// Ràng buộc "chỉ một" cố tình KHÔNG đặt bằng partial unique index: Prisma
+  /// không biểu diễn được index đó, nên nó sẽ hiện ra là lệch schema và làm
+  /// đỏ sẵn `prisma migrate diff` — cổng duy nhất bắt được cột khai nhầm.
+  /// Một cổng đỏ sẵn là một cổng người ta sẽ tắt. Ràng buộc nằm ở
+  /// scripts/backfill-legacy-api-key.ts, và nó chỉ chạy một lần.
+  websiteId String?
+  website   Website? @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  /// Phần đầu khoá, nguyên văn. KHÔNG bí mật — đây là thứ hiện trên màn hình
+  /// để biết "khoá nào", và là thứ tra cứu, vì khoá đầy đủ chỉ lưu dạng băm.
+  keyPrefix String @unique
+
+  /// SHA-256 của khoá đầy đủ. Khoá đầy đủ KHÔNG tồn tại ở đâu trong hệ thống
+  /// này sau khi màn hình sinh khoá đóng lại. Đó là điểm của thay đổi.
+  keyHash String @unique
+
+  /// Ai/cái gì cầm khoá này, do người đặt. Để khi cần thu hồi thì biết thu
+  /// hồi cái nào mà không phải đoán.
+  label String
+
+  /// Lần cuối khoá này xác thực thành công. Ghi có tiết chế (xem
+  /// lib/api/auth.ts) vì nó nằm trên đường đi của mọi request.
+  ///
+  /// Đây là thứ duy nhất trả lời được "thu hồi khoá này có làm chết gì
+  /// không". Thiếu nó thì việc thu hồi khoá cũ vĩnh viễn là một canh bạc, và
+  /// người ta sẽ chọn không thu hồi.
+  lastUsedAt DateTime?
+
+  /// Đánh dấu thay vì xoá hàng: một khoá đã thu hồi vẫn cần đọc được để trả
+  /// lời "khoá bị lộ hôm đó đã dùng lần cuối lúc nào".
+  revokedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([websiteId])
 }

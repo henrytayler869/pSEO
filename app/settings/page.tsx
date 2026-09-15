@@ -5,7 +5,7 @@ import { CredentialFieldRow } from "@/components/credential-field-row";
 import { ApiKeyManager } from "@/components/api-key-manager";
 import { ServiceAccountManager } from "@/components/service-account-manager";
 import { CREDENTIAL_FIELDS, getCredentialStatuses, type CredentialField } from "@/lib/settings/credentials";
-import { getApiKeyStatus } from "@/lib/settings/api-key";
+import { getLegacyKeyStatus } from "@/lib/settings/api-key";
 import { getServiceAccountStatus } from "@/lib/google/service-account";
 import { ChangePasswordForm } from "@/components/change-password-form";
 import { getAdminPasswordHash } from "@/lib/auth/password";
@@ -18,7 +18,7 @@ export default async function SettingsPage() {
   const gateOn = loginRequired();
   const statuses = await getCredentialStatuses();
   const statusByName = new Map(statuses.map((s) => [s.name, s]));
-  const apiKeyStatus = await getApiKeyStatus();
+  const legacyKey = await getLegacyKeyStatus();
   const serviceAccountStatus = await getServiceAccountStatus();
   const qcRules = await listQcRules();
 
@@ -89,12 +89,17 @@ export default async function SettingsPage() {
         <CardHeader>
           <CardTitle>Cổng API (cho plugin/website)</CardTitle>
           <CardDescription>
-            Expose dataset niche đã nghiên cứu (số liệu từ khóa, keyword chính, keyword semantic) qua API để website
-            thật gọi vào — thay vì dựng trang ngay trong control panel này.
+            Mỗi publisher có khoá riêng, tạo ở trang của publisher đó, và chỉ đọc được niche của chính nó.
+            Phần dưới đây là khoá dùng chung cũ còn sót lại.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <ApiKeyManager configured={apiKeyStatus.configured} masked={apiKeyStatus.masked} />
+          <ApiKeyManager
+            exists={legacyKey.exists}
+            masked={legacyKey.masked}
+            lastUsedAt={legacyKey.lastUsedAt}
+            revokedAt={legacyKey.revokedAt}
+          />
         </CardContent>
       </Card>
       <Card>

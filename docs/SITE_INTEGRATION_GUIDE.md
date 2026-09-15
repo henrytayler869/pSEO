@@ -153,11 +153,33 @@ hoặc
 X-Api-Key: <key>
 ```
 
-Key lấy ở Control Panel → **Cài đặt** → "Cổng API (cho plugin/website)" →
-*Tạo lại*. Chỉ tồn tại **một key tại một thời điểm** — tạo key mới sẽ thu
-hồi key cũ ngay, mọi nơi đang dùng key cũ sẽ ngừng hoạt động.
+Key lấy ở Control Panel → **Publisher** → chọn publisher của bạn → thẻ
+**"Khoá API của publisher này"** → *Tạo khoá*. Dán vào `HQ_API_KEY` trong
+`.env` của publisher.
 
-Sai key → `401`:
+Ba điều phải biết trước khi bấm:
+
+**Khoá hiện ra ĐÚNG MỘT LẦN.** HQ chỉ lưu bản băm SHA-256, không lưu nguyên
+văn — nên không có màn hình nào xem lại được. Mất thì tạo khoá khác.
+
+**Khoá chỉ đọc được niche của publisher đó.** Gọi niche khác nhận `403` chứ
+không phải `401`, và thông báo nói rõ khoá thuộc publisher nào:
+
+```json
+{ "error": "Khoá này thuộc publisher \"AT Moving\" (niche \"moving-services\") nên không đọc được niche \"auto-accident-attorney\"." }
+```
+
+`/niches` cũng đã lọc: nó chỉ trả về niche của khoá đang gọi, không còn trả
+về cả danh sách.
+
+**Xoay khoá theo thứ tự này, không đảo:** tạo khoá mới → đổi `HQ_API_KEY`
+bên publisher → đợi dòng *"dùng …"* của khoá cũ trong Control Panel ngừng
+chạy → thu hồi khoá cũ. Thu hồi trước khi đổi là làm site chết trong quãng
+giữa. Mỗi publisher được giữ nhiều khoá còn sống cùng lúc chính là để bước
+này không có khoảng đứt.
+
+Sai key, khoá đã thu hồi, khoá không tồn tại — cả ba đều là `401` và giống
+hệt nhau từ bên ngoài:
 ```json
 { "error": "Unauthorized — provide a valid API key via 'Authorization: Bearer <key>' or 'X-Api-Key' header." }
 ```

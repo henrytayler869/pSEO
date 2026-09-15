@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { requireApiKey } from "@/lib/api/auth";
 import { apiJson } from "@/lib/api/cache-policy";
+import { normalizeHost } from "@/lib/publisher/link-domain";
 
 /**
  * GET /api/v1/sites/{host}/config — the settings a published site needs about
@@ -20,10 +21,10 @@ import { apiJson } from "@/lib/api/cache-policy";
  * "https://example.com" cannot disagree about whether they are the same site.
  */
 export async function GET(request: Request, context: RouteContext<"/api/v1/sites/[host]/config">) {
-  const unauthorized = await requireApiKey(request);
-  if (unauthorized) return unauthorized;
-
   const { host } = await context.params;
+
+  const unauthorized = await requireApiKey(request, { host: decodeURIComponent(host) });
+  if (unauthorized) return unauthorized;
   const wanted = normalizeHost(decodeURIComponent(host));
   if (!wanted) {
     return apiJson({ error: "Thiếu host." }, { status: 400 });
@@ -41,7 +42,10 @@ export async function GET(request: Request, context: RouteContext<"/api/v1/sites
     return apiJson(
       {
         error: `Chưa có website nào đăng ký cho host "${wanted}".`,
-        registeredHosts: websites.map((w) => normalizeHost(w.url)).filter(Boolean),
+        // Cố tình KHÔNG liệt kê các host khác. Trước đây có, và nó biến một
+        // lỗi gõ nhầm host thành danh sách mọi site đang chạy. Với khoá theo
+        // publisher thì nhánh này gần như chỉ còn khoá dùng chung cũ chạm
+        // tới, nhưng "gần như" không phải lý do để vẫn rò.
       },
       { status: 404 }
     );
@@ -58,15 +62,3 @@ export async function GET(request: Request, context: RouteContext<"/api/v1/sites
   });
 }
 
-/** Host only, lowercased, `www.` stripped — so the apex and the www form of
- * one site never resolve to two different answers. */
-function normalizeHost(input: string): string {
-  const raw = input.trim();
-  if (!raw) return "";
-  try {
-    const withScheme = raw.includes("://") ? raw : `https://${raw}`;
-    return new URL(withScheme).host.toLowerCase().replace(/^www\./, "");
-  } catch {
-    return raw.toLowerCase().replace(/^www\./, "");
-  }
-}

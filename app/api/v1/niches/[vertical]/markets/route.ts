@@ -10,10 +10,13 @@ import { apiJson } from "@/lib/api/cache-policy";
  * it actually builds.
  */
 export async function GET(request: Request, ctx: RouteContext<"/api/v1/niches/[vertical]/markets">) {
-  const unauthorized = await requireApiKey(request);
+  const { vertical } = await ctx.params;
+
+  // Phạm vi trước, dữ liệu sau: khoá của publisher này chỉ đọc được
+  // niche của chính nó.
+  const unauthorized = await requireApiKey(request, { vertical });
   if (unauthorized) return unauthorized;
 
-  const { vertical } = await ctx.params;
   const markets = await getTrafficRankedMarkets(vertical);
   if (markets.length === 0) {
     return apiJson({ error: `No researched markets found for vertical "${vertical}".` }, { status: 404 });

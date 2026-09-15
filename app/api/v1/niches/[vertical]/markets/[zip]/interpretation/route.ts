@@ -22,10 +22,13 @@ export async function GET(
   request: Request,
   ctx: RouteContext<"/api/v1/niches/[vertical]/markets/[zip]/interpretation">
 ) {
-  const unauthorized = await requireApiKey(request);
+  const { vertical, zip } = await ctx.params;
+
+  // Phạm vi trước, dữ liệu sau: khoá của publisher này chỉ đọc được
+  // niche của chính nó.
+  const unauthorized = await requireApiKey(request, { vertical });
   if (unauthorized) return unauthorized;
 
-  const { vertical, zip } = await ctx.params;
 
   // Reading NEVER spends. Generating is opt-in via ?generate=1.
   //
