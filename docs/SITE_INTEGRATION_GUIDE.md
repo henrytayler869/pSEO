@@ -1197,11 +1197,50 @@ Kiểm: đếm trang cần đoạn trên site, đếm đoạn ở HQ, hai số p
 Nếu site có 31 trang cụm mà chỉ gọi thành công 28 lần thì 3 trang đang thiếu
 chữ — và như đã nói ở đầu mục, không có gì báo cho bạn biết.
 
-⚠️ Hub một-ZIP có tập ZIP MỘT phần tử, và nó không được nhận đoạn của trang
-market cùng ZIP đó: hai trang nằm cách nhau một cú bấm, nên trùng nhau là
-trùng ở chỗ dễ thấy nhất. HQ chặn bằng một phép đo độ trùng giữa hai văn bản
-(đo được 5-9 từ, trần 16), không phải bằng niềm tin rằng prompt khác nhau
-thì văn khác nhau.
+### Site gửi TẬP ZIP nào, cho trang nào
+
+Cả ba loại dùng chung một endpoint. Thứ quyết định là tập ZIP, nên gửi sai
+tập là `404` im lặng — trang vẫn build, chỉ là không có chữ.
+
+| trang | gửi gì |
+|---|---|
+| trang cụm | ZIP thành viên của cụm |
+| hub bang | **mọi ZIP bang đó publish** — market lẻ CỘNG thành viên cụm |
+| hub bang 1 ZIP | đúng ZIP đó |
+
+Hub bang phải lấy từ manifest, **không phải từ danh sách đang hiển thị trên
+trang**: hub thường chỉ liệt kê market lẻ và link sang trang cụm, nên lấy
+theo những gì đang hiện sẽ thiếu mọi thành viên cụm — một tập khác, một
+`clusterId` khác, `404`.
+
+⚠️ **Bang mà MỌI ZIP nằm trong đúng MỘT trang cụm thì hub KHÔNG lấy đoạn.**
+Tập của bang bằng hệt tập của cụm, nên hai trang nhận cùng một đoạn và đăng
+trùng nhau từng chữ — giữa một trang và trang con của nó. Đo trên site đầu:
+2 bang như vậy. HQ đã bỏ qua chúng lúc sinh, site cũng phải bỏ qua lúc
+render; cả hai đầu cùng biết thì không đầu nào dựa vào đầu kia.
+
+Ngoại lệ của ngoại lệ: bang cluster-only có **từ hai cụm trở lên** thì tập
+bang khác tập từng cụm, và đoạn cấp bang là chính đáng — nó nói dải GIỮA các
+cụm. Hôm nay chưa site nào có ca đó.
+
+### ⚠️⚠️ Bài học "một giả định, ba tầng"
+
+Tập MỘT ZIP là hợp lệ. Nhưng giả định *"cụm nghĩa là từ 2 ZIP trở lên"* từng
+được viết độc lập ở **ba tầng**, và sửa tầng này không làm lộ tầng sau:
+
+```
+1. route /cluster-interpretation   → 400 "Cần ít nhất 2 ZIP"
+2. HQ getCachedClusterText         → dựng fact set cụm, null với 1 ZIP
+3. site fetchClusterInterpretation → not-found trước cả khi gọi mạng
+```
+
+Suốt ba vòng sửa, 7 đoạn đã sinh xong, mọi cổng kiểm ở HQ đều qua, hai luật
+của site cũng qua — và trang vẫn đúng 171 từ. Một giả định lặp ở ba tầng
+không phải ba lớp phòng thủ, mà là ba chỗ phải nhớ sửa.
+
+Cách duy nhất phát hiện là **đo ở đầu cuối**: `HTTP 200` ở tầng API không
+chứng minh chữ lên tới trang. Khi dựng site mới, kiểm bằng cách đếm từ trên
+trang thật, đừng kiểm bằng mã trạng thái của endpoint.
 
 ---
 
@@ -1516,8 +1555,29 @@ cụm gồm những ZIP nào — quy tắc gộp sống ở site, HQ không tín
 Chạy trước khi site lên thì HQ không có gì để đọc.
 
 ```bash
-npm run cluster:generate -- --site <host>     # đoạn cấp cụm
+npm run cluster:generate -- --site <host>        # trang cụm
+npm run state:generate -- --site <host>          # hub bang (từ 2 ZIP)
+npm run solo-state:generate -- --site <host>     # hub bang chỉ 1 ZIP
 ```
+
+**Ba lệnh, không phải một**, vì site có ba loại trang cần đoạn và mỗi loại
+nói một khẳng định khác — xem bảng ở §3.7c. Bỏ sót một lệnh nghĩa là một
+loại trang im lặng không có chữ, và không gì báo cho bạn biết.
+
+⚠️ **Hub bang mới là chỗ mỏng, không phải trang thị trường.** Đo 14/9/2026
+trên site đầu, đếm TỪ hiển thị theo độ sâu đường dẫn:
+
+| độ sâu | loại trang | số từ |
+|---|---|---|
+| 3 | 158 trang thị trường | 891 – 1.295 |
+| 2 | 26 trang hub bang | **111 – 541**, giữa 225 |
+
+Và trong 4 trang Google đã crawl rồi **không lấy**, hai trang là hub. Google
+đọc hub mỏng rồi từ chối, trong khi 158 trang dày thì chưa crawl tới. Nếu
+chỉ chạy `cluster:generate` thì đúng phần Google đang từ chối là phần không
+được chữa.
+
+Sau ba lệnh, hub bang lên 364–805 từ.
 
 `--site` bắt buộc từ site thứ hai trở đi. Với một site thì bỏ được, nhưng
 nếu có nhiều site mà không nêu, script **dừng lại và liệt kê** thay vì đoán:
