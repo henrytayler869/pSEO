@@ -54,6 +54,33 @@ function announceIfProduction(): void {
 }
 announceIfProduction();
 
+/** Cổng của container dùng một lần trên máy này. */
+const LOCAL_DB_PORT = ":5433";
+
+/**
+ * Chặn cứng cho script nào TẠO rồi XOÁ dữ liệu — tức là script chỉ đúng khi
+ * database là thứ vứt đi được.
+ *
+ * Danh sách CHO PHÉP, không phải danh sách cấm: điều kiện là cổng PHẢI là
+ * container cục bộ. Viết ngược lại ("miễn không phải 55433") thì một đích
+ * thứ ba — tunnel khác, staging, bản sao — sẽ mặc định được cho qua.
+ *
+ * Đây là hàm chung chứ không phải một đoạn kiểm trong từng script, vì hai
+ * cổng chỉ khác nhau một chữ số và cả hai đều là 127.0.0.1. Một guard tự
+ * viết rất dễ kiểm "có phải localhost không" — câu hỏi mà tunnel trả lời là
+ * CÓ. Đã xảy ra đúng như vậy khi viết bảng PublisherApiKey: 2 hàng Website
+ * và 3 hàng khoá được tạo rồi xoá trên production trước khi ai kịp nhận ra.
+ */
+export function assertLocalDatabase(purpose: string): void {
+  const url = process.env.DATABASE_URL ?? "";
+  if (url.includes(LOCAL_DB_PORT)) return;
+  const where = url.includes(":55433") ? "tunnel tới PRODUCTION (cổng 55433)" : `đích không nhận ra (${url.replace(/:\/\/[^@]*@/, "://***@")})`;
+  throw new Error(
+    `${purpose} chỉ được chạy trên container cục bộ (cổng 5433). DATABASE_URL đang trỏ tới ${where}.\n` +
+      "  Hai cổng khác nhau một chữ số và cả hai đều là 127.0.0.1 — kiểm 'có phải localhost' KHÔNG phân biệt được."
+  );
+}
+
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };

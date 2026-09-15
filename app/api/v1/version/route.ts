@@ -19,7 +19,7 @@ import { apiJson } from "@/lib/api/cache-policy";
  * asks.
  */
 export async function GET(request: Request) {
-  const unauthorized = await requireApiKey(request);
+  const unauthorized = await requireApiKey(request, "no-scope");
   if (unauthorized) return unauthorized;
 
   return apiJson({

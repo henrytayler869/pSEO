@@ -22,10 +22,13 @@ import { apiJson } from "@/lib/api/cache-policy";
  * collected data yet for this specific zip, not an error.
  */
 export async function GET(request: Request, ctx: RouteContext<"/api/v1/niches/[vertical]/markets/[zip]">) {
-  const unauthorized = await requireApiKey(request);
+  const { vertical, zip } = await ctx.params;
+
+  // Phạm vi trước, dữ liệu sau: khoá của publisher này chỉ đọc được
+  // niche của chính nó.
+  const unauthorized = await requireApiKey(request, { vertical });
   if (unauthorized) return unauthorized;
 
-  const { vertical, zip } = await ctx.params;
 
   const identity = await prisma.marketIdentity.findUnique({
     where: { zip_vertical: { zip, vertical } },

@@ -14,7 +14,10 @@ import { buildContentRules } from "@/lib/content-rules/registry";
  * metric resolutions describe data this repository is private about.
  */
 export async function GET(request: Request) {
-  const unauthorized = await requireApiKey(request);
+  // "no-scope" có chủ ý: đây là LUẬT mà mọi publisher phải tuân, không
+  // phải dữ liệu của một niche. Giấu luật của niche khác đi không bảo vệ
+  // được gì mà lại làm hai site thi hành hai bộ luật khác nhau.
+  const unauthorized = await requireApiKey(request, "no-scope");
   if (unauthorized) return unauthorized;
 
   return apiJson(await buildContentRules());

@@ -15,6 +15,8 @@ import { WpAdminLinkCell } from "@/components/wp-admin-link";
 import { SitemapSubmit } from "@/components/sitemap-submit";
 import { AiBudgetCard } from "@/components/ai-budget-card";
 import { getBudgetStatus } from "@/lib/ai/budget";
+import { PublisherApiKeys } from "@/components/publisher-api-keys";
+import { listPublisherKeys } from "@/lib/settings/api-key";
 
 export default async function WebsiteDetailPage({ params }: { params: Promise<{ websiteId: string }> }) {
   const { websiteId } = await params;
@@ -22,6 +24,7 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
   if (!detail) notFound();
 
   const budget = await getBudgetStatus(websiteId);
+  const apiKeys = await listPublisherKeys(websiteId);
 
   const { website, domain, wpAdmin, requiredPages, requiredPagesError, sitemaps, sitemapsError, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
 
@@ -153,6 +156,18 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
               ))}
             </ul>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Khoá API của publisher này</CardTitle>
+          <CardDescription>
+            Khoá riêng cho từng publisher, thu hồi được riêng, và chỉ đọc được niche của chính nó.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PublisherApiKeys websiteId={websiteId} vertical={detail.website.vertical} keys={apiKeys} />
         </CardContent>
       </Card>
 

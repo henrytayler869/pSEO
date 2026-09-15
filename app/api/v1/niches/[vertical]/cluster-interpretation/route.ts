@@ -28,10 +28,13 @@ export async function GET(
   request: Request,
   ctx: RouteContext<"/api/v1/niches/[vertical]/cluster-interpretation">
 ) {
-  const unauthorized = await requireApiKey(request);
+  const { vertical } = await ctx.params;
+
+  // Phạm vi trước, dữ liệu sau: khoá của publisher này chỉ đọc được
+  // niche của chính nó.
+  const unauthorized = await requireApiKey(request, { vertical });
   if (unauthorized) return unauthorized;
 
-  const { vertical } = await ctx.params;
   const raw = new URL(request.url).searchParams.get("zips") ?? "";
   const zips = raw.split(",").map((z) => z.trim()).filter(Boolean);
 

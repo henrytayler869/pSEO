@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { setCredentials, clearCredential, CREDENTIAL_FIELDS } from "@/lib/settings/credentials";
-import { generateApiKey, revokeApiKey } from "@/lib/settings/api-key";
+import { revokeLegacyKey } from "@/lib/settings/api-key";
 import { saveServiceAccountKey, clearServiceAccountKey } from "@/lib/google/service-account";
 import { getAdminPasswordHash, setAdminPassword } from "@/lib/auth/password";
 import { decidePasswordChange } from "@/lib/auth/change-password";
@@ -31,24 +31,11 @@ export async function clearServiceAccountKeyAction(_prev: ActionResult, _formDat
   return { ok: true, message: "Đã xoá Service Account." };
 }
 
-export interface GenerateApiKeyResult {
-  ok: boolean;
-  message: string;
-  key?: string;
-}
-
 // eslint-disable-next-line @typescript-eslint/no-unused-vars -- useActionState requires this exact (prevState, formData) signature; this action takes no input.
-export async function generateApiKeyAction(_prev: GenerateApiKeyResult, _formData: FormData): Promise<GenerateApiKeyResult> {
-  const key = await generateApiKey();
+export async function revokeLegacyKeyAction(_prev: ActionResult, _formData: FormData): Promise<ActionResult> {
+  await revokeLegacyKey();
   revalidatePath("/settings");
-  return { ok: true, message: "Đã tạo API key mới — lưu lại ngay, sẽ không hiển thị lại dạng đầy đủ.", key };
-}
-
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- useActionState requires this exact (prevState, formData) signature; this action takes no input.
-export async function revokeApiKeyAction(_prev: ActionResult, _formData: FormData): Promise<ActionResult> {
-  await revokeApiKey();
-  revalidatePath("/settings");
-  return { ok: true, message: "Đã thu hồi API key." };
+  return { ok: true, message: "Đã thu hồi khoá dùng chung. Mọi nơi còn dùng nó sẽ nhận 401 ngay lập tức." };
 }
 
 export async function saveCredentialsAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {

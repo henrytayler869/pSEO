@@ -8,6 +8,7 @@ import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "@/lib/goo
 import { notifySiteConfigChanged } from "@/lib/publisher/notify-site";
 import { normalizeHost } from "@/lib/publisher/link-domain";
 import { getVerticalsWithMarkets } from "@/lib/queries/verticals";
+import { createPublisherKey, revokePublisherKey } from "@/lib/settings/api-key";
 
 export interface ActionResult {
   ok: boolean;
@@ -283,4 +284,38 @@ export async function submitSitemapAction(_prev: ActionResult, formData: FormDat
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Nộp sitemap thất bại." };
   }
+}
+
+export interface CreateKeyResult {
+  ok: boolean;
+  message: string;
+  /** Giá trị đầy đủ, chỉ có trong ĐÚNG phản hồi này. Không endpoint nào đọc
+   * lại được — HQ chỉ lưu băm. */
+  key?: string;
+}
+
+export async function createPublisherKeyAction(_prev: CreateKeyResult, formData: FormData): Promise<CreateKeyResult> {
+  const websiteId = String(formData.get("websiteId") ?? "");
+  const label = String(formData.get("label") ?? "");
+  if (!websiteId) return { ok: false, message: "Thiếu website." };
+
+  const site = await prisma.website.findUnique({ where: { id: websiteId }, select: { vertical: true } });
+  if (!site) return { ok: false, message: "Không tìm thấy website." };
+
+  const { key } = await createPublisherKey(websiteId, label);
+  revalidatePath(`/publisher/${websiteId}`);
+  return {
+    ok: true,
+    message: `Khoá chỉ đọc được niche "${site.vertical}". Copy ngay — màn hình này là nơi duy nhất nó xuất hiện.`,
+    key,
+  };
+}
+
+export async function revokePublisherKeyAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("keyId") ?? "");
+  const websiteId = String(formData.get("websiteId") ?? "");
+  if (!id) return { ok: false, message: "Thiếu khoá." };
+  await revokePublisherKey(id);
+  if (websiteId) revalidatePath(`/publisher/${websiteId}`);
+  return { ok: true, message: "Đã thu hồi. Nơi nào còn dùng khoá này sẽ nhận 401 ngay lập tức." };
 }

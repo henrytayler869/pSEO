@@ -1,63 +1,75 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { generateApiKeyAction, revokeApiKeyAction, type GenerateApiKeyResult, type ActionResult } from "@/app/settings/actions";
+import { useActionState } from "react";
+import { revokeLegacyKeyAction, type ActionResult } from "@/app/settings/actions";
 import { Button } from "@/components/ui/button";
 
-const generateInitialState: GenerateApiKeyResult = { ok: false, message: "" };
 const revokeInitialState: ActionResult = { ok: false, message: "" };
 
-export function ApiKeyManager({ configured, masked }: { configured: boolean; masked?: string }) {
-  const [generateState, generateAction, generatePending] = useActionState(generateApiKeyAction, generateInitialState);
-  const [revokeState, revokeAction, revokePending] = useActionState(revokeApiKeyAction, revokeInitialState);
+function ago(d: Date | null | undefined): string {
+  if (!d) return "chưa lần nào";
+  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000);
+  if (days === 0) return "hôm nay";
+  return `${days} ngày trước`;
+}
 
-  // Same "detect the action-state transition during render" pattern as
-  // CredentialFieldRow — the plaintext key is only ever available in the
-  // single response right after generateApiKeyAction runs, so it has to be
-  // captured here rather than re-derived from status props (which only ever
-  // carry the masked tail).
-  const [handledGenerateState, setHandledGenerateState] = useState(generateState);
-  const [revealedKey, setRevealedKey] = useState<string | null>(null);
-  if (generateState !== handledGenerateState) {
-    setHandledGenerateState(generateState);
-    if (generateState.ok && generateState.key) setRevealedKey(generateState.key);
+/**
+ * Khoá dùng chung CŨ. Không có nút tạo mới — cố ý.
+ *
+ * Màn hình này trước đây sinh được khoá dùng chung, và đó là cách một hệ
+ * nhiều publisher lặng lẽ quay về một khoá cho tất cả. Khoá mới sinh ở trang
+ * của từng publisher.
+ */
+export function ApiKeyManager({
+  exists,
+  masked,
+  lastUsedAt,
+  revokedAt,
+}: {
+  exists: boolean;
+  masked?: string;
+  lastUsedAt?: Date | null;
+  revokedAt?: Date | null;
+}) {
+  const [revokeState, revokeAction, revokePending] = useActionState(revokeLegacyKeyAction, revokeInitialState);
+
+  if (!exists) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Không còn khoá dùng chung. Mỗi publisher dùng khoá riêng — tạo ở trang của publisher đó.
+      </p>
+    );
   }
 
-  const statusLabel = configured ? `Đã tạo (${masked})` : "Chưa tạo";
-  const statusColor = configured ? "text-green-700" : "text-muted-foreground";
+  const dead = !!revokedAt;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-        <span className="text-sm font-medium">API Key</span>
-        <span className={`text-xs ${statusColor}`}>{statusLabel}</span>
+        <span className="text-sm font-medium">Khoá dùng chung (cũ)</span>
+        <span className={`text-xs ${dead ? "text-muted-foreground" : "text-amber-700"}`}>
+          {dead ? "đã thu hồi" : `còn sống · dùng lần cuối ${ago(lastUsedAt)}`}
+        </span>
       </div>
+      <code className="rounded bg-muted px-2 py-1 font-mono text-xs">{masked}</code>
       <p className="text-xs text-muted-foreground">
-        Website/plugin gửi key này trong header <code className="rounded bg-muted px-1 py-0.5">Authorization: Bearer &lt;key&gt;</code> khi
-        gọi <code className="rounded bg-muted px-1 py-0.5">/api/v1</code>. Chỉ một key tại một thời điểm — tạo mới sẽ thay thế key cũ (mọi
-        nơi đang dùng key cũ sẽ ngừng hoạt động).
+        Khoá này đọc được <strong>mọi niche</strong> và không gắn với publisher nào, nên thu hồi nó là làm chết mọi nơi
+        đang dùng cùng lúc. Nó còn ở đây chỉ để site cũ không đứt trong lúc chuyển sang khoá riêng.
       </p>
-      {revealedKey && (
-        <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5">
-          <p className="text-xs font-medium text-amber-900">Lưu lại ngay — sẽ không hiển thị lại dạng đầy đủ:</p>
-          <code className="mt-1 block break-all text-xs text-amber-950">{revealedKey}</code>
-        </div>
+      {!dead && (
+        <p className="text-xs text-muted-foreground">
+          Trước khi thu hồi: cấp khoá riêng cho từng publisher, đổi <code className="rounded bg-muted px-1">HQ_API_KEY</code> bên
+          publisher, rồi đợi dòng &ldquo;dùng lần cuối&rdquo; ở trên ngừng chạy. Nó ngừng chạy nghĩa là không còn ai cầm khoá này.
+        </p>
       )}
-      <div className="flex items-center gap-2">
-        <form action={generateAction}>
-          <Button type="submit" size="sm" variant="secondary" disabled={generatePending}>
-            {generatePending ? "Đang tạo..." : configured ? "Tạo lại (thu hồi key cũ)" : "Tạo API key mới"}
+      {!dead && (
+        <form action={revokeAction}>
+          <Button type="submit" variant="destructive" size="sm" disabled={revokePending}>
+            {revokePending ? "Đang thu hồi…" : "Thu hồi khoá dùng chung"}
           </Button>
         </form>
-        {configured && (
-          <form action={revokeAction}>
-            <Button type="submit" size="sm" variant="outline" disabled={revokePending}>
-              {revokePending ? "..." : "Thu hồi"}
-            </Button>
-          </form>
-        )}
-      </div>
-      {revokeState.message && <p className="text-xs text-green-700">{revokeState.message}</p>}
+      )}
+      {revokeState.message && <p className="text-xs text-muted-foreground">{revokeState.message}</p>}
     </div>
   );
 }
