@@ -87,6 +87,15 @@ export const REQUIRED_METRICS_BY_ADAPTER: Record<string, string[]> = {
   ],
   eia_electricity: ["eia_residential_electricity_price_cents_per_kwh"],
   fema_disaster_declarations: ["fema_disaster_declarations_10yr"],
+  // Cả hai đo được 161/161 trên tập thật trước khi đặt vào nhóm BẮT BUỘC —
+  // không đoán từ việc đọc code adapter. Adapter đã ném LocationFetchError
+  // cho hạt không có dòng, nên nếu chúng có mặt thì cả hai cùng có mặt.
+  fars_fatal_crashes: ["fars_fatal_crashes_1yr", "fars_fatalities_1yr"],
+  // Ba chỉ số cùng một lần gọi, cùng một dòng phản hồi. Hai tỷ lệ là phép
+  // chia có mẫu số riêng, nhưng mẫu số đó do chính ACS trả về và đo được
+  // 161/161 khác 0 — khác ca census_mobility_rate_pct, nơi mẫu số có thể là
+  // một ZCTA dân số 0.
+  census_commute: ["commute_car_share_pct", "commute_60min_plus_pct", "commute_workers_total"],
 };
 
 /**

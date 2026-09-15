@@ -6,6 +6,7 @@ import { CensusAcsHousingAdapter } from "./adapters/census-acs-housing";
 import { CensusMobilityAdapter } from "./adapters/census-mobility";
 import { IrsMigrationAdapter } from "./adapters/irs-migration";
 import { FarsFatalCrashesAdapter } from "./adapters/fars-fatal-crashes";
+import { CensusCommuteAdapter } from "./adapters/census-commute";
 import { NoaaClimateNormalsAdapter } from "./adapters/noaa-climate-normals";
 import { EiaElectricityAdapter } from "./adapters/eia-electricity";
 import { FemaDisasterDeclarationsAdapter } from "./adapters/fema-disaster-declarations";
@@ -21,6 +22,17 @@ import { getCredential } from "@/lib/settings/credentials";
  * being collected, or stops being checked, and the reports stay green because
  * nothing is missing from the list that produced them.
  */
+/**
+ * Mọi adapter đã hiện thực.
+ *
+ * ⚠️ THÊM ADAPTER MỚI PHẢI THÊM VÀO ĐÂY. Danh sách này là thứ
+ * scripts/run-scheduled-collection.ts duyệt để làm mới dữ liệu định kỳ —
+ * adapter vắng mặt sẽ thu thập được đúng một lần rồi ĐÓNG BĂNG vĩnh viễn,
+ * trong khi mọi nguồn khác tự cập nhật hằng năm. Không có lỗi nào báo:
+ * DataSource vẫn active, snapshot vẫn OK, chỉ là version không bao giờ tăng.
+ *
+ * Đã suýt xảy ra với fars_fatal_crashes và census_commute (15/9/2026).
+ */
 export const ALL_ADAPTER_KEYS = [
   "nrel_pvwatts",
   "census_acs_housing",
@@ -29,6 +41,8 @@ export const ALL_ADAPTER_KEYS = [
   "noaa_climate_normals",
   "eia_electricity",
   "fema_disaster_declarations",
+  "fars_fatal_crashes",
+  "census_commute",
 ] as const;
 
 /** Maps a DataSource.adapterKey to a live adapter instance. */
@@ -74,6 +88,17 @@ export async function resolveAdapter(adapterKey: string): Promise<CollectorAdapt
       return new IrsMigrationAdapter(); // public IRS SOI file, no credential needed
     case "fars_fatal_crashes":
       return new FarsFatalCrashesAdapter(); // public NHTSA static CSV bundle, no credential needed
+    case "census_commute": {
+      const apiKey = await getCredential("CENSUS_API_KEY");
+      if (!apiKey) {
+        throw new MissingCredentialError(
+          "Chưa cấu hình CENSUS_API_KEY (ở trang Cài đặt hoặc biến môi trường) — không thể thu thập Census B08301/B08303. " +
+            "Lấy key miễn phí, cấp tức thì tại api.census.gov/data/key_signup.html. Không có đường tắt giả lập cho nguồn này.",
+          "CENSUS_API_KEY"
+        );
+      }
+      return new CensusCommuteAdapter(apiKey);
+    }
     case "noaa_climate_normals": {
       const apiToken = await getCredential("NOAA_API_TOKEN");
       if (!apiToken) {
