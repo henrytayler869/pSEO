@@ -122,6 +122,74 @@ ghi đè.
 
 ---
 
+## 2.4 ⚠️ Đầu nhận khoá: `POST /api/hq-key` — BẮT BUỘC
+
+Không có endpoint này thì mỗi lần đổi khoá là SSH vào VPS, sửa
+`.env.production`, restart service. Ba việc, cả ba nằm ngoài mọi màn hình mà
+người đang đổi khoá nhìn thấy.
+
+Khoá không kéo về được — kéo về thì lấy gì xác thực. Nên HQ **đẩy** sang,
+dùng đúng `REVALIDATE_SECRET` mà site đã tin cho `/api/revalidate`.
+
+### Bán kính thiệt hại
+
+Ai cầm được `REVALIDATE_SECRET` thì **đã** purge sạch được cả zone Cloudflare
+và ép build lại. Lạm dụng endpoint này chỉ đặt được một khoá sai → site nhận
+401 từ HQ → phục vụ trang đã cache. Nhỏ hơn thứ họ vốn làm được. Đó là lý do
+dùng lại secret cũ thay vì đẻ thêm một secret thứ hai phải quản.
+
+### Hợp đồng
+
+```
+POST /api/hq-key        x-revalidate-secret: <secret>
+                        { "key": "pseo_<48 hex>" }
+  200 { "ok": true, "keyFile": "...", "source": "pushed" }
+  400   body không phải JSON, hoặc key sai định dạng
+  401   sai secret
+  500   GHI HỎNG — bắt buộc, xem dưới
+  503   site chưa cấu hình REVALIDATE_SECRET
+
+GET  /api/hq-key        x-revalidate-secret: <secret>
+  200 { "configured": true, "source": "pushed" | "env" | "none", "keyFile": "..." }
+```
+
+`GET` **không trả khoá**. Trả giá trị ở đó là dựng lại đúng cái lỗ mà việc HQ
+chỉ lưu băm đã bịt.
+
+### Bốn điều làm sai thì hỏng im
+
+**1. Ghi hỏng phải trả `500`, không phải `200`.** HQ đọc `ok: true` để báo
+"đã đổi khoá". Một lần đẩy hụt mà báo 200 sẽ khiến người ta thu hồi khoá cũ
+và làm chết site. Và đừng tin lệnh ghi: **ghi xong đọc lại rồi mới báo ok** —
+tiến trình Next chạy bằng user của service còn thư mục là checkout của user
+deploy, và quyền ghi ở đó không ai kiểm được từ xa.
+
+**2. File, không phải bộ nhớ.** Giữ khoá trong biến thì mỗi restart là khoá
+biến mất và site chết cho tới khi có người nhớ ra phải đẩy lại. Một trạng
+thái chỉ tồn tại tới lần restart kế tiếp không phải là cấu hình.
+
+Ghi cạnh `.env.production` ở thư mục gốc, **không** vào `.next/`: `deploy.sh`
+dùng `git reset --hard` chứ không `git clean`, nên file không theo dõi ở
+thư mục gốc sống qua deploy — đúng cơ chế `.env.production` đang sống.
+`.next/` thì bị dựng lại. Thêm tên file vào `.gitignore`, `mode 0600`.
+
+**3. File phải THẮNG env.** Nếu `process.env.HQ_API_KEY` thắng thì nút đẩy
+khoá bên HQ báo thành công mà không đổi được gì chừng nào env còn đặt — hỏng
+im lặng, đúng kiểu tệ nhất. Env chỉ là nền cho lần dựng đầu.
+
+**4. Kiểm định dạng khoá TRƯỚC khi ghi** (`/^pseo_[0-9a-f]{48}$/`). Một body
+rác ghi đè được lên khoá đang chạy là site chết im.
+
+### `REVALIDATE_SECRET` chỉ được dùng ASCII
+
+Header HTTP không mang được ký tự ngoài ASCII: `new Request()` ném
+`TypeError: ... has a value of 7853 which is greater than 255` ngay khi
+secret có dấu tiếng Việt. Lỗi nổ ở phía **đẩy**, cách xa ô nhập đã sinh ra
+nó, và thông báo không chỉ về đâu cả. HQ chặn từ lúc lưu; site cũng nên
+đừng đặt secret có dấu.
+
+---
+
 ## 3. Dataset API — nguồn dữ liệu cho website
 
 Base URL (production, từ 2026-09-07):
@@ -171,6 +239,10 @@ không phải `401`, và thông báo nói rõ khoá thuộc publisher nào:
 
 `/niches` cũng đã lọc: nó chỉ trả về niche của khoá đang gọi, không còn trả
 về cả danh sách.
+
+**Nút *Tạo khoá* đẩy thẳng khoá sang site.** Publisher phải có
+`POST /api/hq-key` nhận khoá đó — bắt buộc, xem §2.4. Không có endpoint ấy
+thì HQ báo 404 và bạn phải đặt tay vào `.env.production`.
 
 **Xoay khoá theo thứ tự này, không đảo:** tạo khoá mới → đổi `HQ_API_KEY`
 bên publisher → đợi dòng *"dùng …"* của khoá cũ trong Control Panel ngừng
