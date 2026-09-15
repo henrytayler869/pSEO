@@ -176,6 +176,30 @@ const checks: Check[] = [
       return /Disallow:\s*\/cdn-cgi\//i.test(body) ? null : "robots.txt thật KHÔNG chặn /cdn-cgi/";
     },
   },
+  {
+    name: "guide nêu đủ BA lệnh sinh, và cả ba script tồn tại",
+    run: async () => {
+      const doc = readFileSync(GUIDE, "utf-8");
+      // Ba loại trang cần đoạn, ba lệnh. Bỏ sót một lệnh nghĩa là một loại
+      // trang im lặng không có chữ — và hub bang chính là loại Google đã
+      // đọc rồi từ chối, nên bỏ sót nó là bỏ sót đúng chỗ đang đau.
+      const scripts = [
+        "scripts/generate-cluster-text.ts",
+        "scripts/generate-state-text.ts",
+        "scripts/generate-solo-state-text.ts",
+      ];
+      const missingFile = scripts.filter((f) => !existsSync(f));
+      if (missingFile.length > 0) return `guide mô tả script không tồn tại: ${missingFile.join(", ")}`;
+      const cmds = ["cluster:generate", "state:generate", "solo-state:generate"];
+      const missingDoc = cmds.filter((c) => !doc.includes(c));
+      if (missingDoc.length > 0) return `guide chưa nêu lệnh: ${missingDoc.join(", ")}`;
+      // Và npm phải chạy được chúng — một lệnh có trong tài liệu mà không có
+      // trong package.json là một lệnh người ta gõ rồi gặp lỗi.
+      const pkg = JSON.parse(readFileSync("package.json", "utf-8")) as { scripts: Record<string, string> };
+      const missingPkg = cmds.filter((c) => !pkg.scripts[c]);
+      return missingPkg.length > 0 ? `package.json thiếu lệnh: ${missingPkg.join(", ")}` : null;
+    },
+  },
 ];
 
 async function main() {
