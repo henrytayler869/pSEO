@@ -16,6 +16,8 @@ import { readFileSync, existsSync } from "node:fs";
 import { fetchServedInventory } from "../lib/publisher/inventory";
 import { clusterIdOf } from "../lib/ai/cluster-facts";
 import { prisma } from "../lib/db/prisma";
+import { getCredential } from "../lib/settings/credentials";
+import { fetchOnPageSummary } from "../lib/dataforseo/on-page";
 import { resolveSite } from "../lib/scripts/resolve-site";
 
 /** Số truy vấn cache aiGeneration trong lib/ai/generate.ts.
@@ -198,6 +200,29 @@ const checks: Check[] = [
       const pkg = JSON.parse(readFileSync("package.json", "utf-8")) as { scripts: Record<string, string> };
       const missingPkg = cmds.filter((c) => !pkg.scripts[c]);
       return missingPkg.length > 0 ? `package.json thiếu lệnh: ${missingPkg.join(", ")}` : null;
+    },
+  },
+  {
+    name: "guide nêu mọi lỗi OnPage đang dính, không bỏ sót mục nào",
+    run: async () => {
+      const doc = readFileSync(GUIDE, "utf-8");
+      // Không so với một danh sách chép tay: hỏi thẳng DataForSEO xem site
+      // đang dính gì, rồi đòi guide có nhắc từng mục. Danh sách chép tay sẽ
+      // đứng yên trong khi site đổi, và lúc đó check vẫn xanh.
+      const [login, password] = await Promise.all([
+        getCredential("DATAFORSEO_LOGIN"),
+        getCredential("DATAFORSEO_PASSWORD"),
+      ]);
+      const site = await prisma.website.findFirst({ select: { onPageTaskId: true } });
+      if (!login || !password || !site?.onPageTaskId) return null; // chưa cấu hình thì không kết luận
+      const sum = await fetchOnPageSummary(login, password, site.onPageTaskId);
+      // Chỉ đòi với mục dính từ 10 trang trở lên. Một lỗi trên 1 trang là
+      // chuyện của trang đó, không phải bài học cho site mới.
+      const big = sum.issues.filter((i) => i.count >= 10);
+      const missing = big.filter((i) => !doc.includes(i.key));
+      return missing.length === 0
+        ? null
+        : `guide chưa nhắc: ${missing.map((m) => `${m.key} (${m.count} trang)`).join(", ")}`;
     },
   },
 ];
