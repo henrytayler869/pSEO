@@ -243,6 +243,32 @@ const checks: Check[] = [
       return Number(m[1]) === nulls ? null : `guide ghi ${m[1]} hàng, thực tế ${nulls}`;
     },
   },
+  {
+    name: "ca ÂM: URL không tồn tại trả 404 CỨNG ngay lần gọi đầu",
+    run: async () => {
+      const doc = readFileSync(GUIDE, "utf-8");
+      if (!/soft 404/i.test(doc)) return "guide chưa cảnh báo soft 404";
+      const site = await resolveSite();
+
+      // URL NGẪU NHIÊN, chưa ai từng gọi. Dùng một URL cố định là tự lừa
+      // mình: site đầu đo được "lần gọi ĐẦU 200, lần thứ hai trở đi 404",
+      // nên một URL đã gọi ở lần chạy trước sẽ trả 404 từ cache và check
+      // xanh trên một site đang phục vụ soft 404 cho mọi khách mới.
+      const nonce = `${Date.now().toString(36)}${Math.floor(Math.random() * 1e9).toString(36)}`;
+      const url = `${site.url}/moving-services/ny/khong-ton-tai-${nonce}`;
+
+      // Gọi HAI lần, đòi CẢ HAI cùng 404 — lần đầu bắt App Shell, lần hai
+      // bắt trường hợp ngược lại (404 rồi lại phục vụ 200 từ cache).
+      const codes: number[] = [];
+      for (let i = 0; i < 2; i++) {
+        const r = await fetch(url, { signal: AbortSignal.timeout(15000), redirect: "manual" });
+        codes.push(r.status);
+      }
+      return codes.every((c) => c === 404)
+        ? null
+        : `URL không tồn tại trả ${codes.join(" rồi ")} — 200 ở đây là soft 404, crawler đọc nó như một trang thật`;
+    },
+  },
 ];
 
 async function main() {
