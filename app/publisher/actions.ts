@@ -87,6 +87,12 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
     return { ok: false, message: err instanceof Error ? err.message : "Thông tin kết nối không hợp lệ." };
   }
 
+  /**
+   * try CHỈ bọc lời ghi. Cùng lỗi đã đo ở refreshDomainAction (PR #97): bọc
+   * cả revalidatePath thì một hỏng hóc xảy ra SAU khi hàng đã tạo xong sẽ
+   * được báo là "Kết nối thất bại" — trong khi website đã nối rồi. Người đọc
+   * thông báo đó sẽ thử lại, và lần thử lại vỡ vì gscPropertyUrl đã unique.
+   */
   try {
     await prisma.website.create({
       data: {
@@ -100,11 +106,12 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
         wpApiBaseUrl: wpApiBaseUrlRaw || deriveWpApiBaseUrl(url),
       },
     });
-    revalidatePath("/publisher");
-    return { ok: true, message: `Đã kết nối "${name}".` };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Kết nối thất bại." };
   }
+
+  revalidatePath("/publisher");
+  return { ok: true, message: `Đã kết nối "${name}".` };
 }
 
 export async function removeWebsiteAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
