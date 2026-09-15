@@ -1457,6 +1457,96 @@ mà URL trần sai thì đó là cache, không phải lỗi site.
 
 ---
 
+## 3.12 ⚠️ Lỗi OnPage đã đo trên site đầu — tránh từ đầu, đừng sửa sau
+
+Quét DataForSEO OnPage trên `atmovingservices.com`, 194 trang, điểm 97,2.
+Mỗi mục dưới đây là một lỗi THẬT đã nổ, kèm nguyên nhân và luật để site mới
+không lặp lại. Sắp theo số trang dính, không theo mức độ.
+
+### `title_too_long` — 78/194 trang
+
+Đây là lỗi lớn nhất và nó **do chính quy tắc chống trùng sinh ra**. Đo trên
+40 trang mẫu: dài nhất 76 ký tự, giữa 63, **29 trang quá 60 ký tự**.
+
+Nguồn gốc: 125/174 tiêu đề từng quá 65 ký tự và 48 trang dùng CHUNG một tiêu
+đề, nên ZIP được đưa vào tiêu đề để phân biệt — và tiêu đề dài thêm 6 ký tự.
+Chống trùng và giữ ngắn kéo ngược nhau; site đầu chọn chống trùng.
+
+**Luật cho site mới:** dựng tiêu đề theo ngân sách ký tự, không theo mẫu cố
+định. Ưu tiên bỏ phần thừa TRƯỚC khi bỏ phần phân biệt:
+
+```
+{Dịch vụ} in {Thành phố}, {Bang} {ZIP}      ← ZIP chỉ thêm khi thành phố trùng
+```
+
+Tên bang viết tắt (`TX` không phải `Texas`), bỏ hậu tố thương hiệu ở trang
+con, và kiểm ĐỘ DÀI lúc build — một tiêu đề 76 ký tự bị Google cắt, nên phần
+phân biệt nằm ở cuối chính là phần biến mất.
+
+### `low_content_rate` — 192/194 trang, và 158 trong số đó BỊ BÁO OAN
+
+DataForSEO tính chữ / HTML **thô**. Với Next.js App Router, **61% HTML là
+RSC payload** (`self.__next_f.push`) — chính những câu văn đó serialize lần
+thứ hai để hydrate. Đo trên một trang thị trường: 88 KB HTML, 54 KB payload,
+**1.182 từ thật**, tỷ lệ thô 4,4% nhưng tỷ lệ trên markup thật ~18%.
+
+**Luật:** đừng dùng tỷ lệ này. Đếm **TỪ hiển thị**:
+
+```
+độ sâu 3, trang thị trường   891 - 1.295 từ   khoẻ
+độ sâu 2, hub bang            111 -   541 từ   MỎNG  ← chỗ cần chữa
+/blog                                 103 từ   MỎNG
+```
+
+Ngưỡng dùng được: **dưới 300 từ là mỏng**. Và nhớ rằng thêm chữ để nâng tỷ
+lệ là nhồi chữ cho máy quét — thứ cần là trang có gì để đọc.
+
+### `has_render_blocking_resources` — 193/194 trang, KHÔNG phải vấn đề
+
+Đúng MỘT tài nguyên, và nó là `<script noModule>` — polyfill Next.js sinh tự
+động cho trình duyệt không hiểu ES module. **Trình duyệt hiện đại không tải
+nó.** Trang nén 11 KB, TTFB 155 ms, tải xong 156 ms.
+
+**Luật:** đừng sửa. Gỡ nó phải đụng cấu hình build, đổi lấy 0 cải thiện cho
+người đọc và rủi ro hỏng trình duyệt cũ. Nhưng PHẢI phân biệt được nó với
+script chặn thật — `scripts/audit-technical-seo.ts` nêu TÊN tài nguyên chặn,
+và chỉ cảnh báo khi có script đồng bộ hoặc CSS bên thứ ba trong `<head>`.
+
+### `low_character_count` — 13 trang
+
+Khác `low_content_rate`: đây là đếm ký tự thật, và 13 trang đó mỏng thật.
+Trùng với nhóm hub bang ở trên.
+
+### `is_4xx_code` + thiếu canonical — 1 trang, cùng một URL
+
+`/cdn-cgi/l/email-protection` của Cloudflare. Xem §3.11 — chặn ở `robots.txt`.
+
+### `seo_friendly_url_*` — 1-2 trang
+
+URL `/data` thiếu từ khoá. Nhỏ, nhưng lưu ý: **bốn mục này từng hiện 167
+trang mỗi mục** vì HQ đọc ngược ngữ nghĩa — xem cảnh báo ngay dưới.
+
+### ⚠️⚠️ Đọc báo cáo OnPage: DataForSEO dùng HAI quy ước ngược nhau
+
+Trong cùng một object `checks`, họ trộn hai ý nghĩa và tên trường không nói
+ra. Đo được trên cùng một lần crawl:
+
+| trường | trên trang `/about` (URL 6 ký tự, sạch) | nghĩa |
+|---|---|---|
+| `seo_friendly_url_relative_length_check` | `true` | ĐẠT |
+| `seo_friendly_url_dynamic_check` | `true` | ĐẠT |
+| `title_too_long` (title 64 ký tự) | `false` | không dính lỗi |
+
+Một URL 6 ký tự không thể vừa "quá dài" vừa "động". **Họ `*_check` đếm số
+trang ĐẠT; mọi trường khác đếm số trang DÍNH.**
+
+Đọc sai chiều này biến 4 mục lành thành "167 trang phải sửa" và giấu mất
+trang 4xx thật. Số càng to càng giống việc khẩn, nên sai theo chiều này tốn
+nhiều thời gian hơn là bỏ sót. HQ đã sửa cách đọc; nếu bạn gọi DataForSEO
+trực tiếp thì đây là điều phải biết trước.
+
+---
+
 ## 4. Nguồn dữ liệu chính phủ hiện có
 
 Mỗi nguồn được gắn nhãn niche (`relevantVerticals`) để biết dùng cho việc gì.
