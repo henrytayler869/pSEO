@@ -53,6 +53,33 @@ const VERTICAL_BRIEFS: Record<string, { does: string; offLimits: string }> = {
     does: "designing and installing residential rooftop solar systems",
     offLimits: "roof replacement itself, moving, and unrelated electrical work",
   },
+  /**
+   * ⚠️ Ngành này có một dạng lạc-nghề mà cơ chế suy diễn KHÔNG bắt được.
+   *
+   * scan-generated-copy.ts suy ra "lạc nghề" bằng từ vựng của những nghề
+   * KHÁC — hợp lý cho sáu ngành trên, nơi lỗi là viết về mái nhà trên trang
+   * chuyển nhà. Với nghề luật, dạng nguy hiểm nhất lại là từ vựng của CHÍNH
+   * nghề này: mức bồi thường, tỷ lệ thắng kiện, thời gian giải quyết, giá
+   * trị vụ việc.
+   *
+   * Ba luật hiện có đều trượt nó, mỗi luật vì một lý do khác nhau:
+   *   no-supply-side-bridge  chỉ bắt khi BẮC CẦU từ một con số
+   *   no-price-claims        chặn giá DỊCH VỤ; bồi thường không phải giá
+   *   stay-in-trade          chặn nói như ngành KHÁC
+   *
+   * Nên `offLimits` ở đây phải liệt kê tường minh, không dựa vào suy diễn.
+   * Nó là bản sinh đôi ở tầng prompt của luật `no-outcome-claims` trong
+   * registry — hai chỗ, cùng một tập cấm, cố ý viết cùng lúc để không chỗ
+   * nào lỏng hơn chỗ kia.
+   *
+   * Và với nghề luật, một câu như vậy không chỉ là nội dung yếu: nó là
+   * quảng cáo sai sự thật.
+   */
+  "auto-accident-attorney": {
+    does: "representing people injured in motor-vehicle collisions in claims against insurers and other drivers",
+    offLimits:
+      "ANY claim about what a case is worth, how much money anyone recovers, typical or average settlements, verdict amounts, success or win rates, how long a case takes to resolve, or the chance of any outcome — no dataset here measures any of that, and stating it is false advertising for a law practice. Also off limits: legal advice of any kind, what a reader should do about their own claim, deadlines or filing requirements, fee arrangements including contingency percentages, and anything about how busy, experienced or successful any firm is. You may state the measured figures and address the reader about what to ask or confirm; you may not tell them what will happen.",
+  },
 };
 
 const SYSTEM_PROMPT = `You write short, factual copy for local service pages.
