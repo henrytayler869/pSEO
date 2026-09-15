@@ -16,20 +16,37 @@ export interface SourceComparisonRow {
  * philosophy as the rest of this app's aggregate views. */
 export async function getLatestComparisons(): Promise<SourceComparisonRow[]> {
   const sources = await prisma.dataSource.findMany({ where: { isActive: true } });
-  const rows: SourceComparisonRow[] = [];
-  for (const source of sources) {
-    const latest = await prisma.dataSnapshot.findFirst({
-      where: { sourceId: source.id },
-      orderBy: { version: "desc" },
-    });
-    if (!latest) continue;
-    rows.push({
-      sourceName: source.name,
-      currentVersion: latest.version,
-      comparison: await compareToPreviousSnapshot(latest.id),
-    });
-  }
-  return rows;
+
+  // Song song theo NGUỒN, không tuần tự.
+  //
+  // Mỗi nguồn cần vài lần đi về database (findFirst + các truy vấn bên trong
+  // compareToPreviousSnapshot), và 7 nguồn chạy nối đuôi nhau là ~35 lần đi
+  // về xếp hàng. Đo 15/9/2026 qua SSH tunnel: 202 ms mỗi round-trip, hàm này
+  // mất 10.725 ms, và trang /collector mất 9,5 giây.
+  //
+  // Logic so sánh KHÔNG đổi một dòng — đây thuần là chuyện xếp hàng. Đổi
+  // logic trong cùng một lần sửa hiệu năng là cách chắc nhất để không biết
+  // vì sao kết quả đổi.
+  //
+  // Giữ nguyên THỨ TỰ nguồn: map() trả đúng thứ tự đầu vào dù chúng xong
+  // lệch nhau, nên bảng trên trang không nhảy lung tung giữa các lần tải.
+  const rows = await Promise.all(
+    sources.map(async (source): Promise<SourceComparisonRow | null> => {
+      const latest = await prisma.dataSnapshot.findFirst({
+        where: { sourceId: source.id },
+        orderBy: { version: "desc" },
+      });
+      if (!latest) return null;
+      return {
+        sourceName: source.name,
+        currentVersion: latest.version,
+        comparison: await compareToPreviousSnapshot(latest.id),
+      };
+    })
+  );
+
+  // Nguồn chưa có snapshot nào bị loại, y như `continue` của bản cũ.
+  return rows.filter((r): r is SourceComparisonRow => r !== null);
 }
 
 export async function getSnapshotsWithSource() {

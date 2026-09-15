@@ -171,6 +171,11 @@ jobs:
       - name: Ngân sách AI theo publisher — ba trạng thái còn phân biệt được
         run: npx tsx scripts/test-budget.ts
 
+      # KHÔNG chạy được ở đây: đối chiếu bản SQL gộp với bản vòng lặp cũ trên
+      # DỮ LIỆU THẬT, mà DB của CI rỗng nên cả hai trả mảng rỗng và "khớp
+      # hoàn toàn" là một câu đúng không kiểm gì. Chạy tay sau khi đổi truy
+      # vấn tổng hợp: npm run test:summaries
+
       # Ca đầu tiên là mạch 47 từ ĐO ĐƯỢC khi sinh lại với cùng prompt. Cổng
       # này không bắt được nó thì cả đường sinh lại chỉ là nút bấm tốn tiền.
       - name: Văn sinh lại phải khác văn đã publish
