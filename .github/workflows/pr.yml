@@ -206,3 +206,10 @@ jobs:
 
       - name: Luật nội dung công bố khớp hành vi thật
         run: npx tsx scripts/verify-content-rules.ts
+
+      # Tập cấm KẾT QUẢ sống ở HAI nơi: VERTICAL_BRIEFS.offLimits (chặn
+      # trước khi sinh) và luật no-outcome-claims (hợp đồng với site). Hai
+      # bản sao thì trôi lệch, và khi lệch thì chỗ LỎNG HƠN thắng — prompt
+      # không cấm thì model viết, registry không cấm thì site không chặn.
+      - name: Hai chỗ cấm kết quả phải nói cùng một điều
+        run: npx tsx scripts/test-outcome-claims-parity.ts

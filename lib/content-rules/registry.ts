@@ -400,6 +400,16 @@ export async function buildContentRules(): Promise<ContentRules> {
         provenBy: "atmovingservices: contracts/vectors.json (5 vector, 1 accept / 4 reject).",
       },
       {
+        id: "no-outcome-claims",
+        rule:
+          "Không nêu KẾT QUẢ mà người đọc có thể nhận được: mức bồi thường, số tiền dàn xếp hay bản án, tỷ lệ thắng/thành công, thời gian giải quyết vụ việc, hay xác suất của bất kỳ kết cục nào. Không dataset nào ở đây đo phía đó. " +
+          "KHÁC ba luật gần nhất, và khác ở chỗ khiến cả ba cùng trượt nó: no-supply-side-bridge chỉ bắt khi BẮC CẦU từ một con số (một câu về mức bồi thường không cần bắc cầu từ đâu); no-price-claims chặn giá DỊCH VỤ (tiền bồi thường không phải giá dịch vụ); stay-in-trade chặn nói như ngành KHÁC (đây là từ vựng của CHÍNH ngành đó). " +
+          "Viết cho mọi ngành, không riêng nghề luật — 'tiết kiệm được bao nhiêu', 'hoàn vốn sau bao lâu', 'bảo hiểm thường chi trả bao nhiêu' là cùng một hình dạng. Với nghề luật và nghề y thì ngoài nội dung yếu, nó còn là quảng cáo sai sự thật.",
+        enforcedBy: "lib/ai/generate.ts — VERTICAL_BRIEFS.offLimits liệt kê tường minh cho ngành có rủi ro; phía site cần một luật văn bản riêng vì cơ chế suy-lạc-nghề KHÔNG bắt được nhóm này.",
+        provenBy:
+          "Chưa có publisher nào của nhóm này publish. Vector conformance sẽ do site đầu tiên của ngành cung cấp — ghi rõ ở đây thay vì để trống, vì 'chưa chứng minh' và 'đã chứng minh' là hai trạng thái khác nhau và luật này đang ở trạng thái thứ nhất.",
+      },
+      {
         id: "stay-in-trade",
         rule: "Đoạn viết cho một ngành không được nói như ngành khác, không hứa bảo hành, không mô tả dịch vụ định kỳ nếu ngành đó không phải vậy. Bắt prompt drift giữa các vertical dùng chung template.",
         enforcedBy: "phía site — niche-other-trade, niche-warranty, niche-routine-service",
