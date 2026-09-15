@@ -229,6 +229,11 @@ const METRIC_LABELS: Record<string, string> = {
   irs_migration_outflow_households: "households that moved out (IRS returns)",
   irs_migration_net_households: "net household migration",
   irs_migration_inflow_agi_usd: "total income arriving with in-movers",
+  // Chữ "fatal" nằm trong NHÃN, không chỉ trong tên trường: prompt in nhãn
+  // cho model đọc, nên nhãn là chỗ quyết định model viết "vụ tai nạn" hay
+  // "vụ tai nạn chết người". FARS chỉ đếm vụ có người chết.
+  fars_fatal_crashes_1yr: "fatal traffic crashes in a year",
+  fars_fatalities_1yr: "people killed in traffic crashes in a year",
   fema_disaster_declarations_10yr: "federal disaster declarations in the last 10 years",
   solar_ac_annual_kwh: "annual solar output for a reference 4kW system",
   solar_radiation_avg_kwh_per_m2_day: "average daily solar radiation",
