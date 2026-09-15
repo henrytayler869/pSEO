@@ -176,6 +176,20 @@ export async function refreshDomainAction(_prev: ActionResult, formData: FormDat
   const creds = await getCloudflareCredentials();
   if ("error" in creds) return { ok: false, message: creds.error };
 
+  /**
+   * `cloudflareError` chỉ được mang lỗi CỦA CLOUDFLARE.
+   *
+   * Trước đây khối try bọc luôn `revalidatePath` và lệnh return, nên bất kỳ
+   * hỏng hóc nào xảy ra SAU khi zone đã tạo xong cũng bị ghi vào ô đó. Đo
+   * được ngày 15/9/2026: zone `theaccidentrecord.com` tạo thành công, hàng
+   * lưu đúng zone id và nameserver, nhưng màn hình hiện huy hiệu "Lỗi" kèm
+   * "Invariant: static generation store missing in revalidatePath /domains".
+   *
+   * Đó là kiểu sai tệ hơn im lặng: nó bảo người ta đi sửa Cloudflare cho một
+   * việc Cloudflare đã làm xong. Nên phạm vi của try bây giờ dừng đúng ở chỗ
+   * cuối cùng mà Cloudflare còn liên quan.
+   */
+  let zoneStatus: string;
   try {
     // Same order as adding: adopt before creating. A row that failed to add
     // earlier has no zone id, and re-checking it used to jump straight to
@@ -197,14 +211,16 @@ export async function refreshDomainAction(_prev: ActionResult, formData: FormDat
         lastCheckedAt: new Date(),
       },
     });
-    revalidatePath("/domains");
-    return { ok: true, message: `Trạng thái hiện tại: ${zone.status}.` };
+    zoneStatus = zone.status;
   } catch (err) {
     const message = err instanceof CloudflareApiError || err instanceof Error ? err.message : "Kiểm tra trạng thái thất bại.";
     await prisma.domain.update({ where: { id }, data: { cloudflareError: message, lastCheckedAt: new Date() } });
     revalidatePath("/domains");
     return { ok: false, message };
   }
+
+  revalidatePath("/domains");
+  return { ok: true, message: `Trạng thái hiện tại: ${zoneStatus}.` };
 }
 
 /** Removes the Domain row from this app only — does NOT delete the zone on
