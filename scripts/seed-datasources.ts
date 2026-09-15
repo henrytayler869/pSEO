@@ -41,6 +41,23 @@ const SOURCES = [
     relevantVerticals: ["roofing-replacement", "hvac-repair", "water-damage-restoration", "moving-services"],
   },
   {
+    name: "NHTSA FARS (fatal traffic crashes)",
+    adapterKey: "fars_fatal_crashes",
+    endpoint: "https://static.nhtsa.gov/nhtsa/downloads/FARS/2022/National/FARS2022NationalCSV.zip",
+    unit: "crashes/yr (fatal crashes), people/yr (fatalities)",
+    geoResolution: "COUNTY" as const,
+    refreshInterval: "P365D", // NHTSA phát hành mỗi năm một bộ, trễ ~2 năm
+    isActive: true,
+    // Nguồn DUY NHẤT trong hệ này đo đúng nghề auto-accident-attorney.
+    // Trước nó, 0/7 nguồn gắn nhãn ngành đó nên governmentData rỗng cho cả
+    // 582 thị trường và niche không dựng được trang nào.
+    //
+    // CHỈ gắn một ngành, dù dữ liệu tai nạn cũng "liên quan" tới vài nghề
+    // khác. Gắn rộng là mời đúng bẫy đã ghi ở guide §3.7: một con số đúng
+    // đặt trên trang sai nghề thì không câu nào sai, chỉ là sai nghề.
+    relevantVerticals: ["auto-accident-attorney"],
+  },
+  {
     name: "Census ACS5 (geographic mobility)",
     adapterKey: "census_mobility",
     endpoint: "https://api.census.gov/data/2023/acs/acs5 (table B07003)",

@@ -5,6 +5,7 @@ import { PvWattsMockAdapter } from "./adapters/pvwatts-mock";
 import { CensusAcsHousingAdapter } from "./adapters/census-acs-housing";
 import { CensusMobilityAdapter } from "./adapters/census-mobility";
 import { IrsMigrationAdapter } from "./adapters/irs-migration";
+import { FarsFatalCrashesAdapter } from "./adapters/fars-fatal-crashes";
 import { NoaaClimateNormalsAdapter } from "./adapters/noaa-climate-normals";
 import { EiaElectricityAdapter } from "./adapters/eia-electricity";
 import { FemaDisasterDeclarationsAdapter } from "./adapters/fema-disaster-declarations";
@@ -71,6 +72,8 @@ export async function resolveAdapter(adapterKey: string): Promise<CollectorAdapt
     }
     case "irs_migration":
       return new IrsMigrationAdapter(); // public IRS SOI file, no credential needed
+    case "fars_fatal_crashes":
+      return new FarsFatalCrashesAdapter(); // public NHTSA static CSV bundle, no credential needed
     case "noaa_climate_normals": {
       const apiToken = await getCredential("NOAA_API_TOKEN");
       if (!apiToken) {
