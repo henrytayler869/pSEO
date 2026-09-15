@@ -225,6 +225,24 @@ const checks: Check[] = [
         : `guide chưa nhắc: ${missing.map((m) => `${m.key} (${m.count} trang)`).join(", ")}`;
     },
   },
+  {
+    name: "guide nói đúng lớp ZIP thiếu tên hạt, và lớp đó chưa đổi",
+    run: async () => {
+      const doc = readFileSync(GUIDE, "utf-8");
+      if (!/county === null/.test(doc)) return "guide chưa nêu nhánh county null";
+      // Đối chiếu với DB, không tin con số chép tay. Guide khẳng định "đúng
+      // 5 hàng, cả 5 đều CÓ countyFips" và "06902 có cầu ở 7 niche" — hai
+      // khẳng định đó đổi được khi dữ liệu đổi, và lúc đó guide dạy sai.
+      const nulls = await prisma.location.count({ where: { county: null } });
+      const nullsWithFips = await prisma.location.count({ where: { county: null, countyFips: { not: null } } });
+      if (nulls !== nullsWithFips) {
+        return `có ${nulls - nullsWithFips} ZIP thiếu CẢ county lẫn countyFips — guide nói cả 5 đều có countyFips, không còn đúng`;
+      }
+      const m = doc.match(/đúng \*\*(\d+) hàng `county: null`/);
+      if (!m) return "guide không còn nêu số hàng county null để đối chiếu";
+      return Number(m[1]) === nulls ? null : `guide ghi ${m[1]} hàng, thực tế ${nulls}`;
+    },
+  },
 ];
 
 async function main() {

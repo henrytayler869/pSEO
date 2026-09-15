@@ -1759,6 +1759,37 @@ nếu không sẽ phá vỡ tính trung thực của toàn hệ thống:
    mọi thứ khác vẫn nguyên — một check chỉ nhìn phần khác biệt sẽ không
    thấy hình dạng dữ liệu mới mà nó mang theo.
 
+   **ĐO LẦN HAI, 15/9/2026 — và nó đổi bản chất của quy tắc này.** Cùng ZIP
+   06902, lần này vào niche `auto-accident-attorney` qua một đợt mở rộng
+   khác, tám ngày sau lần đầu. Nhưng đếm cả bảng thì nó không phải trùng
+   hợp:
+
+   | ZIP | thành phố | `countyFips` | `county` | có cầu ở |
+   |---|---|---|---|---|
+   | 00725, 00926, 00949, 00956 | Puerto Rico | có | **null** | *chưa niche nào* |
+   | **06902** | **Stamford, CT** | 09001 | **null** | **7 niche** |
+
+   Toàn bộ bảng `Location` có đúng **5 hàng `county: null`, cả 5 đều CÓ
+   `countyFips`**. Bốn hàng Puerto Rico không có cầu ở niche nào nên chúng
+   không bao giờ vào tập buildable. Còn 06902 có cầu ở **bảy** niche:
+   garage-door-repair, hvac-repair, roofing-replacement, moving-services,
+   senior-care, pest-control, auto-accident-attorney.
+
+   Nghĩa là nhánh `county === null` **không phải ca hiếm cần để ý nếu tình
+   cờ gặp** — nó là điều CHẮC CHẮN xảy ra với mọi niche có Stamford. Không
+   phải "đã xảy ra hai lần", mà là "sẽ xảy ra ở mọi niche tiếp theo".
+
+   Nguyên nhân gốc đã biết và không sửa được từ phía này: Connecticut đã
+   thay county bằng "Planning Region" với mã FIPS mới trong các bản phát
+   hành liên bang gần đây, trong khi bảng tra ZCTA→county của Census (nguồn
+   của `Location.countyFips`) vẫn dùng mã county cũ. Tra tên theo mã cũ
+   không ra. Đây là lệch NIÊN ĐẠI địa lý giữa hai cơ quan, không phải dữ
+   liệu thiếu — xem chú thích đầu `lib/collector/adapters/irs-migration.ts`.
+
+   **Cho site mới:** viết nhánh `county === null` vào template NGAY TỪ ĐẦU,
+   đừng chờ gặp. Quy tắc §7.7 đã nói đừng đoán tên hạt; đây là bằng chứng
+   rằng bạn sẽ phải dùng nó, không phải có thể.
+
 ---
 
 ## 8. Câu lệnh kiểm tra nhanh
