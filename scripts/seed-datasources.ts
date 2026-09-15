@@ -41,6 +41,20 @@ const SOURCES = [
     relevantVerticals: ["roofing-replacement", "hvac-repair", "water-damage-restoration", "moving-services"],
   },
   {
+    name: "Census ACS5 (commute mode & duration)",
+    adapterKey: "census_commute",
+    endpoint: "https://api.census.gov/data/2023/acs/acs5 (tables B08301, B08303)",
+    unit: "% (car share, 60+ min share), people (workers)",
+    geoResolution: "ZIP" as const,
+    refreshInterval: "P365D",
+    isActive: true,
+    // Lý do tồn tại là TRỤC PHÂN BIỆT, không phải thêm số: fars_fatal_crashes
+    // cấp HẠT nên 21/76 trang của niche này có governmentData trùng khít —
+    // 5 trang Los Angeles cùng in 817 vụ / 1.199 người chết. Bảng này cấp
+    // ZIP và đo mức phơi nhiễm với giao thông đường bộ, tức đúng nghề.
+    relevantVerticals: ["auto-accident-attorney"],
+  },
+  {
     name: "NHTSA FARS (fatal traffic crashes)",
     adapterKey: "fars_fatal_crashes",
     endpoint: "https://static.nhtsa.gov/nhtsa/downloads/FARS/2022/National/FARS2022NationalCSV.zip",

@@ -234,6 +234,11 @@ const METRIC_LABELS: Record<string, string> = {
   // "vụ tai nạn chết người". FARS chỉ đếm vụ có người chết.
   fars_fatal_crashes_1yr: "fatal traffic crashes in a year",
   fars_fatalities_1yr: "people killed in traffic crashes in a year",
+  // Nhãn mang đúng NGƯỠNG, không mang chữ "long". Prompt in nhãn cho model
+  // đọc, nên nhãn mờ là chỗ ngưỡng trôi mà không ai thấy.
+  commute_car_share_pct: "share of workers who commute by car, truck or van",
+  commute_60min_plus_pct: "share of workers whose commute takes 60 minutes or more",
+  commute_workers_total: "workers aged 16 and over who commute",
   fema_disaster_declarations_10yr: "federal disaster declarations in the last 10 years",
   solar_ac_annual_kwh: "annual solar output for a reference 4kW system",
   solar_radiation_avg_kwh_per_m2_day: "average daily solar radiation",
