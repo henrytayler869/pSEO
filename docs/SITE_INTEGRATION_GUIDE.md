@@ -1457,6 +1457,68 @@ mà URL trần sai thì đó là cache, không phải lỗi site.
 
 ---
 
+## 3.13 ⚠️⚠️ Soft 404: hỏng MẶC ĐỊNH, và không phép kiểm nào ở trên thấy
+
+Cái bẫy nặng nhất của stack này, và nó không nằm trong bất kỳ mục nào ở
+trên vì mọi mục ở trên đều kiểm những URL **có thật**.
+
+### Cơ chế
+
+Next.js Cache Components phục vụ **App Shell** cho mọi URL có params chưa
+được prerender, rồi stream nội dung thật vào sau. Nghĩa là **status đã được
+gửi đi trước khi biết body**. Với một ZIP không tồn tại, `notFound()` render
+nội dung 404 **dưới một status 200** — đúng định nghĩa soft 404.
+
+`dynamicParams = false` là cách sửa thông thường và **không dùng được khi
+bật Cache Components**.
+
+### Đo được trên site đầu, không phải suy luận
+
+> lần gọi ĐẦU: `200` kèm body "không có trang cho ZIP này"
+> lần thứ hai trở đi: `404`
+
+Chi tiết đó phá hỏng phép kiểm ngây thơ: một test gọi URL lạ MỘT lần rồi
+thấy 404 sẽ xanh — vì nó vô tình là lần gọi thứ hai. Ca âm phải gọi một URL
+**chưa ai từng gọi**, hoặc gọi hai lần và khẳng định **cả hai** đều 404.
+
+### Vì sao không phép kiểm nào khác thấy
+
+| kiểm | thấy được soft 404 không |
+|---|---|
+| sitemap có đủ URL không | không — URL hỏng không nằm trong sitemap |
+| `/api/inventory` khớp sitemap | không — cả hai suy từ cùng một nguồn |
+| mọi URL trong sitemap trả 200 | **không** — đúng những URL đó vẫn 200 |
+| crawl + đọc status | không, nếu chỉ crawl URL đã biết |
+
+Một phép kiểm chỉ khẳng định "mọi URL trong sitemap trả 200" sẽ **xanh trên
+một site hỏng hoàn toàn**, vì thứ hỏng là những URL KHÔNG nằm trong sitemap.
+
+### Cách site đầu xử — hai lớp, cả hai đều cần
+
+```ts
+// app/.../[slug]/page.tsx — chặn thay vì stream App Shell
+export const instant = false;
+
+// proxy.ts — trả 404 THẬT trước khi tới route
+// Đọc manifest tĩnh, tra tập, không I/O.
+```
+
+`instant = false` sửa route; proxy sửa lần gọi ĐẦU TIÊN, thứ `instant`
+không cứu được vì nó chạy trước routing.
+
+### Luật cho site mới
+
+1. Viết cả hai lớp ngay từ đầu. Đây không phải tối ưu, nó là điều kiện để
+   `404` có nghĩa.
+2. **Ca âm nằm trong CI**, không nằm trong một script chạy tay: gọi một URL
+   chắc chắn không tồn tại và đòi `404` CỨNG. Hỏng mặc định của stack này là
+   200, nên không có ca âm thì không có gì canh.
+3. Đối chiếu thêm với `.next/prerender-manifest.json` — đó là output của
+   **build**, không phải ý định của mã nguồn, nên nó không trùng lặp với
+   sitemap và `/api/inventory` vốn cùng suy từ `publishedPages()`.
+
+---
+
 ## 3.12 ⚠️ Lỗi OnPage đã đo trên site đầu — tránh từ đầu, đừng sửa sau
 
 Quét DataForSEO OnPage trên `atmovingservices.com`, 194 trang, điểm 97,2.
