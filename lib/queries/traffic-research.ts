@@ -29,39 +29,83 @@ export interface TrafficVerticalSummary {
  * consistently good, which topScore alone can't tell apart. topScore is
  * still returned too (useful for "best zip to build first" within a niche
  * you've already picked), just not what ranks niches against each other. */
+/**
+ * Một truy vấn gộp thay cho 13 vòng lặp tuần tự.
+ *
+ * Bản cũ lặp từng vertical và mỗi vòng tải TOÀN BỘ MarketIdentity của niche
+ * đó kèm marketScores — 582 hàng chỉ riêng moving-services — rồi tính trung
+ * bình trong JavaScript. Đo 15/9/2026 qua SSH tunnel: **10.574 ms**. Trang
+ * /domains gọi nó chỉ để đổ một danh sách chọn niche, và trang /markets gọi
+ * nó rồi còn gọi thêm getTrafficScoreTrend cho từng niche.
+ *
+ * Chi phí không nằm ở Postgres mà ở SỐ LẦN ĐI VỀ: 202 ms mỗi round-trip qua
+ * tunnel (đo được), nhân với hai truy vấn mỗi niche, nhân 13 niche. Gộp vào
+ * một câu SQL biến 26 lần đi về thành 1.
+ *
+ * DISTINCT ON là cách Postgres lấy "bản mới nhất mỗi nhóm" mà không cần
+ * window function lồng nhau — nó chọn hàng đầu tiên của mỗi
+ * marketIdentityId theo thứ tự version giảm dần, đúng thứ `orderBy: version
+ * desc, take: 1` của bản cũ làm.
+ *
+ * AVG của SQL bỏ qua NULL, khớp với `filter((v) => v !== null)` của bản cũ
+ * cho cpcInput. Với difficultyIndexInput và searchVolumeInput (không
+ * nullable) thì hai bên tính trên cùng tập.
+ *
+ * scripts/test-vertical-summaries.ts đối chiếu bản này với bản cũ trên dữ
+ * liệu thật và đòi khớp từng trường.
+ */
 export async function getTrafficVerticalSummaries(): Promise<TrafficVerticalSummary[]> {
-  const scoredVerticals = await prisma.marketIdentity.findMany({
-    where: { marketScores: { some: { mode: "TRAFFIC" } } },
-    select: { vertical: true },
-    distinct: ["vertical"],
-  });
+  const rows = await prisma.$queryRaw<
+    {
+      vertical: string;
+      market_count: bigint;
+      scored_count: bigint;
+      top_score: number | null;
+      avg_score: number | null;
+      avg_cpc: number | null;
+      avg_kd: number | null;
+      total_volume: bigint | null;
+    }[]
+  >`
+    WITH latest AS (
+      SELECT DISTINCT ON (ms."marketIdentityId")
+             ms."marketIdentityId",
+             ms.score,
+             ms."cpcInput",
+             ms."difficultyIndexInput",
+             ms."searchVolumeInput"
+      FROM "MarketScore" ms
+      WHERE ms.mode = 'TRAFFIC'
+      ORDER BY ms."marketIdentityId", ms.version DESC
+    )
+    SELECT mi.vertical                                   AS vertical,
+           COUNT(*)                                      AS market_count,
+           COUNT(l."marketIdentityId")                   AS scored_count,
+           MAX(l.score)                                  AS top_score,
+           AVG(l.score)                                  AS avg_score,
+           AVG(l."cpcInput")                             AS avg_cpc,
+           AVG(l."difficultyIndexInput")                 AS avg_kd,
+           SUM(l."searchVolumeInput")                    AS total_volume
+    FROM "MarketIdentity" mi
+    LEFT JOIN latest l ON l."marketIdentityId" = mi.id
+    GROUP BY mi.vertical
+  `;
 
-  const summaries: Omit<TrafficVerticalSummary, "rank">[] = [];
-  for (const { vertical } of scoredVerticals) {
-    const [marketCount, scored] = await Promise.all([
-      prisma.marketIdentity.count({ where: { vertical } }),
-      prisma.marketIdentity.findMany({
-        where: { vertical, marketScores: { some: { mode: "TRAFFIC" } } },
-        include: { marketScores: { where: { mode: "TRAFFIC" }, orderBy: { version: "desc" }, take: 1 } },
-      }),
-    ]);
-    const latestScores = scored.map((i) => i.marketScores[0]).filter((s) => s !== undefined);
-    const scoreValues = latestScores.map((s) => s.score);
-    const cpcValues = latestScores.map((s) => s.cpcInput).filter((v): v is number => v !== null);
-    const kdValues = latestScores.map((s) => s.difficultyIndexInput);
-    const volumeValues = latestScores.map((s) => s.searchVolumeInput);
-
-    summaries.push({
-      vertical,
-      marketCount,
-      scoredMarketCount: scored.length,
-      topScore: scoreValues.length > 0 ? Math.max(...scoreValues) : null,
-      avgScore: scoreValues.length > 0 ? scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length : null,
-      avgCpc: cpcValues.length > 0 ? cpcValues.reduce((a, b) => a + b, 0) / cpcValues.length : null,
-      avgKeywordDifficulty: kdValues.length > 0 ? kdValues.reduce((a, b) => a + b, 0) / kdValues.length : null,
-      totalSearchVolume: volumeValues.length > 0 ? volumeValues.reduce((a, b) => a + b, 0) : null,
-    });
-  }
+  // Chỉ giữ niche CÓ ít nhất một điểm TRAFFIC — giống điều kiện
+  // `marketScores: { some: { mode: "TRAFFIC" } }` của bản cũ. Niche chưa
+  // chấm điểm lần nào không phải "điểm 0", nó là chưa nghiên cứu.
+  const summaries: Omit<TrafficVerticalSummary, "rank">[] = rows
+    .filter((r) => Number(r.scored_count) > 0)
+    .map((r) => ({
+      vertical: r.vertical,
+      marketCount: Number(r.market_count),
+      scoredMarketCount: Number(r.scored_count),
+      topScore: r.top_score,
+      avgScore: r.avg_score,
+      avgCpc: r.avg_cpc,
+      avgKeywordDifficulty: r.avg_kd,
+      totalSearchVolume: r.total_volume === null ? null : Number(r.total_volume),
+    }));
 
   const ranked = [...summaries].sort((a, b) => (b.avgScore ?? -Infinity) - (a.avgScore ?? -Infinity));
   const rankByVertical = new Map(ranked.filter((s) => s.avgScore !== null).map((s, i) => [s.vertical, i + 1]));
