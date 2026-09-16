@@ -11,6 +11,10 @@ import { getVerticalsWithMarkets } from "@/lib/queries/verticals";
 import { createPublisherKey, revokePublisherKey } from "@/lib/settings/api-key";
 import { pushKeyToSite, isHeaderSafeSecret } from "@/lib/publisher/push-key";
 import { judgeReadiness } from "@/lib/publisher/site-config";
+import { judgeFillBudget, COST_PER_PASSAGE_USD } from "@/lib/ai/fill-queue";
+import { buildFillQueue } from "@/lib/queries/fill-queue";
+import { getOrGenerateInterpretation } from "@/lib/ai/generate";
+import { getTotalSpendUsd } from "@/lib/ai/anthropic";
 
 export interface ActionResult {
   ok: boolean;
@@ -407,4 +411,92 @@ export async function updateSiteIdentityAction(_prev: ActionResult, formData: Fo
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Lưu thất bại." };
   }
+}
+
+export interface FillBatchResult {
+  ok: boolean;
+  message: string;
+  /** Đã sinh đạt trong lô này. */
+  filled?: number;
+  /** Bị validator chặn — cơ chế hoạt động ĐÚNG, không phải lỗi. */
+  rejected?: number;
+  /** Lỗi kỹ thuật. Khác hẳn `rejected`, và gộp hai cái sẽ giấu mất sự cố. */
+  failed?: number;
+  /** Còn lại chưa phục vụ được, để UI biết có nên gọi lô tiếp không. */
+  remaining?: number;
+  costUsd?: number;
+}
+
+/**
+ * Điền MỘT LÔ, không phải tất cả.
+ *
+ * "Fill all" ở giao diện là lời gọi lặp lại hàm này cho tới khi `remaining`
+ * về 0. Không dựng hàng đợi job, và đó là lựa chọn có lý do: repo này chưa có
+ * hạ tầng job nào, và thêm một cái cho việc này là thêm một hệ phải vận hành.
+ * Lô nhỏ cho ba thứ mà một job dài không cho: tiến độ nhìn thấy được, dừng
+ * được giữa chừng, và mỗi lô là một lần kiểm ngân sách mới.
+ *
+ * Mỗi lô tự hỏi lại đường phục vụ, nên hai người bấm cùng lúc không sinh
+ * trùng: người thứ hai thấy ZIP kia đã phục vụ được và bỏ qua.
+ */
+export async function fillContentBatchAction(_prev: FillBatchResult, formData: FormData): Promise<FillBatchResult> {
+  const websiteId = String(formData.get("websiteId") ?? "");
+  const size = Math.min(Math.max(Number(formData.get("size") ?? 5), 1), 25);
+  if (!websiteId) return { ok: false, message: "Thiếu website." };
+
+  const site = await prisma.website.findUnique({
+    where: { id: websiteId },
+    select: { vertical: true, aiBudgetUsd: true },
+  });
+  if (!site) return { ok: false, message: "Không tìm thấy website." };
+
+  const queue = await buildFillQueue(site.vertical);
+  if (queue.pending.length === 0) {
+    return { ok: true, message: "Không còn gì để điền.", filled: 0, rejected: 0, failed: 0, remaining: 0, costUsd: 0 };
+  }
+
+  // Kiểm ngân sách cho ĐÚNG LÔ NÀY, không phải cho toàn bộ hàng đợi. Chặn cả
+  // lô vì tổng vượt trần sẽ khoá luôn việc điền mười trang quan trọng nhất.
+  const spent = await getTotalSpendUsd();
+  const verdict = judgeFillBudget({
+    budgetUsd: site.aiBudgetUsd,
+    spentUsd: spent,
+    estimatedUsd: Math.min(size, queue.pending.length) * COST_PER_PASSAGE_USD,
+  });
+  if (!verdict.ok) return { ok: false, message: verdict.reason };
+
+  let filled = 0;
+  let rejected = 0;
+  let failed = 0;
+  let costUsd = 0;
+
+  for (const candidate of queue.pending.slice(0, size)) {
+    try {
+      const out = await getOrGenerateInterpretation(site.vertical, candidate.zip);
+      if (!out) {
+        failed++;
+        continue;
+      }
+      costUsd += out.costUsd;
+      if (out.validation.passed) filled++;
+      else rejected++;
+    } catch {
+      failed++;
+    }
+  }
+
+  revalidatePath(`/publisher/${websiteId}/content`);
+  const remaining = queue.pending.length - filled;
+  const parts = [`điền ${filled}`];
+  if (rejected > 0) parts.push(`${rejected} bị validator chặn`);
+  if (failed > 0) parts.push(`${failed} LỖI KỸ THUẬT`);
+  return {
+    ok: failed === 0,
+    message: `${parts.join(", ")} — $${costUsd.toFixed(4)}. Còn ${remaining}.`,
+    filled,
+    rejected,
+    failed,
+    remaining,
+    costUsd: Number(costUsd.toFixed(4)),
+  };
 }
