@@ -173,6 +173,20 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
 
       <Card>
         <CardHeader>
+          <CardTitle>Nội dung</CardTitle>
+          <CardDescription>
+            Điền đoạn diễn giải theo thứ tự từ khoá quan trọng nhất, kèm ước phí TRƯỚC khi tiêu.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Link href={`/publisher/${websiteId}/content`} className="text-sm underline underline-offset-4">
+            Mở hàng đợi nội dung →
+          </Link>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>
             Danh tính site{" "}
             {readiness.ready ? (
