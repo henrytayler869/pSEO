@@ -2,9 +2,14 @@
 // vertical, so a consuming site can fetch all of it from cache instead of
 // paying for a cold generation on every page build.
 //
-// Safe to re-run: anything already generated and passing validation is
-// skipped, so a run that stops halfway (spend cap, network, Ctrl-C) is
-// resumed simply by running it again.
+// Safe to re-run: anything the SERVE PATH can already return is skipped, so a
+// run that stops halfway (spend cap, network, Ctrl-C) is resumed simply by
+// running it again.
+//
+// "Đã có" nghĩa là getCachedInterpretation trả về chữ — KHÔNG phải "có hàng
+// trong bảng". Hai câu đó khác nhau kể từ khi cache khoá theo
+// factsFingerprint, và chỗ này từng dùng câu yếu hơn. Xem chú thích tại
+// alreadyDone.
 //
 // The spend cap is the real stop condition. It is checked inside
 // generateWithClaude() before every call, so this script does not need to
@@ -28,7 +33,7 @@ import { prisma } from "../lib/db/prisma";
 import { computeTrafficValues } from "../lib/keywords/traffic-metrics";
 import { latestPerKeyword } from "../lib/keywords/latest";
 import { getRealDataPointsForZipAndVertical, getCountyKeywordForZip } from "../lib/queries/collector";
-import { getOrGenerateInterpretation } from "../lib/ai/generate";
+import { getOrGenerateInterpretation, getCachedInterpretation } from "../lib/ai/generate";
 import { getTotalSpendUsd, getAiConfig, SpendCapExceededError } from "../lib/ai/anthropic";
 
 const DEFAULT_CONCURRENCY = 4; // modest on purpose — this is a bulk job against a rate-limited API
@@ -82,12 +87,32 @@ async function main() {
     console.log(`--standalone-only: ${eligible.length}/${buildable.length} zip có trang riêng (bỏ ${buildable.length - eligible.length} zip nằm chung trang cụm)`);
   }
 
-  const alreadyDone = new Set(
-    (await prisma.aiGeneration.findMany({ where: { vertical, validationPassed: true }, select: { zip: true } })).map((r) => r.zip)
-  );
+  /**
+   * "Đã có" phải nghĩa là ĐƯỜNG PHỤC VỤ TRẢ ĐƯỢC CHỮ, không phải "tồn tại
+   * một hàng đạt trong bảng".
+   *
+   * Trước đây chỗ này chỉ hỏi `aiGeneration có hàng nào validationPassed cho
+   * zip này không`, bỏ qua factsFingerprint. Mà cache khoá theo (vertical,
+   * zip, factsFingerprint): thu thập thêm dữ liệu là fingerprint đổi và bản
+   * cũ không bao giờ được phục vụ nữa.
+   *
+   * Hậu quả đo được 15/9/2026: cổng canh báo 101/158 trang mất chữ, còn
+   * script này báo "đã có 127 | sẽ sinh 0". Cả hai đều chạy, cả hai đều
+   * không lỗi, và chúng nói ngược nhau — vì chúng trả lời hai câu hỏi khác
+   * nhau trong khi tên biến bảo rằng cùng một câu.
+   *
+   * Nên dùng ĐÚNG hàm mà endpoint dùng. Chậm hơn (mỗi zip một lần dựng fact
+   * set) và đó là giá của việc chỉ có MỘT định nghĩa về "đã xong".
+   */
+  process.stdout.write(`Đang kiểm ${eligible.length} zip xem đường phục vụ có trả chữ không…`);
+  const alreadyDone = new Set<string>();
+  for (const z of eligible) {
+    if (await getCachedInterpretation(vertical, z)) alreadyDone.add(z);
+  }
+  process.stdout.write(" xong\n");
   const todo = eligible.filter((z) => !alreadyDone.has(z)).slice(0, limit);
 
-  console.log(`đủ điều kiện ${eligible.length} | đã có ${eligible.filter((z) => alreadyDone.has(z)).length} | sẽ sinh ${todo.length} (concurrency ${concurrency})\n`);
+  console.log(`đủ điều kiện ${eligible.length} | phục vụ được ${alreadyDone.size} | sẽ sinh ${todo.length} (concurrency ${concurrency})\n`);
   if (todo.length === 0) {
     console.log("Không còn gì để sinh.");
     return;
@@ -157,7 +182,23 @@ async function main() {
   }
   if (failures.length > 0) {
     console.log(`\nLỗi kỹ thuật (${failures.length}):`);
-    for (const f of failures.slice(0, 10)) console.log(`  ${f.zip}: ${f.message.slice(0, 100)}`);
+    for (const f of failures.slice(0, 10)) console.log(`  ${f.zip}: ${f.message.slice(0, 200)}`);
+
+    /**
+     * Lỗi kỹ thuật phải làm ĐỎ lần chạy.
+     *
+     * Trước đây process.exitCode chỉ được đặt trong catch của main(), tức là
+     * chỉ khi có exception KHÔNG bắt được. Lỗi của từng zip được gom vào
+     * `failures`, in ra, rồi script thoát mã 0.
+     *
+     * Đo được 15/9/2026: 101 trên 101 zip hỏng vì tài khoản Anthropic hết
+     * credit — và lệnh vẫn thoát 0. Với một job chạy theo lịch hay trong CI,
+     * "hỏng toàn bộ" và "xong sạch" khi đó không phân biệt được.
+     *
+     * Chặn KHÁC lỗi: rejections là validator làm đúng việc của nó, nên chúng
+     * không làm đỏ. Chỉ lỗi kỹ thuật mới đỏ.
+     */
+    process.exitCode = 1;
   }
 }
 
