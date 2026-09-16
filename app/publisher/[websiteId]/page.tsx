@@ -16,6 +16,8 @@ import { SitemapSubmit } from "@/components/sitemap-submit";
 import { AiBudgetCard } from "@/components/ai-budget-card";
 import { getBudgetStatus } from "@/lib/ai/budget";
 import { PublisherApiKeys } from "@/components/publisher-api-keys";
+import { SiteIdentityForm } from "@/components/site-identity-form";
+import { judgeReadiness } from "@/lib/publisher/site-config";
 import { listPublisherKeys } from "@/lib/settings/api-key";
 
 export default async function WebsiteDetailPage({ params }: { params: Promise<{ websiteId: string }> }) {
@@ -25,6 +27,16 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
 
   const budget = await getBudgetStatus(websiteId);
   const apiKeys = await listPublisherKeys(websiteId);
+  const readiness = judgeReadiness({
+    id: detail.website.id,
+    name: detail.website.name,
+    url: detail.website.url,
+    vertical: detail.website.vertical,
+    tagline: detail.website.tagline,
+    description: detail.website.description,
+    ga4MeasurementId: detail.website.ga4MeasurementId,
+    wpApiBaseUrl: detail.website.wpApiBaseUrl,
+  });
 
   const { website, domain, wpAdmin, requiredPages, requiredPagesError, sitemaps, sitemapsError, sitemapCount, sitemapError, postCount, postCountError, search, topPages, gscError, traffic, trafficBySource, ga4Error } = detail;
 
@@ -156,6 +168,32 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
               ))}
             </ul>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            Danh tính site{" "}
+            {readiness.ready ? (
+              <Badge className="ml-2 bg-green-100 text-green-800 hover:bg-green-100">đủ để dựng</Badge>
+            ) : (
+              <Badge className="ml-2 bg-amber-100 text-amber-800 hover:bg-amber-100">còn thiếu {readiness.missing.length}</Badge>
+            )}
+          </CardTitle>
+          <CardDescription>
+            Một app phục vụ nhiều domain nên những giá trị này không nằm trong mã nguồn site được — chúng ở đây và site đọc về
+            theo Host.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SiteIdentityForm
+            websiteId={websiteId}
+            name={detail.website.name}
+            tagline={detail.website.tagline}
+            description={detail.website.description}
+            missing={readiness.missing}
+          />
         </CardContent>
       </Card>
 
