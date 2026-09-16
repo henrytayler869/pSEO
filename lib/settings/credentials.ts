@@ -106,6 +106,21 @@ export const CREDENTIAL_FIELDS: CredentialField[] = [
     secret: false,
     helpText: "Xem ở cột phải trang tổng quan (Overview) của bất kỳ site nào trong tài khoản Cloudflare — mục \"Account ID\".",
   },
+  {
+    name: "GNAME_API_KEY",
+    label: "Gname API Key",
+    group: "Registrar (Gname)",
+    secret: true,
+    helpText:
+      "Lấy ở trang quản lý API của Gname. QUAN TRỌNG: Gname lọc theo IP, nên phải whitelist IP của máy chủ production (46.225.145.196) — lời gọi từ máy cá nhân sẽ bị từ chối dù key đúng.",
+  },
+  {
+    name: "GNAME_API_SECRET",
+    label: "Gname API Secret",
+    group: "Registrar (Gname)",
+    secret: true,
+    helpText: "Đi kèm API Key. Dùng để ký request; không gửi nguyên văn trong tham số.",
+  },
 ];
 
 type CredentialStore = Record<string, string>;

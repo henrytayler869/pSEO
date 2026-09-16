@@ -18,6 +18,8 @@ import { getBudgetStatus } from "@/lib/ai/budget";
 import { PublisherApiKeys } from "@/components/publisher-api-keys";
 import { SiteIdentityForm } from "@/components/site-identity-form";
 import { judgeReadiness } from "@/lib/publisher/site-config";
+import { Ga4CreateProperty } from "@/components/ga4-create-property";
+import { listAccounts } from "@/lib/google/analytics-admin";
 import { listPublisherKeys } from "@/lib/settings/api-key";
 
 export default async function WebsiteDetailPage({ params }: { params: Promise<{ websiteId: string }> }) {
@@ -27,6 +29,18 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
 
   const budget = await getBudgetStatus(websiteId);
   const apiKeys = await listPublisherKeys(websiteId);
+
+  // Chỉ hỏi Google khi website CHƯA có property — không có gì để tạo thì
+  // không đáng một lời gọi mạng mỗi lần mở trang.
+  let gaAccounts: { name: string; displayName: string }[] = [];
+  let gaError: string | null = null;
+  if (!detail.website.ga4PropertyId) {
+    try {
+      gaAccounts = await listAccounts();
+    } catch (err) {
+      gaError = err instanceof Error ? err.message : "Không hỏi được Google Analytics.";
+    }
+  }
   const readiness = judgeReadiness({
     id: detail.website.id,
     name: detail.website.name,
@@ -170,6 +184,20 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
           )}
         </CardContent>
       </Card>
+
+      {!detail.website.ga4PropertyId && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Google Analytics</CardTitle>
+            <CardDescription>
+              Website này chưa có GA4 property. Tạo ngay từ đây thay vì mở Google Analytics rồi chép số về.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Ga4CreateProperty websiteId={websiteId} accounts={gaAccounts} accountsError={gaError} />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
