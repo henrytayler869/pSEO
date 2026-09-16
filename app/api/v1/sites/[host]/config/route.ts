@@ -2,12 +2,24 @@ import { prisma } from "@/lib/db/prisma";
 import { requireApiKey } from "@/lib/api/auth";
 import { apiJson } from "@/lib/api/cache-policy";
 import { normalizeHost } from "@/lib/publisher/link-domain";
+import { buildSiteConfig } from "@/lib/publisher/site-config";
 
 /**
  * GET /api/v1/sites/{host}/config — the settings a published site needs about
  * itself, so nobody has to hand-edit a file on a server to change them.
  *
- * Right now that is the GA4 measurement ID. It lived in .env.production, which
+ * Từ 16/9/2026 nó trả về TOÀN BỘ danh tính hiển thị của site — tên, tagline,
+ * description, niche — chứ không chỉ mã analytics. Lý do là mô hình đã đổi:
+ * MỘT app phục vụ nhiều domain, phân biệt theo Host, nên hằng số `SITE` trong
+ * mã nguồn publisher không còn đúng. Một hằng số ở đó sẽ gán danh tính của
+ * site này cho mọi site khác, và trang vẫn render đủ, vẫn 200, chỉ sai thương
+ * hiệu và sai mã analytics.
+ *
+ * Phản hồi kèm `ready` và `missing`. Trả cấu hình KÈM phán quyết chứ không từ
+ * chối trả: app vẫn phải dựng được trang cho một site thiếu tagline, còn thứ
+ * bị chặn là hành động DỰNG MỚI.
+ *
+ * Trước đó nó chỉ trả GA4 measurement ID. It lived in .env.production, which
  * meant changing it required SSH access, knowing which file, and knowing that
  * NEXT_PUBLIC_* is inlined at build time so a restart does nothing. Three
  * pieces of knowledge, none of them written down where the person changing an
@@ -31,7 +43,16 @@ export async function GET(request: Request, context: RouteContext<"/api/v1/sites
   }
 
   const websites = await prisma.website.findMany({
-    select: { id: true, name: true, url: true, ga4MeasurementId: true },
+    select: {
+      id: true,
+      name: true,
+      url: true,
+      vertical: true,
+      tagline: true,
+      description: true,
+      ga4MeasurementId: true,
+      wpApiBaseUrl: true,
+    },
   });
   const match = websites.find((w) => normalizeHost(w.url) === wanted);
 
@@ -51,14 +72,10 @@ export async function GET(request: Request, context: RouteContext<"/api/v1/sites
     );
   }
 
-  return apiJson({
-    websiteId: match.id,
-    name: match.name,
-    host: wanted,
-    // null is a real answer meaning "analytics not configured", distinct from
-    // the 404 above meaning "this site is not registered at all". A caller that
-    // conflates them would silently drop the tag whenever the host was wrong.
-    ga4MeasurementId: match.ga4MeasurementId,
-  });
+  // Hình dạng phản hồi dựng ở lib/publisher/site-config.ts, không dựng tại
+  // chỗ này: nút "Dựng Site" bên HQ phải hỏi CÙNG một câu "site này đã đủ
+  // chưa" mà endpoint trả lời, và hai nơi tự trả lời riêng là hai câu trả lời
+  // sẽ trôi lệch.
+  return apiJson(buildSiteConfig(match, wanted));
 }
 

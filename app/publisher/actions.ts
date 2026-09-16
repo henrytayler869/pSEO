@@ -10,6 +10,7 @@ import { normalizeHost } from "@/lib/publisher/link-domain";
 import { getVerticalsWithMarkets } from "@/lib/queries/verticals";
 import { createPublisherKey, revokePublisherKey } from "@/lib/settings/api-key";
 import { pushKeyToSite, isHeaderSafeSecret } from "@/lib/publisher/push-key";
+import { judgeReadiness } from "@/lib/publisher/site-config";
 
 export interface ActionResult {
   ok: boolean;
@@ -353,4 +354,57 @@ export async function revokePublisherKeyAction(_prev: ActionResult, formData: Fo
   await revokePublisherKey(id);
   if (websiteId) revalidatePath(`/publisher/${websiteId}`);
   return { ok: true, message: "Đã thu hồi. Nơi nào còn dùng khoá này sẽ nhận 401 ngay lập tức." };
+}
+
+/**
+ * Danh tính hiển thị của site: tên, tagline, description.
+ *
+ * Tách khỏi connectWebsiteAction vì hai việc xảy ra ở hai thời điểm: site
+ * được đăng ký ngay khi có domain, còn câu chữ thương hiệu thường chốt sau.
+ * Bắt điền đủ ở form kết nối sẽ đẩy người ta tới chỗ gõ bừa cho qua — và một
+ * description gõ bừa là thứ đi thẳng vào kết quả tìm kiếm.
+ *
+ * Ô trống XOÁ giá trị, không bị từ chối. Gỡ một description sai là việc có
+ * thật, và một ô chỉ điền được mà không xoá được sẽ nhốt giá trị sai ở đó.
+ */
+export async function updateSiteIdentityAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const websiteId = String(formData.get("websiteId") ?? "").trim();
+  if (!websiteId) return { ok: false, message: "Thiếu websiteId." };
+
+  const name = String(formData.get("name") ?? "").trim();
+  const tagline = String(formData.get("tagline") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+
+  if (!name) return { ok: false, message: "Tên site không được để trống — nó là tiêu đề trang và tên thương hiệu." };
+
+  try {
+    const website = await prisma.website.update({
+      where: { id: websiteId },
+      data: { name, tagline: tagline || null, description: description || null },
+    });
+    revalidatePath(`/publisher/${websiteId}`);
+    revalidatePath("/publisher");
+
+    // Báo ngay cho site, cùng lý do như measurement ID: site tự lấy khi cache
+    // hết hạn, nhưng HTML nằm ở Cloudflare tới 24 giờ và người vừa sửa tên sẽ
+    // mở trang, không thấy gì đổi, rồi kết luận là hỏng.
+    const notify = await notifySiteConfigChanged(website);
+    const { ready, missing } = judgeReadiness({
+      id: website.id,
+      name: website.name,
+      url: website.url,
+      vertical: website.vertical,
+      tagline: website.tagline,
+      description: website.description,
+      ga4MeasurementId: website.ga4MeasurementId,
+      wpApiBaseUrl: website.wpApiBaseUrl,
+    });
+
+    const state = ready
+      ? "Site đã đủ danh tính để dựng."
+      : `CHƯA đủ để dựng — còn thiếu: ${missing.map((m) => `${m.field} (${m.why})`).join("; ")}.`;
+    return { ok: true, message: `Đã lưu. ${state} ${notify.detail}` };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Lưu thất bại." };
+  }
 }

@@ -892,6 +892,24 @@ model Website {
   wpLoopbackSecret String?
 
   /**
+   * Câu một dòng dưới tên site, và đoạn mô tả dùng cho thẻ meta description.
+   * Nằm ở đây thay vì trong mã nguồn site vì mô hình đã đổi: MỘT app phục vụ
+   * nhiều domain, phân biệt theo Host. Hằng số trong `lib/site.ts` chỉ đúng
+   * khi mỗi site là một bản build riêng — với app dùng chung, nó sẽ gán danh
+   * tính của site này cho mọi site khác.
+   * NULLABLE trong database, nhưng KHÔNG phải tuỳ chọn về mặt sản phẩm: thiếu
+   * description là ship một thẻ meta rỗng, và đó là hỏng SEO không ai thấy
+   * trên màn hình. Cột để null được là để migration không vỡ hàng đang có;
+   * chỗ chặn nằm ở `ready`/`missing` của /api/v1/sites/{host}/config, nơi một
+   * site chưa đủ danh tính bị từ chối DỰNG chứ không phải bị dựng ra rỗng.
+   * Hai trường riêng chứ không gộp: tagline hiện trên trang, description hiện
+   * trong kết quả tìm kiếm. Dùng chung một chuỗi cho hai chỗ là để một trong
+   * hai luôn sai độ dài.
+   */
+  tagline     String?
+  description String?
+
+  /**
    * What this site is currently optimising for. Drives which recommendations
    * Control Panel makes from the same metrics — a site chasing index coverage
    * and a site chasing leads read the same numbers and should be told
