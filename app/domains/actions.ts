@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { getTrafficVerticalSummaries } from "@/lib/queries/traffic-research";
 import { getCredential } from "@/lib/settings/credentials";
+import { setNameservers } from "@/lib/registrar/gname";
 import { createCloudflareZone, getCloudflareZone, findCloudflareZoneByName, CloudflareApiError } from "@/lib/cloudflare/zones";
 
 export interface ActionResult {
@@ -236,4 +237,26 @@ export async function removeDomainAction(_prev: ActionResult, formData: FormData
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Gỡ thất bại." };
   }
+}
+
+/**
+ * Đặt nameserver Cloudflare cho domain tại registrar Gname.
+ *
+ * Tách thành hành động RIÊNG, không gộp vào addDomainAction. Ba lý do:
+ * Gname lọc theo IP nên lời gọi chỉ chạy được từ production; nhiều domain đã
+ * trỏ nameserver từ trước và gọi lại là thừa; và một domain có thể được thêm
+ * trước khi ai đó cấu hình khoá Gname. Gộp vào sẽ khiến "thêm domain" thất
+ * bại vì một bước không phải lúc nào cũng cần.
+ */
+export async function setRegistrarNameserversAction(_prev: ActionResult, formData: FormData): Promise<ActionResult> {
+  const id = String(formData.get("id") ?? "");
+  const domain = await prisma.domain.findUnique({
+    where: { id },
+    select: { name: true, nameServers: true },
+  });
+  if (!domain) return { ok: false, message: "Không tìm thấy domain." };
+
+  const result = await setNameservers({ domain: domain.name, nameServers: domain.nameServers });
+  revalidatePath("/domains");
+  return { ok: result.ok, message: result.detail };
 }

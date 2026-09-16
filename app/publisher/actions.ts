@@ -15,6 +15,7 @@ import { judgeFillBudget, COST_PER_PASSAGE_USD } from "@/lib/ai/fill-queue";
 import { buildFillQueue } from "@/lib/queries/fill-queue";
 import { getOrGenerateInterpretation } from "@/lib/ai/generate";
 import { getTotalSpendUsd } from "@/lib/ai/anthropic";
+import { createPropertyWithWebStream } from "@/lib/google/analytics-admin";
 
 export interface ActionResult {
   ok: boolean;
@@ -499,4 +500,57 @@ export async function fillContentBatchAction(_prev: FillBatchResult, formData: F
     remaining,
     costUsd: Number(costUsd.toFixed(4)),
   };
+}
+
+export interface CreateGa4Result {
+  ok: boolean;
+  message: string;
+  propertyId?: string;
+  measurementId?: string;
+}
+
+/**
+ * Tạo GA4 property + luồng web cho một website đã nối, rồi LƯU cả hai id.
+ *
+ * Lưu luôn thay vì hiện ra cho người chép: chép tay giữa hai ô là chỗ
+ * ga4PropertyId và ga4MeasurementId bị đảo cho nhau, và hai cái đó đảo nhau
+ * thì Data API từ chối một bên còn bên kia thu thập rỗng trong khi mọi trang
+ * vẫn render — không màn hình nào báo.
+ */
+export async function createGa4PropertyAction(_prev: CreateGa4Result, formData: FormData): Promise<CreateGa4Result> {
+  const websiteId = String(formData.get("websiteId") ?? "");
+  const accountName = String(formData.get("accountName") ?? "").trim();
+  if (!websiteId) return { ok: false, message: "Thiếu website." };
+  if (!accountName) return { ok: false, message: "Chưa chọn tài khoản Google Analytics." };
+
+  const site = await prisma.website.findUnique({
+    where: { id: websiteId },
+    select: { name: true, url: true, ga4PropertyId: true },
+  });
+  if (!site) return { ok: false, message: "Không tìm thấy website." };
+
+  try {
+    const created = await createPropertyWithWebStream({
+      accountName,
+      displayName: site.name,
+      siteUrl: site.url,
+    });
+
+    await prisma.website.update({
+      where: { id: websiteId },
+      data: { ga4PropertyId: created.propertyId, ga4MeasurementId: created.measurementId },
+    });
+    revalidatePath(`/publisher/${websiteId}`);
+
+    return {
+      ok: true,
+      message:
+        `Đã tạo property "${created.displayName}" và lưu cả hai id. ` +
+        `Property ID ${created.propertyId} để ĐỌC báo cáo; Measurement ID ${created.measurementId} để site GHI sự kiện.`,
+      propertyId: created.propertyId,
+      measurementId: created.measurementId,
+    };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : "Tạo GA4 property thất bại." };
+  }
 }
