@@ -61,7 +61,10 @@ export async function pushKeyToSite(
         "content-type": "application/json",
         "x-revalidate-secret": website.revalidateSecret,
       },
-      body: JSON.stringify({ key }),
+      // host đi kèm: từ khi publisher giữ khoá theo từng host, một lần đẩy
+      // không nói rõ host sẽ ghi vào site đầu tiên trong bảng — đúng cho một
+      // site, sai lặng lẽ từ site thứ hai.
+      body: JSON.stringify({ key, host: new URL(website.url).hostname.replace(/^www\./, "") }),
       signal: AbortSignal.timeout(15_000),
       cache: "no-store",
     });

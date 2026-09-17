@@ -113,6 +113,16 @@ async function main() {
   const vertical = arg("--vertical") ?? "";
   const ga4Property = arg("--ga4-property");
   const ga4Measurement = arg("--ga4-measurement");
+  /**
+   * Danh tính hiển thị. BẮT BUỘC trên thực tế dù script này không chặn:
+   * lib/publisher/site-config.ts coi thiếu tagline hoặc description là site
+   * CHƯA dựng được, nên `npm run hq:sites` bên publisher sẽ từ chối.
+   *
+   * Thêm vào đây vì nếu không thì nối site xong vẫn phải mở giao diện điền
+   * tay hai ô — đúng thứ chuỗi lệnh này tồn tại để bỏ đi.
+   */
+  const tagline = arg("--tagline");
+  const description = arg("--description");
   const wpApiBase = arg("--wp-api-base");
   const serviceAccountFile = arg("--service-account-file");
   const revalidateSecretFile = arg("--revalidate-secret-file");
@@ -246,6 +256,8 @@ async function main() {
       ga4PropertyId: ga4Property,
       ga4MeasurementId: ga4Measurement || null,
       wpApiBaseUrl: effectiveWpApiBase,
+      ...(tagline ? { tagline } : {}),
+      ...(description ? { description } : {}),
       ...(revalidateSecret ? { revalidateSecret } : {}),
     },
     update: {
@@ -254,6 +266,10 @@ async function main() {
       ga4PropertyId: ga4Property,
       ga4MeasurementId: ga4Measurement || null,
       wpApiBaseUrl: effectiveWpApiBase,
+      // Như revalidateSecret bên dưới: chỉ ghi khi có truyền vào. Chạy lại
+      // lệnh mà quên hai cờ này thì không được XOÁ danh tính đang dùng được.
+      ...(tagline ? { tagline } : {}),
+      ...(description ? { description } : {}),
       // Only overwritten when a new one was supplied. Passing nothing must not
       // silently erase a secret that is already working.
       ...(revalidateSecret ? { revalidateSecret } : {}),
@@ -267,6 +283,8 @@ async function main() {
   console.log(`  gsc              ${website.gscPropertyUrl}`);
   console.log(`  ga4 property     ${website.ga4PropertyId}`);
   console.log(`  ga4 measurement  ${website.ga4MeasurementId ?? "(chưa đặt)"}`);
+  console.log(`  tagline          ${website.tagline ?? "(CHƯA ĐẶT — hq:sites sẽ từ chối)"}`);
+  console.log(`  description      ${website.description ? `${website.description.slice(0, 60)}…` : "(CHƯA ĐẶT — hq:sites sẽ từ chối)"}`);
   console.log(`  revalidate secret ${website.revalidateSecret ? "đã đặt" : "(chưa đặt — site sẽ tự lấy khi cache hết hạn)"}`);
   console.log(`  wp api base      ${website.wpApiBaseUrl ?? "(mặc định)"}${wpApiBase ? "" : "  <- tự suy ra"}${wpProbe.ok ? "  [200 OK]" : "  [KHÔNG trả 200]"}`);
   console.log("\nKiểm lại từ bên ngoài: https://<host>/api/version — analyticsSource phải là \"hq\".");
