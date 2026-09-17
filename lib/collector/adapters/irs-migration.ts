@@ -1,4 +1,5 @@
 import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types";
+import { parseCsv } from "../csv";
 import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
@@ -130,11 +131,20 @@ export class IrsMigrationAdapter implements CollectorAdapter {
     assertHttpOk(status, body, `IRS migration file request failed (${url})`, { unauthenticated: true });
 
     const text = body.toString("utf-8");
-    const lines = text.split("\n").filter((l) => l.trim().length > 0);
-    if (lines.length === 0) {
+    /**
+     * Bộ đọc CSV đúng chuẩn, cùng lý do với adapter FARS.
+     *
+     * Ở đây rủi ro còn rõ hơn: adapter này đọc cột TÊN HẠT, và tên hạt là chỗ
+     * dấu phẩy xuất hiện tự nhiên nhất trong một file của cơ quan liên bang.
+     * Một tên có dấu phẩy sẽ đẩy `n1` và `agi` sang cột khác — và cả hai đều
+     * là số, nên chúng nhận một giá trị có thật của cột bên cạnh và trông
+     * hoàn toàn bình thường.
+     */
+    const rows = parseCsv(text);
+    if (rows.length === 0) {
       throw new SchemaDriftError(`IRS migration file (${url}) was empty.`);
     }
-    const header = lines[0].split(",");
+    const header = rows[0].map((h) => h.trim());
     const stateIdx = header.indexOf(countyStateCol);
     const countyIdx = header.indexOf(countyCountyCol);
     const nameIdx = header.indexOf(countyNameCol);
@@ -145,8 +155,8 @@ export class IrsMigrationAdapter implements CollectorAdapter {
     }
 
     const result = new Map<string, { households: number; agiThousands: number }>();
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(",");
+    for (let i = 1; i < rows.length; i++) {
+      const cols = rows[i];
       const name = cols[nameIdx];
       if (!name || !name.endsWith(TOTAL_MIGRATION_SUFFIX)) continue; // only the one aggregate row per county
 
