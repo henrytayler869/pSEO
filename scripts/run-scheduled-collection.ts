@@ -44,12 +44,38 @@ const IMPLEMENTED_ADAPTER_KEYS = [...ALL_ADAPTER_KEYS];
 // plus retry bursts can exceed that, so this source alone runs throttled.
 const CONCURRENCY_OVERRIDES: Record<string, number> = { noaa_climate_normals: 4 };
 
+/**
+ * `--adapter <key>`: chạy đúng MỘT nguồn.
+ *
+ * Thêm vào 17/9/2026 khi phải thu lại FARS sau lúc sửa bộ đọc CSV. Không có
+ * cờ này thì cách duy nhất là chạy cả bảy nguồn — chạm dữ liệu của sáu nguồn
+ * không liên quan, mất hàng chục phút, và làm bất kỳ sai lệch nào sau đó khó
+ * quy về nguyên nhân nào.
+ *
+ * Không cờ thì chạy tất cả, y như trước — cron không đổi.
+ */
+function adapterFilter(): string | null {
+  const i = process.argv.indexOf("--adapter");
+  return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : null;
+}
+
 async function main() {
   const startedAt = new Date();
-  console.log(`[${startedAt.toISOString()}] Bắt đầu chạy thu thập dữ liệu định kỳ.`);
+  const only = adapterFilter();
+  console.log(
+    `[${startedAt.toISOString()}] Bắt đầu chạy thu thập dữ liệu định kỳ${only ? ` — CHỈ nguồn "${only}"` : ""}.`
+  );
+
+  const known: readonly string[] = IMPLEMENTED_ADAPTER_KEYS;
+  const allowed = only ? [only] : [...IMPLEMENTED_ADAPTER_KEYS];
+  if (only && !known.includes(only)) {
+    console.error(`Adapter "${only}" chưa được triển khai. Đang có: ${IMPLEMENTED_ADAPTER_KEYS.join(", ")}`);
+    process.exitCode = 1;
+    return;
+  }
 
   const sources = await prisma.dataSource.findMany({
-    where: { isActive: true, adapterKey: { in: IMPLEMENTED_ADAPTER_KEYS } },
+    where: { isActive: true, adapterKey: { in: allowed } },
   });
   if (sources.length === 0) {
     console.error("Không có DataSource nào đang active với adapter đã triển khai — không có gì để chạy.");
