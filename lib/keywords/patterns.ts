@@ -261,10 +261,22 @@ export interface KeywordCandidateMetrics {
  * 2026-09-09: the two pillar pages on atmovingservices.com. Verified clean at
  * the time — 0 markets targeting either term, 0 overlapping pairs — so this
  * costs nothing today and exists to keep it that way.
+ *
+ * 2026-09-17: trang pillar đầu tiên của publisher thứ hai,
+ * theaccidentrecord.com. Kiểm trước khi thêm, cùng cách:
+ *
+ *   thị trường nhắm ĐÚNG cụm đó               0
+ *   thị trường chứa cụm "accident statistics"  0
+ *
+ * Cụm được chọn theo ĐO ĐẠC, không theo ý muốn. Chủ dự án yêu cầu chủ đề
+ * "crash data by state"; DataForSEO trả no-data cho đúng chữ đó, còn
+ * "car accident statistics by state" có 170/mo và KD 25. Giữ chủ đề, đổi cách
+ * gọi — một trang trụ dựng trên cụm không ai tìm là một trang dựng trên ý kiến.
  */
 const RESERVED_TERMS = new Map<string, string>([
   ["moving services cross country", "trang pillar /long-distance-moving"],
   ["local moving services", "trang pillar /local-moving"],
+  ["car accident statistics by state", "trang pillar /car-accident-statistics-by-state"],
 ]);
 
 function normaliseTerm(keyword: string): string {
