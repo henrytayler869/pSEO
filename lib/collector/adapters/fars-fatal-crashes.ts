@@ -2,6 +2,7 @@ import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types
 import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 import { readZipEntry } from "../zip-entry";
+import { parseCsv, headerIndex } from "../csv";
 
 /**
  * NHTSA FARS — số vụ tai nạn giao thông CÓ NGƯỜI CHẾT theo hạt, mỗi năm.
@@ -107,14 +108,27 @@ export class FarsFatalCrashesAdapter implements CollectorAdapter {
     // encoding cho ra tên cột "﻿STATE", `indexOf("STATE")` trả -1, và
     // phép gộp ra 0 hạt — một mảng rỗng, không phải một lỗi. Đã mắc đúng
     // lỗi này lúc khảo sát.
-    const text = csv.toString("utf-8").replace(/^﻿/, "");
-    const lines = text.split("\n").filter((l) => l.trim().length > 0);
-    if (lines.length < 2) throw new SchemaDriftError(`accident.csv trong bộ FARS ${DATA_YEAR} rỗng.`);
+    /**
+     * Bộ đọc CSV đúng chuẩn, KHÔNG phải split(",").
+     *
+     * accident.csv có 1.107 / 39.422 dòng chứa trường có ngoặc kép, và FATALS
+     * là cột thứ 79 trong 80 — nên mọi lệch cột đều trúng nó. Đo 17/9/2026
+     * trên chính file này:
+     *
+     *   split(",")   vụ=38.878  người=80.360  tỷ lệ 2,07
+     *   đúng chuẩn   vụ=39.419  người=42.718  tỷ lệ 1,08
+     *   NHTSA        vụ=39.221  người=42.795  tỷ lệ 1,09
+     *
+     * Số người chết cao GẦN GẤP ĐÔI, và 541 vụ bị nuốt hẳn vì STATE/COUNTY
+     * lệch tới mức không parse được. Cả hai sai số đều im lặng.
+     */
+    const rows = parseCsv(csv.toString("utf-8"));
+    if (rows.length < 2) throw new SchemaDriftError(`accident.csv trong bộ FARS ${DATA_YEAR} rỗng.`);
 
-    const header = lines[0].split(",").map((h) => h.trim());
-    const stateIdx = header.indexOf("STATE");
-    const countyIdx = header.indexOf("COUNTY");
-    const fatalsIdx = header.indexOf("FATALS");
+    const header = rows[0];
+    const stateIdx = headerIndex(header, "STATE");
+    const countyIdx = headerIndex(header, "COUNTY");
+    const fatalsIdx = headerIndex(header, "FATALS");
     if ([stateIdx, countyIdx, fatalsIdx].includes(-1)) {
       throw new SchemaDriftError(
         `accident.csv thiếu cột mong đợi (STATE/COUNTY/FATALS). Cột nhận được: ${header.slice(0, 15).join(", ")}…`
@@ -123,12 +137,16 @@ export class FarsFatalCrashesAdapter implements CollectorAdapter {
 
     const result = new Map<string, CountyCrashData>();
     let parsed = 0;
-    for (let i = 1; i < lines.length; i++) {
-      const cols = lines[i].split(",");
+    let skippedUnparsable = 0;
+    for (let i = 1; i < rows.length; i++) {
+      const cols = rows[i];
       const state = Number(cols[stateIdx]);
       const county = Number(cols[countyIdx]);
       const fatals = Number(cols[fatalsIdx]);
-      if (!Number.isFinite(state) || !Number.isFinite(county)) continue;
+      if (!Number.isFinite(state) || !Number.isFinite(county)) {
+        skippedUnparsable++;
+        continue;
+      }
 
       // FARS dùng mã hạt 997/998/999 cho "không rõ"/"ngoài hạt". Gộp chúng
       // vào một FIPS thật sẽ cộng vụ của nơi khác vào một hạt có thật.
@@ -140,6 +158,19 @@ export class FarsFatalCrashesAdapter implements CollectorAdapter {
       e.fatalities += Number.isFinite(fatals) ? fatals : 0;
       result.set(fips, e);
       parsed++;
+    }
+
+    /**
+     * Dòng không đọc được là LỖI, không phải chuyện thường.
+     *
+     * Bản trước bỏ qua im lặng và mất 541 vụ. Ngưỡng 0,5% đủ rộng cho một dòng
+     * rác lẻ ở cuối file, và đủ chặt để bắt một lần đổi định dạng.
+     */
+    if (skippedUnparsable > (rows.length - 1) * 0.005) {
+      throw new SchemaDriftError(
+        `accident.csv: ${skippedUnparsable}/${rows.length - 1} dòng không đọc được STATE/COUNTY. ` +
+          `Định dạng có thể đã đổi — một bản trước của adapter này mất 541 vụ đúng theo cách đó.`
+      );
     }
 
     // Một file tải về đủ 33 MB nhưng gộp ra vài chục hàng nghĩa là cột đã
