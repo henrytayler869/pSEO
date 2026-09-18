@@ -6,6 +6,7 @@ import { getTrafficVerticalSummaries } from "@/lib/queries/traffic-research";
 import { getCredential } from "@/lib/settings/credentials";
 import { setNameservers } from "@/lib/registrar/gname";
 import { createCloudflareZone, getCloudflareZone, findCloudflareZoneByName, CloudflareApiError } from "@/lib/cloudflare/zones";
+import { provisionSite, type StepResult } from "@/lib/publisher/provision";
 
 export interface ActionResult {
   ok: boolean;
@@ -259,4 +260,75 @@ export async function setRegistrarNameserversAction(_prev: ActionResult, formDat
   const result = await setNameservers({ domain: domain.name, nameServers: domain.nameServers });
   revalidatePath("/domains");
   return { ok: result.ok, message: result.detail };
+}
+
+export interface ProvisionActionResult {
+  ok: boolean;
+  message: string;
+  steps: StepResult[];
+  manual: { title: string; commands: string[] }[];
+}
+
+/**
+ * Dựng site từ một domain đã có zone.
+ *
+ * XÁC NHẬN BẰNG CHÍNH TÊN MIỀN, không phải một hộp thoại "bạn có chắc không".
+ * Bước này tạo GA4 property thật, ghi A record thật, và cấp khoá thật — gõ lại
+ * tên miền là cách rẻ nhất để phân biệt "tôi định bấm cái này" với "tôi vừa
+ * bấm nhầm hàng".
+ *
+ * KHÔNG dừng ở bước hỏng đầu tiên rồi im: báo cáo trả về TOÀN BỘ trạng thái
+ * từng bước. Một nút chỉ nói "thất bại" buộc người bấm phải đoán nó đã kịp làm
+ * gì, và đoán sai ở đây nghĩa là chạy lại một bước đã xong.
+ */
+export async function provisionSiteAction(
+  _prev: ProvisionActionResult,
+  formData: FormData
+): Promise<ProvisionActionResult> {
+  const empty = { steps: [], manual: [] };
+  const domainName = String(formData.get("domainName") ?? "").trim().toLowerCase();
+  const confirm = String(formData.get("confirm") ?? "").trim().toLowerCase();
+
+  if (confirm !== domainName) {
+    return { ok: false, message: `Gõ đúng "${domainName}" để xác nhận.`, ...empty };
+  }
+
+  const name = String(formData.get("name") ?? "").trim();
+  const vertical = String(formData.get("vertical") ?? "").trim();
+  const tagline = String(formData.get("tagline") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  const serverIp = String(formData.get("serverIp") ?? "").trim();
+
+  const missing = [
+    !name && "tên site",
+    !vertical && "ngành",
+    !tagline && "tagline",
+    !description && "mô tả",
+    !serverIp && "IP máy chủ",
+  ].filter(Boolean);
+  if (missing.length) {
+    // Kiểm ở đây chứ không để bước sau gãy: thiếu tagline hay mô tả thì
+    // lib/publisher/site-config.ts coi site là CHƯA dựng được, và lỗi đó sẽ
+    // nổ ở tận lệnh hq:sites bên repo publisher.
+    return { ok: false, message: `Thiếu: ${missing.join(", ")}.`, ...empty };
+  }
+
+  const report = await provisionSite({ domainName, name, vertical, tagline, description, serverIp });
+  revalidatePath("/domains");
+
+  const failed = report.steps.filter((s) => s.status === "failed").length;
+  const waiting = report.steps.filter((s) => s.status === "waiting").length;
+  const done = report.steps.filter((s) => s.status === "done").length;
+
+  return {
+    ok: failed === 0,
+    message:
+      failed > 0
+        ? `${done} bước xong, ${failed} bước HỎNG, ${waiting} bước đang chờ.`
+        : waiting > 0
+          ? `${done} bước xong, ${waiting} bước chờ phần việc tay bên dưới. Làm xong rồi bấm lại.`
+          : `${done} bước xong.`,
+    steps: report.steps,
+    manual: report.manual,
+  };
 }
