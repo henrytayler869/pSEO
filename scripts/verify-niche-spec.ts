@@ -46,8 +46,8 @@ async function main() {
     }
 
     // Chỉ số THẬT SỰ có, cho đúng nghề này, qua đúng đường mà fact set đi.
-    const rows = await prisma.$queryRawUnsafe<{ metric: string }[]>(
-      `SELECT DISTINCT dp.metric
+    const rows = await prisma.$queryRawUnsafe<{ metric: string; res: string }[]>(
+      `SELECT DISTINCT dp.metric, dp."resolvedAtResolution"::text AS res
        FROM "DataPoint" dp
        JOIN "DataSnapshot" ds ON ds.id = dp."snapshotId"
        JOIN "DataSource" s ON s.id = ds."sourceId"
@@ -55,6 +55,7 @@ async function main() {
       vertical
     );
     const real = new Set(rows.map((r) => r.metric));
+    const resolutionOf = new Map(rows.map((r) => [r.metric, r.res]));
     const named = metricsNamedBy(spec);
 
     const invented = [...named].filter((m) => !real.has(m)).sort();
@@ -73,6 +74,33 @@ async function main() {
         `${vertical}: "${m}" chưa được dùng cũng chưa được ghi vào excluded. ` +
           `"Chưa ai viết mục cho nó" và "đã quyết định không dùng" phải phân biệt được.`
       );
+    }
+
+    /**
+     * CHIỀU THỨ TƯ: `scope` của mục phải khớp độ phân giải THẬT của từng chỉ số.
+     *
+     * Thêm sau khi cổng phía publisher để lọt đúng đột biến này. Cổng đó dựng
+     * sự kiện giả bằng CHÍNH `section.scope`, nên nó kiểm đặc tả với chính nó:
+     * đổi COUNTY thành ZIP thì sự kiện giả cũng thành ZIP, khớp, và xanh. Một
+     * phép kiểm tự nhất quán không phải một phép kiểm.
+     *
+     * Hậu quả nếu lọt: mục in "Measured for this ZIP code" ngay dưới một con
+     * số cấp HẠT — sai phạm vi, đọc trôi chảy, và vi phạm đúng luật
+     * `aggregate-must-declare-scope` mà HQ tự công bố.
+     *
+     * Chỉ HQ kiểm được: publisher không có bảng DataPoint nên không biết độ
+     * phân giải thật của bất kỳ chỉ số nào.
+     */
+    for (const section of spec.sections) {
+      for (const metric of [...section.requires, ...(section.optional ?? [])]) {
+        const actual = resolutionOf.get(metric);
+        if (!actual || actual === section.scope) continue;
+        console.log(`          ✗ mục "${section.key}" khai ${section.scope} nhưng "${metric}" thật sự là ${actual}`);
+        problems.push(
+          `${vertical}: mục "${section.key}" khai ${section.scope}, chỉ số "${metric}" là ${actual}. ` +
+            `Mục sẽ in câu nói phạm vi SAI ngay cạnh con số nó mô tả.`
+        );
+      }
     }
   }
 
