@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { AddDomainForm } from "@/components/add-domain-form";
 import { RefreshDomainButton } from "@/components/refresh-domain-button";
+import { ProvisionSiteButton } from "@/components/provision-site-button";
 import { SetNameserversButton } from "@/components/set-nameservers-button";
 import { RemoveDomainButton } from "@/components/remove-domain-button";
 import { getDomains } from "@/lib/queries/domains";
@@ -121,6 +122,7 @@ export default async function DomainsPage() {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <RefreshDomainButton domainId={d.id} />
+                        <ProvisionSiteButton domainName={d.name} vertical={d.relevantVertical} />
                         <SetNameserversButton domainId={d.id} nameServers={d.nameServers} />
                         <RemoveDomainButton domainId={d.id} />
                       </div>
