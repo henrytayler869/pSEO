@@ -14,7 +14,7 @@ import { judgeReadiness } from "@/lib/publisher/site-config";
 import { judgeFillBudget, COST_PER_PASSAGE_USD } from "@/lib/ai/fill-queue";
 import { buildFillQueue } from "@/lib/queries/fill-queue";
 import { getOrGenerateInterpretation } from "@/lib/ai/generate";
-import { getTotalSpendUsd } from "@/lib/ai/anthropic";
+import { getSpendUsdForVertical, getTotalSpendUsd } from "@/lib/ai/anthropic";
 import { createPropertyWithWebStream } from "@/lib/google/analytics-admin";
 
 export interface ActionResult {
@@ -458,7 +458,8 @@ export async function fillContentBatchAction(_prev: FillBatchResult, formData: F
 
   // Kiểm ngân sách cho ĐÚNG LÔ NÀY, không phải cho toàn bộ hàng đợi. Chặn cả
   // lô vì tổng vượt trần sẽ khoá luôn việc điền mười trang quan trọng nhất.
-  const spent = await getTotalSpendUsd();
+  // Chi tiêu CỦA NGHỀ NÀY, để cùng đơn vị đo với ngân sách của site.
+  const spent = await getSpendUsdForVertical(site.vertical);
   const verdict = judgeFillBudget({
     budgetUsd: site.aiBudgetUsd,
     spentUsd: spent,

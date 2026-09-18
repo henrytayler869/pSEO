@@ -64,6 +64,32 @@ export async function getTotalSpendUsd(): Promise<number> {
   return agg._sum.costUsd ?? 0;
 }
 
+/**
+ * Chi tiêu AI của MỘT nghề.
+ *
+ * ═══ VÌ SAO CẦN, VÀ VÌ SAO LÀ MỘT LỖI CHỨ KHÔNG PHẢI THIẾU TÍNH NĂNG ═══
+ *
+ * `Website.aiBudgetUsd` là ngân sách của MỘT site. `getTotalSpendUsd()` là chi
+ * tiêu của TOÀN HỆ. Cổng ngân sách so hai con số đó với nhau — hai đơn vị đo
+ * khác nhau, nên kết luận của nó không có nghĩa.
+ *
+ * Đo 18/9/2026, đặt ngân sách $2 cho publisher thứ hai rồi bấm điền 5 trang:
+ *
+ *   "Điền hết ước tính $0.12, cộng $11.66 đã tiêu thành $11.78 —
+ *    vượt ngân sách $2.00."
+ *
+ * $11,66 đó là tiền site THỨ NHẤT đã tiêu. Site thứ hai chưa tiêu một xu, và
+ * nó bị chặn vì mức chi của người khác. Hệ quả ngược lại cũng đúng và nguy
+ * hơn: đặt ngân sách rộng cho một site là nới trần cho mọi site.
+ *
+ * Bảng AiSpend đã có sẵn cột `vertical` và `websiteId` — dữ liệu chưa bao giờ
+ * thiếu, chỉ có phép cộng là sai chỗ.
+ */
+export async function getSpendUsdForVertical(vertical: string): Promise<number> {
+  const agg = await prisma.aiSpend.aggregate({ _sum: { costUsd: true }, where: { vertical } });
+  return agg._sum.costUsd ?? 0;
+}
+
 function costUsd(model: string, inputTokens: number, outputTokens: number): number {
   const p = PRICING_PER_MTOK[model];
   // An unknown model is priced at the most expensive known rate rather than
