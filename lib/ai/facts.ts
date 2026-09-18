@@ -138,6 +138,29 @@ const UNIT_WORDS: Record<string, string> = {
   // Empty on purpose: every label using this already says "in the last 10
   // years", and repeating it reads as a second, different figure.
   "count/10yr": "",
+  /**
+   * Cố ý để trống — nhãn đã mang danh từ.
+   *
+   * Đo dòng prompt thật cho ZIP 85225, niche auto-accident-attorney:
+   *
+   *   - fatal traffic crashes in a year: 630        [unit="crashes/yr"]
+   *   - workers aged 16 and over who commute: 40,324  [unit="people"]
+   *
+   * Thêm "crashes" vào cái thứ nhất ra "fatal traffic crashes in a year: 630
+   * crashes"; thêm "people" vào cái thứ hai ra "…who commute: 40,324 people".
+   * Cả hai đều là lặp — cùng hình dạng với "67.282 households households" đã
+   * ship lên 126 trang ngày 10/9.
+   *
+   * Cơ chế này sinh ra để chặn model ĐOÁN đơn vị khi con số mơ hồ (8.79 là
+   * inch hay cm). Một phép đếm mà nhãn đã nói đang đếm cái gì thì không mơ hồ,
+   * nên câu trả lời đúng là "không thêm từ" — khai tường minh, chứ không để
+   * rơi vào nhánh cảnh báo. Một cảnh báo nổ trong lúc chạy bình thường dạy
+   * người đọc bỏ qua cảnh báo.
+   *
+   * "/yr" cũng không cần từ: nhãn đã nói "in a year".
+   */
+  "crashes/yr": "",
+  people: "",
   // Already symbolised inside the formatted string.
   "%": "",
   USD: "",

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { unitWordFor } from "@/lib/ai/facts";
 import { SchemaDriftError, LocationFetchError } from "./errors";
 import { HostUnreachableError } from "@/lib/net/curl-fetch";
 import { mapWithConcurrency, sleep } from "./concurrency";
@@ -170,6 +171,37 @@ export async function runCollection(params: {
     },
     () => driftMessage !== null || unreachableMessage !== null
   );
+
+  /**
+   * ĐƠN VỊ LẠ LÀ LỖI, KHÔNG PHẢI CẢNH BÁO — và bắt ở đây, nơi nó RA ĐỜI.
+   *
+   * Trước đây chỗ duy nhất nhận ra một đơn vị chưa có từ hiển thị là
+   * lib/ai/facts.ts, lúc dựng prompt — xa chỗ sinh ra nó hàng tuần, và chỉ
+   * console.warn. Đo 18/9/2026: hai đơn vị của niche auto-accident-attorney
+   * ("crashes/yr", "people") đã nằm trong dữ liệu production nhiều ngày, cảnh
+   * báo nổ mỗi lần dựng hàng đợi, và không ai đọc.
+   *
+   * Hậu quả nếu điền nội dung lúc đó: model nhận SỐ TRẦN không kèm đơn vị và
+   * phải tự đoán "8828" là vụ hay là người. Validator kiểm CON SỐ, chưa bao
+   * giờ kiểm đơn vị — nên một lỗi đơn vị đọc trôi chảy và qua mọi cổng.
+   *
+   * Không quét tĩnh mã nguồn: adapter khai đơn vị bằng ba cách khác nhau —
+   * literal trong object, tham số của một hàm push(), và template
+   * `count/${...}yr`. Một regex bỏ sót đúng cái đang thiếu và sẽ báo xanh.
+   * Chỗ duy nhất biết chắc là dữ liệu vừa thu.
+   *
+   * Ném chứ không ghi nhận: snapshot chưa được tạo ở điểm này, nên chưa có gì
+   * để dọn. Một adapter mới gãy ngay lần chạy đầu, trước khi kịp đổ dữ liệu
+   * không mô tả được vào bảng.
+   */
+  const undeclared = [...new Set(collectedPoints.map((p) => p.unit))].filter((u) => unitWordFor(u) === null);
+  if (undeclared.length > 0) {
+    throw new Error(
+      `[collector:${adapterKey}] ${undeclared.length} đơn vị chưa có từ hiển thị: ${undeclared.map((u) => JSON.stringify(u)).join(", ")}. ` +
+        `Khai trong UNIT_WORDS ở lib/ai/facts.ts — một từ, hoặc "" kèm lý do nếu nhãn đã mang danh từ. ` +
+        `Chưa khai thì prompt in số trần và model phải đoán đơn vị, mà validator chỉ kiểm con số.`
+    );
+  }
 
   const status = snapshotStatusFor({
     driftMessage,
