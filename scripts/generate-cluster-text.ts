@@ -4,12 +4,18 @@
 // thứ đã sinh phải là thứ đáng nhất — không phải cụm nào tình cờ đứng đầu
 // bảng chữ cái.
 //
+// Hàng đợi dựng bằng CHÍNH hàm mà nút "Điền cụm" trên UI gọi
+// (lib/queries/cluster-fill-queue.ts). Trước đây script tự gom cụm và tự xếp
+// hạng, và bản sao thứ hai đó là bản sẽ trôi lệch: một sửa đổi ở màn hình
+// không chạm tới nó, nên hai bên sẽ nói hai con số "còn thiếu" khác nhau mà
+// không bên nào sai rõ ràng.
+//
 // Dùng: tsx scripts/generate-cluster-text.ts [số cụm tối đa]
 
 import { prisma } from "../lib/db/prisma";
 import { resolveSite, reportSiteError } from "../lib/scripts/resolve-site";
 import { numberArg, reportArgError } from "../lib/scripts/argv";
-import { fetchServedInventory } from "../lib/publisher/inventory";
+import { buildClusterFillQueue } from "../lib/queries/cluster-fill-queue";
 import { generateForCluster } from "../lib/ai/cluster-generate";
 import { SpendCapExceededError } from "../lib/ai/anthropic";
 import { getBudgetStatus } from "../lib/ai/budget";
@@ -23,32 +29,12 @@ async function main() {
     throw err;
   }
 
-  const inv = await fetchServedInventory(site.url);
-
-  // Gom ZIP theo đường dẫn trang cụm. Publisher quyết định cụm gồm những ai;
-  // HQ chỉ đọc, không tính lại.
-  const byPath = new Map<string, string[]>();
-  for (const [zip, path] of inv.byZip) {
-    if (inv.kindByZip.get(zip) !== "cluster") continue;
-    byPath.set(path, [...(byPath.get(path) ?? []), zip]);
+  const queue = await buildClusterFillQueue(site);
+  if (queue.unavailable) {
+    console.log(`⛔ ${queue.unavailable}`);
+    await prisma.$disconnect();
+    return;
   }
-
-  // Volume của cụm = volume từ khoá của thành viên cao nhất. Mọi thành viên
-  // chung một từ khoá nên con số này là của cả cụm.
-  const ids = await prisma.marketIdentity.findMany({
-    where: { vertical: site.vertical },
-    select: { zip: true, keywordMetrics: { select: { keyword: true, searchVolume: true } } },
-  });
-  const volByZip = new Map<string, { keyword: string; volume: number }>();
-  for (const i of ids) {
-    const lead = [...i.keywordMetrics].sort((a, b) => b.searchVolume - a.searchVolume)[0];
-    if (lead) volByZip.set(i.zip, { keyword: lead.keyword, volume: lead.searchVolume });
-  }
-
-  const clusters = [...byPath].map(([path, zips]) => {
-    const best = zips.map((z) => volByZip.get(z)).filter(Boolean).sort((a, b) => b!.volume - a!.volume)[0];
-    return { path, zips, keyword: best?.keyword ?? "?", volume: best?.volume ?? 0 };
-  }).sort((a, b) => b.volume - a.volume);
 
   // Trạng thái ngân sách in TRƯỚC khi tiêu, không phải sau. In sau thì nó
   // là biên lai; in trước thì nó là thứ người ta còn kịp làm gì đó.
@@ -60,17 +46,19 @@ async function main() {
     console.log(`· Chưa đặt ngân sách AI cho publisher này (đã tiêu $${budget.totalUsd.toFixed(4)}). Đặt ở /publisher/${site.id}.\n`);
   }
 
-  const limit = numberArg(0, clusters.length);
-  console.log(`${clusters.length} cụm, chạy ${Math.min(limit, clusters.length)} theo volume giảm dần\n`);
+  const limit = numberArg(0, queue.pending.length);
+  console.log(
+    `${queue.summary.total} cụm, ${queue.summary.served} đã có chữ, ` +
+      `chạy ${Math.min(limit, queue.pending.length)} theo volume giảm dần\n`
+  );
 
-  let done = 0, failed = 0, cached = 0, cost = 0, capped = false;
-  for (const c of clusters.slice(0, limit)) {
+  let done = 0, failed = 0, cost = 0, capped = false;
+  for (const c of queue.pending.slice(0, limit)) {
     try {
       const r = await generateForCluster(site.vertical, c.zips, c.path, site.id);
       if (!r) { failed++; console.log(`  ✗ ${c.path} — không dựng được fact set (dưới 2 ZIP có dữ liệu)`); continue; }
       cost += r.costUsd;
-      if (r.attempts === 0) { cached++; console.log(`  · ${c.path} — đã có, bỏ qua`); continue; }
-      if (r.passed) { done++; console.log(`  ✓ ${String(c.volume).padStart(6)} ${c.path.padEnd(42)} ${r.attempts} lần $${r.costUsd.toFixed(4)}`); }
+      if (r.passed) { done++; console.log(`  ✓ ${String(c.searchVolume ?? 0).padStart(6)} ${c.path.padEnd(42)} ${r.attempts} lần $${r.costUsd.toFixed(4)}`); }
       else { failed++; console.log(`  ✗ ${c.path} — trượt sau ${r.attempts} lần: ${r.issues[0]?.slice(0, 90)}`); }
     } catch (err) {
       if (err instanceof SpendCapExceededError) {
@@ -83,7 +71,7 @@ async function main() {
     }
   }
 
-  console.log(`\nsinh mới ${done} | đã có ${cached} | trượt ${failed} | chạm trần ${capped} | chi phí $${cost.toFixed(4)}`);
+  console.log(`\nsinh mới ${done} | trượt ${failed} | chạm trần ${capped} | chi phí $${cost.toFixed(4)}`);
   await prisma.$disconnect();
 }
 main().catch((err) => {

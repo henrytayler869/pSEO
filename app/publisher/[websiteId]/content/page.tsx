@@ -7,6 +7,8 @@ import { prisma } from "@/lib/db/prisma";
 import { buildFillQueue } from "@/lib/queries/fill-queue";
 import { getSpendUsdForVertical } from "@/lib/ai/anthropic";
 import { ContentFillQueue } from "@/components/content-fill-queue";
+import { ClusterFillQueue } from "@/components/cluster-fill-queue";
+import { buildClusterFillQueue } from "@/lib/queries/cluster-fill-queue";
 
 /**
  * Hàng đợi điền nội dung của một publisher.
@@ -27,7 +29,14 @@ export default async function ContentPage({ params }: { params: Promise<{ websit
   // Chi tiêu CỦA NGHỀ NÀY — cùng đơn vị với ngân sách hiện ngay cạnh nó, và
   // cùng đơn vị với con số mà nút điền đem so. Hiện tổng toàn hệ ở đây trong
   // khi nút so theo nghề sẽ cho người bấm đọc một số rồi gặp một số khác.
-  const [queue, spent] = await Promise.all([buildFillQueue(site), getSpendUsdForVertical(site.vertical)]);
+  // Hai hàng đợi dựng SONG SONG. Mỗi cái đều tự hỏi /api/inventory và tự dựng
+  // fact set, nên chạy nối tiếp là cộng thẳng hai lần chờ vào một màn hình vốn
+  // đã chậm có chủ ý.
+  const [queue, clusterQueue, spent] = await Promise.all([
+    buildFillQueue(site),
+    buildClusterFillQueue(site),
+    getSpendUsdForVertical(site.vertical),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -58,6 +67,28 @@ export default async function ContentPage({ params }: { params: Promise<{ websit
             spentUsd={spent}
             excluded={queue.excluded}
             unavailable={queue.unavailable}
+          />
+        </CardContent>
+      </Card>
+
+      {/* Hàng đợi THỨ HAI, không phải một tab của cái trên.
+          Trang cụm không đọc đoạn theo ZIP, nên hai thứ này không thay thế nhau
+          được — và khi một site chỉ còn việc cụm, cái trên sẽ báo "không còn gì
+          để điền" trong khi những từ khoá lớn nhất của site vẫn 100% template. */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Trang cụm</CardTitle>
+          <CardDescription>
+            Một trang gộp nhiều ZIP, nên nó không có &ldquo;giá trị của nơi này&rdquo; — thứ nó nói được mà trang ZIP lẻ
+            không nói nổi là DẢI. Đoạn cấp cụm là một lớp riêng, sinh riêng, và trang cụm không đọc đoạn theo ZIP.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ClusterFillQueue
+            websiteId={site.id}
+            summary={clusterQueue.summary}
+            pending={clusterQueue.pending}
+            unavailable={clusterQueue.unavailable}
           />
         </CardContent>
       </Card>
