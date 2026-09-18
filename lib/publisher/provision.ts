@@ -4,6 +4,8 @@ import { ensureDnsRecord, findDnsRecord } from "@/lib/cloudflare/dns";
 import { createPropertyWithWebStream, listAccounts, AnalyticsAdminError } from "@/lib/google/analytics-admin";
 import { createPublisherKey } from "@/lib/settings/api-key";
 import { pushKeyToSite } from "@/lib/publisher/push-key";
+import { writeSiteToRepo } from "@/lib/publisher/repo-write";
+import { specFor } from "@/lib/content-spec/niche-spec";
 
 /**
  * "Dựng Site": chạy những bước HQ THẬT SỰ làm được, và nói rõ những bước
@@ -60,6 +62,30 @@ export interface ProvisionReport {
 }
 
 const hostOf = (url: string) => new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+
+/**
+ * Manifest của host này trong repo publisher, hoặc null.
+ *
+ * Đọc từ repo chứ không dựng lại: dựng manifest cần một lần gọi HQ cho mỗi ZIP
+ * và mất vài phút. Việc đó thuộc về `npm run hq:markets`, chạy một lần, không
+ * thuộc về một request từ trình duyệt.
+ */
+async function fetchRepoManifest(host: string): Promise<unknown | null> {
+  const token = await getCredential("GITHUB_TOKEN");
+  const repo = await getCredential("GITHUB_REPO");
+  if (!token || !repo) return null;
+  try {
+    const res = await fetch(`https://api.github.com/repos/${repo}/contents/data/sites/${host}/markets.json?ref=main`, {
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github.raw+json" },
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) return null;
+    return JSON.parse(await res.text());
+  } catch {
+    return null;
+  }
+}
 
 export async function provisionSite(input: ProvisionInput): Promise<ProvisionReport> {
   const steps: StepResult[] = [];
@@ -289,34 +315,81 @@ export async function provisionSite(input: ProvisionInput): Promise<ProvisionRep
     }
   }
 
+  // ── 7. Ghi dữ liệu vào repo publisher ──────────────────────────────────
+  //
+  // Manifest KHÔNG sinh ở đây: nó cần một lần gọi HQ cho từng ZIP (582 với
+  // niche này) và mất vài phút — quá lâu cho một request từ trình duyệt, và
+  // một nút treo bốn phút là một nút người ta bấm lại.
+  //
+  // Nên bước này chỉ ghi khi manifest ĐÃ có trong repo. Chưa có thì nó nói ra,
+  // kèm đúng lệnh cần chạy — thay vì ghi ba phần tư dữ liệu rồi báo xong.
+  const spec = specFor(input.vertical);
+  if (!spec) {
+    push({
+      key: "repo",
+      title: "Ghi vào repo",
+      status: "waiting",
+      detail: `Nghề "${input.vertical}" chưa có đặc tả nội dung trong HQ — khai ở lib/content-spec/niche-spec.ts.`,
+    });
+  } else {
+    const existingManifest = await fetchRepoManifest(host);
+    if (!existingManifest) {
+      push({
+        key: "repo",
+        title: "Ghi vào repo",
+        status: "waiting",
+        detail:
+          `Chưa có manifest cho ${host} trong repo. Chạy \`npm run hq:markets -- --host ${host}\` ` +
+          `rồi bấm lại — không ghi thiếu file, vì một publisher có danh tính mà không có trang là hỏng câm.`,
+      });
+    } else {
+      const written = await writeSiteToRepo({
+        host,
+        site: {
+          host,
+          name: input.name,
+          url: siteUrl,
+          vertical: input.vertical,
+          tagline: input.tagline,
+          description: input.description,
+        },
+        manifest: existingManifest,
+        spec,
+      });
+      push({
+        key: "repo",
+        title: "Ghi vào repo",
+        status: written.ok ? "done" : "waiting",
+        detail: written.prUrl ? `${written.detail} ${written.prUrl}` : written.detail,
+      });
+    }
+  }
+
   return { steps, manual: manualSteps(host, input.vertical) };
 }
 
 /**
- * Ba việc HQ KHÔNG làm được, kèm lệnh chính xác.
+ * Việc HQ KHÔNG làm được, kèm lệnh chính xác.
  *
- * Viết ra đây thay vì để trong đầu người từng làm: đó là khác biệt giữa một
- * quy trình và một ký ức.
+ * Danh sách này NGẮN DẦN, và đó là thước đo tiến độ thật của nút này:
+ *
+ *   18/9/2026 sáng   nginx + chứng chỉ · bảng site + manifest · Search Console
+ *   18/9/2026 chiều  khối nginx CHUNG xoá bỏ mục thứ nhất
+ *                    đường ghi qua GitHub API xoá phần lớn mục thứ hai
+ *
+ * Còn lại: một lệnh kéo manifest (chậm, chạy một lần), và Search Console —
+ * thứ Google bắt buộc con người xác minh quyền sở hữu, không tự động được và
+ * không nên tự động được.
  */
 function manualSteps(host: string, vertical: string): ProvisionReport["manual"] {
   return [
     {
-      title: "Khối nginx + chứng chỉ trên VPS",
+      title: `Manifest cho ${host} — cần chạy MỘT LẦN, trong repo publisher`,
       commands: [
-        `# tạo /etc/nginx/sites-available/${host.split(".")[0]} theo mẫu của site đang chạy`,
-        `#   KHÔNG khai lại map $host_prefixed_uri — nó ở tầng http, khai lại thì nginx không khởi động`,
-        `#   include /etc/nginx/snippets/publisher-app.conf`,
-        `certbot certonly --webroot -w /var/www/certbot -d ${host} -d www.${host}`,
-        `nginx -t && systemctl reload nginx`,
-      ],
-    },
-    {
-      title: "Bảng site + đặc tả + manifest trong repo publisher",
-      commands: [
-        `NEXT_PUBLIC_SITE_URL=https://${host} npm run hq:sites`,
-        `npm run hq:content-spec`,
         `npm run hq:markets -- --host ${host}`,
-        `# commit data/sites.json data/content-spec.json data/markets.json, mở PR, merge`,
+        `npm run data:index && git add data && git commit && git push`,
+        `# Không làm từ đây được: một lần gọi HQ cho mỗi ZIP, mất vài phút.`,
+        `# Xong bước này rồi bấm lại "Dựng Site" — nó sẽ tự ghi phần còn lại và mở PR.`,
       ],
     },
     {
