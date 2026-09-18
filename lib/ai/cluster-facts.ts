@@ -69,6 +69,28 @@ export async function buildClusterFactSet(
       byKey.set(f.key, [...(byKey.get(f.key) ?? []), { zip, f }]);
     }
   }
+  /**
+   * NHÃN ĐI VÀO PROMPT PHẢI LÀ TIẾNG ANH.
+   *
+   * Repo này viết chú thích bằng tiếng Việt có chủ ý. Nhãn thì KHÁC: nó không
+   * phải lời giải thích cho người đọc mã, nó là văn bản gửi thẳng cho model,
+   * và model trả lời bằng thứ tiếng nó nhìn thấy.
+   *
+   * Đo 19/9/2026, cụm /auto-accident-attorney/ca/san-diego, 6 lần thử, 0 đạt.
+   * NGAY LẦN ĐẦU — trước mọi phản hồi lỗi — model viết:
+   *
+   *   "Ba ZIP trong trang này không giống nhau ở mức độ phụ thuộc vào ô tô…"
+   *
+   * và kèm theo đó là "74,9%" với dấu phẩy thập phân kiểu Việt. Luật số đọc
+   * fact ghi "74.9%", nên nó trượt — model đã đổi luôn cách viết số theo ngôn
+   * ngữ. Rồi luật 3 dò tín hiệu dải bằng regex TIẾNG ANH (from|to|between|
+   * ranges|lowest…), nên một đoạn tiếng Việt không đời nào qua được. Ba tầng
+   * cùng trượt vì một nguyên nhân, và không tầng nào nói ra nguyên nhân đó.
+   *
+   * Lan rộng đến đâu, đo trên toàn bộ dữ liệu: 5/115 bản nháp CỤM là tiếng
+   * Việt, cả 5 đều của niche mới, 0 bản nào ĐẠT. Bên theo ZIP 0/433 — vì
+   * nhãn của nó không đi qua chỗ này.
+   */
   for (const [key, list] of byKey) {
     if (list.length < 2) continue;
     const sorted = [...list].sort((a, b) => a.f.value - b.f.value);
@@ -79,7 +101,7 @@ export async function buildClusterFactSet(
     if (lo.f.value === hi.f.value) continue;
     facts.push({
       key: `${key}__min`,
-      label: `${lo.f.label} — thấp nhất trong ${sets.length} ZIP (ZIP ${lo.zip})`,
+      label: `${lo.f.label} — lowest of the ${sets.length} ZIPs (ZIP ${lo.zip})`,
       value: lo.f.value,
       display: formatForPrompt(lo.f.value, lo.f.unit),
       unit: lo.f.unit,
@@ -88,7 +110,7 @@ export async function buildClusterFactSet(
     });
     facts.push({
       key: `${key}__max`,
-      label: `${hi.f.label} — cao nhất trong ${sets.length} ZIP (ZIP ${hi.zip})`,
+      label: `${hi.f.label} — highest of the ${sets.length} ZIPs (ZIP ${hi.zip})`,
       value: hi.f.value,
       display: formatForPrompt(hi.f.value, hi.f.unit),
       unit: hi.f.unit,

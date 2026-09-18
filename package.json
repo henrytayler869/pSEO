@@ -25,6 +25,7 @@
     "cluster:generate": "tsx scripts/generate-cluster-text.ts",
     "test:argv": "tsx scripts/test-argv.ts",
     "test:budget": "tsx scripts/test-budget.ts",
+    "test:cluster-validator": "tsx scripts/test-cluster-validator.ts",
     "test:distinctness": "tsx scripts/test-distinctness.ts",
     "regen:niche": "tsx scripts/regenerate-niche.ts",
     "regen:measure": "tsx scripts/measure-regen-distinctness.ts",
