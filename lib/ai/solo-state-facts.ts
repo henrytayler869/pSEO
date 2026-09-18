@@ -111,7 +111,7 @@ export async function buildSoloStateFactSet(
     });
     facts.push({
       key: `${f.key}__poollow`,
-      label: `${f.label} — thấp nhất trong ${sorted.length} ZIP đã publish (ZIP ${lo.zip})`,
+      label: `${f.label} — lowest of the ${sorted.length} published ZIPs (ZIP ${lo.zip})`,
       value: lo.f.value,
       display: formatForPrompt(lo.f.value, lo.f.unit),
       unit: lo.f.unit,
@@ -120,7 +120,7 @@ export async function buildSoloStateFactSet(
     });
     facts.push({
       key: `${f.key}__poolhigh`,
-      label: `${f.label} — cao nhất trong ${sorted.length} ZIP đã publish (ZIP ${hi.zip})`,
+      label: `${f.label} — highest of the ${sorted.length} published ZIPs (ZIP ${hi.zip})`,
       value: hi.f.value,
       display: formatForPrompt(hi.f.value, hi.f.unit),
       unit: hi.f.unit,

@@ -30,6 +30,8 @@ HARD RULES — a violation means the draft is rejected:
 5. Do not repeat the table. The point of the paragraph is the SPREAD: which figures vary a lot across the area, which barely vary, and what that means for someone planning a move here.
 6. Do not mention keywords, search volume, SEO or ranking.
 
+Write in ENGLISH, and write numbers the way the FACTS list writes them — a decimal point, never a decimal comma.
+
 Output PLAIN TEXT. No HTML, no markdown. Three to five sentences.`;
 
 function factsBlock(set: ClusterFactSet): string {

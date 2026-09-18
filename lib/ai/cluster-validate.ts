@@ -19,7 +19,12 @@ import type { ClusterFactSet } from "@/lib/ai/cluster-facts";
  * không bị rule nào của bên kia bắt, vì không câu nào nhắc tới ZIP.
  */
 
-export const CLUSTER_VALIDATOR_RULES = ["unsupported_number", "wrong_unit", "range_endpoint_as_whole"] as const;
+export const CLUSTER_VALIDATOR_RULES = [
+  "unsupported_number",
+  "wrong_unit",
+  "range_endpoint_as_whole",
+  "vietnamese_output",
+] as const;
 
 export type ClusterValidatorRule = (typeof CLUSTER_VALIDATOR_RULES)[number];
 
@@ -40,14 +45,48 @@ export interface ClusterValidationResult {
 const RANGE_SIGNAL =
   /\b(from|to|between|range[sd]?|ranging|as (low|high) as|lowest|highest|varies|spread|across (the )?\d+ ZIP|depending on)\b/i;
 
+/**
+ * Chữ cái CHỈ có trong tiếng Việt.
+ *
+ * Không phải "không phải tiếng Anh": một phép kiểm chặn mọi ký tự ngoài ASCII
+ * sẽ chặn cả tên nơi chốn có thật ở Mỹ — Cañon City, Coeur d'Alene — và từ
+ * chối một đoạn đúng vì một cái tên đúng là kiểu sai tệ hơn thứ nó định chữa.
+ *
+ * Tập này hẹp có chủ ý: nó bắt ĐÚNG kiểu trôi đã đo được, và tên luật nói ra
+ * điều đó thay vì hứa hẹn rộng hơn khả năng thật.
+ */
+const VIETNAMESE_LETTER =
+  /[ăâđêôơưĂÂĐÊÔƠƯàáảãạằắẳẵặầấẩẫậèéẻẽẹềếểễệìíỉĩịòóỏõọồốổỗộờớởỡợùúủũụừứửữựỳýỷỹỵ]/;
+
 export function validateClusterText(text: string, set: ClusterFactSet): ClusterValidationResult {
   const issues: ClusterValidationIssue[] = [];
+
+  /**
+   * Đoạn văn viết bằng tiếng Việt thì KHÔNG bao giờ được lên trang tiếng Anh.
+   *
+   * Luật này tồn tại vì ba luật kia đã cùng trượt trên đúng ca đó mà không
+   * luật nào nói ra nguyên nhân: model viết tiếng Việt → viết "74,9%" theo
+   * kiểu Việt → luật 1 báo "số không có trong fact"; luật 3 dò tín hiệu dải
+   * bằng regex tiếng Anh nên không đời nào khớp. Người đọc báo lỗi sẽ đi sửa
+   * fact set — sai chỗ, và sửa xong vẫn hỏng.
+   *
+   * Nguyên nhân gốc đã vá ở cluster-facts.ts (nhãn prompt giờ là tiếng Anh).
+   * Luật này là thứ giữ cho lần trôi SAU không lặng lẽ như lần này: một đoạn
+   * tiếng Việt không dùng số thập phân nào sẽ qua được cả ba luật kia, và khi
+   * đó nó lên trang.
+   */
+  if (VIETNAMESE_LETTER.test(text)) {
+    issues.push({
+      rule: "vietnamese_output",
+      detail: "Đoạn văn có chữ tiếng Việt — trang phục vụ bằng tiếng Anh, nên bản nháp này không dùng được.",
+    });
+  }
 
   // ZIP thành viên là số HỢP LỆ, dù nó không phải giá trị của fact nào.
   //
   // Đo 13/9/2026: cụm Chicago trượt cả 3 lần vì model viết "60632" — một ZIP
   // thành viên. Nêu tên ZIP ở đầu dải là chính thứ fact set cung cấp trong
-  // nhãn ("thấp nhất trong 14 ZIP (ZIP 60632)"), nên cấm model nhắc lại nó
+  // nhãn ("lowest of the 14 ZIPs (ZIP 60632)"), nên cấm model nhắc lại nó
   // là cấm đúng thứ mình vừa đưa cho.
   //
   // CHỈ ZIP thành viên, không phải mọi số 5 chữ số: cho qua cả nhóm sẽ để
