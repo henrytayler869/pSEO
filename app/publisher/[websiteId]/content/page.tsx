@@ -20,14 +20,14 @@ export default async function ContentPage({ params }: { params: Promise<{ websit
   const { websiteId } = await params;
   const site = await prisma.website.findUnique({
     where: { id: websiteId },
-    select: { id: true, name: true, vertical: true, aiBudgetUsd: true },
+    select: { id: true, name: true, vertical: true, url: true, aiBudgetUsd: true },
   });
   if (!site) notFound();
 
   // Chi tiêu CỦA NGHỀ NÀY — cùng đơn vị với ngân sách hiện ngay cạnh nó, và
   // cùng đơn vị với con số mà nút điền đem so. Hiện tổng toàn hệ ở đây trong
   // khi nút so theo nghề sẽ cho người bấm đọc một số rồi gặp một số khác.
-  const [queue, spent] = await Promise.all([buildFillQueue(site.vertical), getSpendUsdForVertical(site.vertical)]);
+  const [queue, spent] = await Promise.all([buildFillQueue(site), getSpendUsdForVertical(site.vertical)]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -56,6 +56,8 @@ export default async function ContentPage({ params }: { params: Promise<{ websit
             pending={queue.pending}
             budgetUsd={site.aiBudgetUsd}
             spentUsd={spent}
+            excluded={queue.excluded}
+            unavailable={queue.unavailable}
           />
         </CardContent>
       </Card>

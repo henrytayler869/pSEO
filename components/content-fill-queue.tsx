@@ -20,6 +20,8 @@ export function ContentFillQueue({
   pending,
   budgetUsd,
   spentUsd,
+  excluded,
+  unavailable,
 }: {
   websiteId: string;
   vertical: string;
@@ -27,11 +29,22 @@ export function ContentFillQueue({
   pending: RankedCandidate[];
   budgetUsd: number | null;
   spentUsd: number;
+  excluded: { cluster: number; noPage: number; noData: number };
+  unavailable?: string;
 }) {
   const [state, action, running] = useActionState(fillContentBatchAction, initial);
   const [confirmedAll, setConfirmedAll] = useState(false);
 
+  if (unavailable) {
+    return (
+      <p className="text-sm text-destructive">
+        {unavailable}
+      </p>
+    );
+  }
+
   const pct = summary.total === 0 ? 0 : Math.round((summary.served / summary.total) * 100);
+  const skipped = excluded.cluster + excluded.noPage + excluded.noData;
   const after = spentUsd + summary.estimatedUsd;
   const overBudget = budgetUsd !== null && after > budgetUsd;
 
@@ -55,6 +68,18 @@ export function ContentFillQueue({
           )}
           {summary.never > 0 && <Badge variant="secondary">{summary.never} chưa làm</Badge>}
         </div>
+        {/* Vì sao tổng nhỏ hơn số ZIP đã nghiên cứu. Không nói ra thì con số
+            trông như dữ liệu bị mất, và người đọc sẽ đi tìm thứ không hỏng. */}
+        {skipped > 0 && (
+          <p className="pt-1 text-xs text-muted-foreground">
+            Bỏ qua {skipped} ZIP vì đoạn sinh ra sẽ không hiện ở đâu:{" "}
+            {excluded.cluster > 0 && <>{excluded.cluster} nằm trong trang cụm (trang cụm dùng đoạn cấp cụm)</>}
+            {excluded.cluster > 0 && (excluded.noPage > 0 || excluded.noData > 0) ? ", " : ""}
+            {excluded.noPage > 0 && <>{excluded.noPage} chưa có trang nào phục vụ</>}
+            {excluded.noPage > 0 && excluded.noData > 0 ? ", " : ""}
+            {excluded.noData > 0 && <>{excluded.noData} chưa thu được dữ liệu</>}.
+          </p>
+        )}
       </div>
 
       {/* Chi phí nói TRƯỚC khi tiêu, không phải sau. */}

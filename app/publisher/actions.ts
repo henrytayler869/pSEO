@@ -447,11 +447,15 @@ export async function fillContentBatchAction(_prev: FillBatchResult, formData: F
 
   const site = await prisma.website.findUnique({
     where: { id: websiteId },
-    select: { vertical: true, aiBudgetUsd: true },
+    select: { vertical: true, url: true, aiBudgetUsd: true },
   });
   if (!site) return { ok: false, message: "Không tìm thấy website." };
 
-  const queue = await buildFillQueue(site.vertical);
+  const queue = await buildFillQueue(site);
+  // "Không dựng được hàng đợi" KHÔNG được báo thành "không còn gì để điền":
+  // cả hai cho pending rỗng, và một cái nghĩa là xong việc còn cái kia nghĩa
+  // là có thứ đang hỏng.
+  if (queue.unavailable) return { ok: false, message: queue.unavailable };
   if (queue.pending.length === 0) {
     return { ok: true, message: "Không còn gì để điền.", filled: 0, rejected: 0, failed: 0, remaining: 0, costUsd: 0 };
   }
