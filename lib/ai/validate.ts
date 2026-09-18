@@ -331,6 +331,9 @@ export function checkUnitWords(text: string, facts: Fact[]): ValidationIssue[] {
   return issues;
 }
 
+/** Chữ quá phổ biến để làm dấu nhận nhãn. */
+const STOPWORDS = new Set(["that", "this", "with", "from", "their", "there", "which", "those", "more", "than", "over", "were", "have", "been"]);
+
 export function validateGeneratedText(text: string, factSet: FactSet): ValidationResult {
   const issues: ValidationIssue[] = [];
 
@@ -340,11 +343,71 @@ export function validateGeneratedText(text: string, factSet: FactSet): Validatio
 
   // --- Rule 1: every stated number must trace to a measured fact ---
   const zipAsNumber = Number(factSet.zip);
+
+  /**
+   * Số nằm trong CHÍNH NHÃN của chỉ số cũng là số đo được.
+   *
+   * Luật 1 lọc theo GIÁ TRỊ của chỉ số. Nhưng nhãn cũng chứa số, và một đoạn
+   * văn nhắc lại nhãn thì buộc phải nhắc số đó:
+   *
+   *   "workers aged 16 and over who commute: 36,503"
+   *   "share of workers whose commute takes 60 minutes or more: 10.5%"
+   *
+   * Đo 18/9/2026, 5/5 đoạn của niche auto-accident-attorney bị từ chối vì "16"
+   * và "60" — trong khi văn bản hoàn toàn đúng:
+   *
+   *   "In ZIP 77095, 36,503 workers aged 16 and over commute, 82.6% of them by
+   *    car, truck or van, and 10.5% spend 60 minutes or more getting to work."
+   *
+   * Không luật nào sai về nguyên tắc; luật 1 chỉ đang nhìn nửa nguồn. Và nó
+   * KHÔNG lộ ra với nghề chuyển nhà, vì nhãn của nghề đó không có số — một cái
+   * bẫy nằm im cho tới khi có nghề thứ hai.
+   *
+   * Chỉ lấy số từ nhãn của chính fact set này, không phải một danh sách cho
+   * phép viết tay: nhãn đến từ HQ, nên nguồn vẫn là một.
+   *
+   * VÀ CHỈ CHO PHÉP KHI SỐ ĐỨNG CẠNH CHỮ CỦA CHÍNH NHÃN ĐÓ.
+   *
+   * Bản đầu chỉ cần "số này có trong một nhãn nào đó" là cho qua, và nó mở một
+   * lỗ: "In ZIP 77095, 16 fatal crashes were recorded" ĐI QUA, vì 16 có trong
+   * nhãn "workers aged 16 and over". Số thật, gán sai danh từ — đúng loại lỗi
+   * đọc trôi chảy nhất.
+   *
+   * Nên mỗi số từ nhãn mang theo chữ ĐẶC TRƯNG của nhãn sinh ra nó, và chỉ
+   * được miễn khi một trong những chữ đó nằm TRONG CÙNG MỘT CÂU.
+   *
+   * Cùng câu, không phải "gần trong N ký tự": một cửa sổ ký tự vắt qua dấu
+   * chấm, và "there were 16 incidents. Separately, workers commute" đi qua
+   * được — hai mệnh đề không liên quan, một cửa sổ nhìn thấy cả hai.
+   */
+  const labelNumbers: { value: number; cues: string[] }[] = [];
+  for (const f of factSet.facts) {
+    const cues = f.label
+      .toLowerCase()
+      .split(/[^a-z]+/)
+      .filter((w) => w.length >= 4 && !STOPWORDS.has(w));
+    if (cues.length === 0) continue;
+    for (const { value } of extractNumbers(f.label)) labelNumbers.push({ value, cues });
+  }
+
+  /** Câu chứa số đó — cắt ở dấu chấm câu, không cắt theo số ký tự. */
+  const sentences = text.toLowerCase().split(/(?<=[.!?])\s+/);
+
+  /** Số này có đứng cùng câu với chữ của chính nhãn sinh ra nó không. */
+  const nearItsOwnLabel = (value: number, raw: string): boolean => {
+    const entries = labelNumbers.filter((l) => l.value === value);
+    if (entries.length === 0) return false;
+    const needle = raw.toLowerCase();
+    return sentences.some(
+      (sentence) => sentence.includes(needle) && entries.some((e) => e.cues.some((c) => sentence.includes(c)))
+    );
+  };
   for (const { raw, value } of extractNumbers(text)) {
     if (ALWAYS_ALLOWED.has(value)) continue;
     // The zip itself is an identifier, not a quantity — naming it is how a
     // page states which place it is about.
     if (value === zipAsNumber) continue;
+    if (nearItsOwnLabel(value, raw)) continue;
     // A bare 4-digit number in a plausible year range is a year, not a claim.
     if (Number.isInteger(value) && value >= 1800 && value <= 2100 && !raw.includes("$") && !raw.includes(",")) continue;
     if (!matchesFact(value, factSet.facts)) {
