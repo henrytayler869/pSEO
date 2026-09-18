@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db/prisma";
 import { buildFillQueue } from "@/lib/queries/fill-queue";
-import { getTotalSpendUsd } from "@/lib/ai/anthropic";
+import { getSpendUsdForVertical } from "@/lib/ai/anthropic";
 import { ContentFillQueue } from "@/components/content-fill-queue";
 
 /**
@@ -24,7 +24,10 @@ export default async function ContentPage({ params }: { params: Promise<{ websit
   });
   if (!site) notFound();
 
-  const [queue, spent] = await Promise.all([buildFillQueue(site.vertical), getTotalSpendUsd()]);
+  // Chi tiêu CỦA NGHỀ NÀY — cùng đơn vị với ngân sách hiện ngay cạnh nó, và
+  // cùng đơn vị với con số mà nút điền đem so. Hiện tổng toàn hệ ở đây trong
+  // khi nút so theo nghề sẽ cho người bấm đọc một số rồi gặp một số khác.
+  const [queue, spent] = await Promise.all([buildFillQueue(site.vertical), getSpendUsdForVertical(site.vertical)]);
 
   return (
     <div className="flex flex-col gap-6">
