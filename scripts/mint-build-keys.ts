@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import { prisma } from "@/lib/db/prisma";
-import { createPublisherKey } from "@/lib/settings/api-key";
+import { createPublisherKey, revokePublisherKey } from "@/lib/settings/api-key";
 
 /**
  * Cấp một khoá cho MỖI publisher và ghi thành bảng {host: khoá} vào một FILE.
@@ -20,7 +20,27 @@ import { createPublisherKey } from "@/lib/settings/api-key";
  * KHÔNG IN KHOÁ. Chỉ in host, 13 ký tự đầu và id để thu hồi. Bảng đi thẳng
  * vào file với quyền 0600; nạp vào CI bằng `gh secret set HQ_API_KEYS < file`,
  * rồi xoá file. Khoá không bao giờ đi qua màn hình, argv hay log.
+ *
+ * ═══ CẤP LỚP MỚI THÌ THU HỒI LỚP CŨ ═══
+ *
+ * HQ chỉ giữ BĂM, nên nó không trả lại được giá trị khoá — "dùng lại khoá cũ"
+ * là điều không làm được, không phải điều chưa làm. Hệ quả: mỗi lần cần bảng
+ * khoá build là một lần cấp mới.
+ *
+ * Bản trước dừng ở đó, và để lại một lớp khoá sống sau mỗi lần chạy. Đo
+ * 18/9/2026: 11 khoá sống cho MỘT site, 23 khoá toàn hệ — trong đó hai khoá
+ * mang nhãn "đột biến wording", sinh ra cho một phép thử rồi bỏ đó. Đúng thứ
+ * đã dọn sáng cùng ngày rồi tái tạo trong ngày.
+ *
+ * Nên cấp mới ĐI KÈM thu hồi: khoá build cũ bị vô hiệu ngay sau khi bảng mới
+ * ghi xong. Chỉ thu hồi khoá do chính lệnh này cấp — nhận ra bằng tiền tố
+ * nhãn — nên khoá đang phục vụ site và khoá máy dev không bị đụng.
  */
+
+/** Tiền tố nhãn của khoá do lệnh này cấp. Là cách duy nhất phân biệt khoá
+ *  build với khoá đang phục vụ, nên nó là một hằng số chứ không phải một
+ *  chuỗi gõ lại ở hai chỗ. */
+const BUILD_LABEL_PREFIX = "build:";
 
 function arg(flag: string): string | null {
   const i = process.argv.indexOf(flag);
@@ -51,7 +71,7 @@ async function main() {
     process.exit(1);
   }
 
-  const label = arg("--label") ?? "khoá build cho CI";
+  const label = `${BUILD_LABEL_PREFIX} ${arg("--label") ?? "CI"}`;
   const map: Record<string, string> = {};
   const issued: { host: string; prefix: string; id: string }[] = [];
 
@@ -67,7 +87,26 @@ async function main() {
   // khoảng đó là đủ.
   fs.writeFileSync(out, `${JSON.stringify(map, null, 2)}\n`, { mode: 0o600 });
 
+  /**
+   * Thu hồi SAU khi file đã ghi xong.
+   *
+   * Thứ tự quan trọng: thu hồi trước rồi ghi hụt sẽ để CI không có khoá nào
+   * dùng được — hỏng ngay và hỏng ở chỗ không ai đang nhìn.
+   */
+  const superseded = await prisma.publisherApiKey.findMany({
+    where: {
+      revokedAt: null,
+      label: { startsWith: BUILD_LABEL_PREFIX },
+      id: { notIn: issued.map((i) => i.id) },
+    },
+    select: { id: true, keyPrefix: true },
+  });
+  for (const k of superseded) await revokePublisherKey(k.id);
+
   console.log(`Đã cấp ${issued.length} khoá và ghi bảng vào ${out} (quyền 0600).`);
+  if (superseded.length > 0) {
+    console.log(`Đã thu hồi ${superseded.length} khoá build lớp trước: ${superseded.map((k) => k.keyPrefix).join(", ")}`);
+  }
   for (const i of issued) console.log(`  ${i.host.padEnd(28)} ${i.prefix}  id=${i.id}`);
   console.log("\nNạp vào CI:  gh secret set HQ_API_KEYS < " + out);
   console.log("Rồi XOÁ file. Khoá cũ của CI nên thu hồi sau khi bản build mới xanh.");
