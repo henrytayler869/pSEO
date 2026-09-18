@@ -13,8 +13,10 @@ import { pushKeyToSite, isHeaderSafeSecret } from "@/lib/publisher/push-key";
 import { judgeReadiness } from "@/lib/publisher/site-config";
 import { judgeFillBudget, COST_PER_PASSAGE_USD } from "@/lib/ai/fill-queue";
 import { buildFillQueue } from "@/lib/queries/fill-queue";
+import { buildClusterFillQueue, COST_PER_CLUSTER_USD } from "@/lib/queries/cluster-fill-queue";
+import { generateForCluster } from "@/lib/ai/cluster-generate";
 import { getOrGenerateInterpretation } from "@/lib/ai/generate";
-import { getSpendUsdForVertical, getTotalSpendUsd } from "@/lib/ai/anthropic";
+import { getSpendUsdForVertical, SpendCapExceededError } from "@/lib/ai/anthropic";
 import { createPropertyWithWebStream } from "@/lib/google/analytics-admin";
 
 export interface ActionResult {
@@ -494,6 +496,99 @@ export async function fillContentBatchAction(_prev: FillBatchResult, formData: F
   revalidatePath(`/publisher/${websiteId}/content`);
   const remaining = queue.pending.length - filled;
   const parts = [`điền ${filled}`];
+  if (rejected > 0) parts.push(`${rejected} bị validator chặn`);
+  if (failed > 0) parts.push(`${failed} LỖI KỸ THUẬT`);
+  return {
+    ok: failed === 0,
+    message: `${parts.join(", ")} — $${costUsd.toFixed(4)}. Còn ${remaining}.`,
+    filled,
+    rejected,
+    failed,
+    remaining,
+    costUsd: Number(costUsd.toFixed(4)),
+  };
+}
+
+/**
+ * Điền MỘT LÔ đoạn cấp CỤM.
+ *
+ * Song song với fillContentBatchAction chứ không gộp vào nó: hai thứ này có
+ * đơn giá khác nhau ($0,0619 so với $0,0237), luật kiểm khác nhau, và dừng
+ * được riêng. Gộp một nút sẽ khiến người bấm không biết lô mình vừa gọi tiêu
+ * gấp ba lần lô trước.
+ *
+ * Chi phí gắn ĐÍCH DANH website: thành viên cụm lấy từ /api/inventory của
+ * chính site đó, nên hai publisher cùng niche có cụm khác nhau và cần đoạn
+ * khác nhau — khác hẳn đoạn theo ZIP vốn cache theo niche và phục vụ mọi site.
+ */
+export async function fillClusterBatchAction(
+  _prev: FillBatchResult,
+  formData: FormData
+): Promise<FillBatchResult> {
+  const websiteId = String(formData.get("websiteId") ?? "");
+  const size = Math.min(Math.max(Number(formData.get("size") ?? 3), 1), 15);
+  if (!websiteId) return { ok: false, message: "Thiếu website." };
+
+  const site = await prisma.website.findUnique({
+    where: { id: websiteId },
+    select: { vertical: true, url: true, aiBudgetUsd: true },
+  });
+  if (!site) return { ok: false, message: "Không tìm thấy website." };
+
+  const queue = await buildClusterFillQueue(site);
+  if (queue.unavailable) return { ok: false, message: queue.unavailable };
+  if (queue.pending.length === 0) {
+    return { ok: true, message: "Mọi trang cụm đã có chữ.", filled: 0, rejected: 0, failed: 0, remaining: 0, costUsd: 0 };
+  }
+
+  const spent = await getSpendUsdForVertical(site.vertical);
+  const verdict = judgeFillBudget({
+    budgetUsd: site.aiBudgetUsd,
+    spentUsd: spent,
+    estimatedUsd: Math.min(size, queue.pending.length) * COST_PER_CLUSTER_USD,
+  });
+  if (!verdict.ok) return { ok: false, message: verdict.reason };
+
+  let filled = 0;
+  let rejected = 0;
+  let failed = 0;
+  let costUsd = 0;
+
+  for (const c of queue.pending.slice(0, size)) {
+    try {
+      const out = await generateForCluster(site.vertical, c.zips, c.path, websiteId);
+      // null nghĩa là dưới 2 ZIP có dữ liệu — một ZIP không tạo thành dải, nên
+      // không có gì để so sánh và cũng không có gì để viết. Không phải lỗi, và
+      // cũng không phải validator chặn.
+      if (!out) {
+        failed++;
+        continue;
+      }
+      costUsd += out.costUsd;
+      if (out.passed) filled++;
+      else rejected++;
+    } catch (err) {
+      // Chạm trần chi tiêu toàn hệ dừng cả lô, và nói ra — chứ không đếm
+      // thành "lỗi kỹ thuật" rồi để người bấm đi tìm một sự cố không có.
+      if (err instanceof SpendCapExceededError) {
+        revalidatePath(`/publisher/${websiteId}/content`);
+        return {
+          ok: false,
+          message: `Chạm trần chi tiêu toàn hệ sau ${filled} cụm — $${costUsd.toFixed(4)}. Cụm chưa sinh giữ nguyên.`,
+          filled,
+          rejected,
+          failed,
+          remaining: queue.pending.length - filled,
+          costUsd: Number(costUsd.toFixed(4)),
+        };
+      }
+      failed++;
+    }
+  }
+
+  revalidatePath(`/publisher/${websiteId}/content`);
+  const remaining = queue.pending.length - filled;
+  const parts = [`điền ${filled} cụm`];
   if (rejected > 0) parts.push(`${rejected} bị validator chặn`);
   if (failed > 0) parts.push(`${failed} LỖI KỸ THUẬT`);
   return {
