@@ -121,6 +121,24 @@ export const CREDENTIAL_FIELDS: CredentialField[] = [
     secret: true,
     helpText: "Đi kèm API Key. Dùng để ký request; không gửi nguyên văn trong tham số.",
   },
+  {
+    name: "GITHUB_TOKEN",
+    label: "GitHub token (repo publisher)",
+    group: "Publisher",
+    secret: true,
+    helpText:
+      "Dùng để HQ ghi data/sites/<host>/ vào repo publisher, rồi để CI build và deploy. " +
+      "Dùng fine-grained token, phạm vi ĐÚNG MỘT repo, quyền Contents → Read and write. " +
+      "Đừng dùng token classic có scope repo+workflow: nó là toàn quyền trên MỌI repo, " +
+      "và nó sẽ nằm trên một máy chủ công khai.",
+  },
+  {
+    name: "GITHUB_REPO",
+    label: "Repo publisher (owner/name)",
+    group: "Publisher",
+    secret: false,
+    helpText: 'Ví dụ "henrytayler869/pseo-publisher". Không đoán từ tên domain — một repo sai tên thì mọi lần ghi rơi vào chỗ khác.',
+  },
 ];
 
 type CredentialStore = Record<string, string>;
