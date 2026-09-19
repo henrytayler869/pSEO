@@ -44,7 +44,7 @@ export default async function GaPage({
       <PageHeader
         icon={BarChart3}
         title="Google Analytics 4"
-        description={`Hành vi người thật trên ${website.url}, property ${website.ga4PropertyId}. GSC nói người ta thấy gì trên Google; GA4 nói chuyện gì xảy ra sau khi họ bấm vào.`}
+        description={`Hành vi trên ${website.url}, property ${website.ga4PropertyId}. GSC nói người ta thấy gì trên Google; GA4 nói chuyện gì xảy ra sau khi họ bấm vào.`}
       />
 
       <WindowPicker base={base} active={days} />
@@ -57,20 +57,44 @@ export default async function GaPage({
           {!totals.ok ? (
             <Failed error={totals.error} />
           ) : (
-            <dl className="grid grid-cols-3 gap-4">
-              <div>
-                <dt className="text-xs text-muted-foreground">Người dùng</dt>
-                <dd className="text-2xl font-semibold">{totals.value.activeUsers.toLocaleString("vi-VN")}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Phiên</dt>
-                <dd className="text-2xl font-semibold">{totals.value.sessions.toLocaleString("vi-VN")}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">Lượt xem trang</dt>
-                <dd className="text-2xl font-semibold">{totals.value.screenPageViews.toLocaleString("vi-VN")}</dd>
-              </div>
-            </dl>
+            <>
+              {/* Bốn ô, và thứ tự là một phát biểu: ô ĐẦU là con số được tin,
+                  ba ô sau là bối cảnh. Đặt "Người dùng" ở ô đầu — như trước
+                  ngày 19/9/2026 — là dán nhãn người lên một con số mà hai phần
+                  ba là client tự động. */}
+              <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div>
+                  <dt className="text-xs text-muted-foreground">Phiên có tương tác</dt>
+                  <dd className="text-2xl font-semibold">{totals.value.engagedSessions.toLocaleString("vi-VN")}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Phiên thô</dt>
+                  <dd className="text-2xl font-semibold text-muted-foreground">
+                    {totals.value.sessions.toLocaleString("vi-VN")}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Viewport 800×600</dt>
+                  <dd className="text-2xl font-semibold text-muted-foreground">
+                    {totals.value.headlessSessions.toLocaleString("vi-VN")}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-xs text-muted-foreground">Lượt xem trang</dt>
+                  <dd className="text-2xl font-semibold text-muted-foreground">
+                    {totals.value.screenPageViews.toLocaleString("vi-VN")}
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-3 text-xs text-muted-foreground">
+                <strong>Phiên có tương tác</strong> là con số đáng đọc: trên 10 giây, hoặc từ 2 lượt xem trang, hoặc có
+                conversion. Ba số còn lại là bối cảnh, không phải thành tích.{" "}
+                <strong>Viewport 800×600</strong> là kích thước cửa sổ mặc định của Chrome chạy headless — đo ngày
+                19/9/2026, toàn bộ phiên loại này trên cả hai site đều có 0 tương tác. Nó chỉ bắt được client tự động
+                nào chưa buồn đổi viewport, nên khoảng cách còn lại giữa hai số đầu vẫn là bot chưa lọc được, không
+                phải người.
+              </p>
+            </>
           )}
         </CardContent>
       </Card>
@@ -94,7 +118,7 @@ export default async function GaPage({
                 <tr>
                   <th className="py-1 pr-3">Kênh</th>
                   <th className="py-1 pr-3 text-right">Phiên</th>
-                  <th className="py-1 text-right">Người dùng</th>
+                  <th className="py-1 text-right">Có tương tác</th>
                 </tr>
               </thead>
               <tbody>
@@ -102,7 +126,7 @@ export default async function GaPage({
                   <tr key={r.dimensionValue} className="border-t">
                     <td className="py-1 pr-3">{r.dimensionValue}</td>
                     <td className="py-1 pr-3 text-right">{r.sessions.toLocaleString("vi-VN")}</td>
-                    <td className="py-1 text-right">{r.activeUsers.toLocaleString("vi-VN")}</td>
+                    <td className="py-1 text-right">{r.engagedSessions.toLocaleString("vi-VN")}</td>
                   </tr>
                 ))}
               </tbody>
@@ -131,7 +155,7 @@ export default async function GaPage({
                   <tr>
                     <th className="py-1 pr-3">Trang vào</th>
                     <th className="py-1 pr-3 text-right">Phiên</th>
-                    <th className="py-1 pr-3 text-right">Người dùng</th>
+                    <th className="py-1 pr-3 text-right">Có tương tác</th>
                     <th className="py-1 text-right">TG phiên TB</th>
                   </tr>
                 </thead>
@@ -140,7 +164,7 @@ export default async function GaPage({
                     <tr key={r.path} className="border-t">
                       <td className="py-1 pr-3 font-mono">{r.path}</td>
                       <td className="py-1 pr-3 text-right">{r.sessions.toLocaleString("vi-VN")}</td>
-                      <td className="py-1 pr-3 text-right">{r.activeUsers.toLocaleString("vi-VN")}</td>
+                      <td className="py-1 pr-3 text-right">{r.engagedSessions.toLocaleString("vi-VN")}</td>
                       <td className="py-1 text-right">{mmss(r.avgSessionSeconds)}</td>
                     </tr>
                   ))}

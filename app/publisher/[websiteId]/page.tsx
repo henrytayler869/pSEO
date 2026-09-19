@@ -326,7 +326,16 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
           value={search ? `${search.clicks.toLocaleString()} / ${search.impressions.toLocaleString()}` : "—"}
           error={gscError}
         />
-        <StatCard label="Active users (28 ngày)" value={traffic ? traffic.activeUsers.toLocaleString() : "—"} error={ga4Error} />
+        <StatCard
+          label="Phiên có tương tác (28 ngày)"
+          value={traffic ? traffic.engagedSessions.toLocaleString() : "—"}
+          error={ga4Error}
+          note={
+            traffic
+              ? `Trên ${traffic.sessions.toLocaleString()} phiên thô — trong đó ${traffic.headlessSessions.toLocaleString()} đến từ viewport 800×600 (Chrome headless). Phiên có tương tác = trên 10 giây, hoặc từ 2 lượt xem trang.`
+              : undefined
+          }
+        />
       </div>
 
       <Card>
@@ -375,8 +384,10 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
         <CardHeader>
           <CardTitle>Traffic (Google Analytics 4)</CardTitle>
           <CardDescription>
-            28 ngày gần nhất. Sessions: {traffic ? traffic.sessions.toLocaleString() : "—"} · Pageviews:{" "}
-            {traffic ? traffic.screenPageViews.toLocaleString() : "—"}.
+            28 ngày gần nhất. Phiên có tương tác: {traffic ? traffic.engagedSessions.toLocaleString() : "—"} trên{" "}
+            {traffic ? traffic.sessions.toLocaleString() : "—"} phiên thô · Pageviews:{" "}
+            {traffic ? traffic.screenPageViews.toLocaleString() : "—"}. Cột <em>Có tương tác</em> là cột đáng đọc: một
+            kênh mở 50 phiên mà không phiên nào bước qua ngưỡng tương tác thì kênh đó chưa đưa ai tới.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -390,8 +401,8 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
               <TableHeader>
                 <TableRow>
                   <TableHead>Kênh</TableHead>
-                  <TableHead>Sessions</TableHead>
-                  <TableHead>Active users</TableHead>
+                  <TableHead>Phiên</TableHead>
+                  <TableHead>Có tương tác</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -399,7 +410,7 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
                   <TableRow key={r.dimensionValue}>
                     <TableCell>{r.dimensionValue}</TableCell>
                     <TableCell>{r.sessions.toLocaleString()}</TableCell>
-                    <TableCell>{r.activeUsers.toLocaleString()}</TableCell>
+                    <TableCell>{r.engagedSessions.toLocaleString()}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

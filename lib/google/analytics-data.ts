@@ -54,16 +54,86 @@ import { getGoogleAccessToken, explainGoogleApiError } from "./service-account";
 const GA4_DATA_API_BASE = "https://analyticsdata.googleapis.com/v1beta";
 const GA4_READONLY_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 
+/**
+ * Viewport 800×600 — mặc định của Chrome chạy headless, và là dấu vết duy nhất
+ * ở đây đủ sạch để lọc bằng.
+ *
+ * Đo trên hai property thật ngày 19/9/2026: 800×600 chiếm 22/51 phiên của
+ * atmovingservices.com và 12/22 của theaccidentrecord.com, và CẢ 34 phiên đó
+ * đều có engagedSessions = 0. Loại chúng không làm mất một phiên có tương tác
+ * nào — bộ lọc cắt nhiễu mà không cắt người.
+ *
+ * MỘT giá trị, không phải một danh sách. Năm độ phân giải khả nghi khác
+ * (1024×768, 1600×1200, 1080×600, 1920×1049, 1280×1200) mỗi cái chỉ 1–3 phiên,
+ * và vài cái trong đó là màn hình thật của máy cũ. Thêm chúng vào cắt thêm
+ * được 7 phiên, nhưng đổi bản chất bộ lọc từ "một dấu vết kỹ thuật cụ thể"
+ * thành "một danh sách phỏng đoán" — và danh sách phỏng đoán thì không ai biết
+ * lúc nào nó bắt đầu cắt nhầm.
+ *
+ * KHÔNG phải bộ lọc bot đầy đủ, và không được trình bày như thế. Sau khi lọc,
+ * atmovingservices.com còn 29 phiên mà chỉ 8 có tương tác: 21 phiên còn lại là
+ * client tự động đặt viewport trông như thật, và không còn dấu hiệu nào để bắt
+ * chúng. Đó là lý do engagedSessions là chỉ số chính, còn bộ lọc này chỉ là
+ * lớp thứ hai.
+ */
+const HEADLESS_VIEWPORT = "800x600";
+
+/**
+ * Loại phiên có viewport headless, ở tầng TRUY VẤN.
+ *
+ * Không đặt được ở tầng property: GA4 Admin > Data Filters chỉ làm được
+ * Internal Traffic (theo IP) và Developer Traffic, không có filter theo
+ * viewport hay hành vi. Đặt ở đây lại có một ưu điểm mà tầng property không
+ * có: dữ liệu gốc trong GA4 không bị đụng tới, nên tắt bộ lọc là số cũ quay
+ * lại nguyên vẹn — kể cả cho dữ liệu đã thu trong quá khứ.
+ */
+const EXCLUDE_HEADLESS = {
+  notExpression: {
+    filter: { fieldName: "screenResolution", stringFilter: { value: HEADLESS_VIEWPORT } },
+  },
+};
+
 export interface SiteTrafficTotals {
+  /**
+   * Số THÔ của GA4, không lọc gì.
+   *
+   * Giữ lại chứ không thay thế. Khoảng cách giữa số thô và số có tương tác
+   * chính là thông tin: hôm nay nó đo áp lực bot lên site, và khi lưu lượng
+   * thật bắt đầu về thì chính khoảng cách đó thu hẹp lại sẽ là tín hiệu sớm
+   * nhất. Thay 48 bằng 8 rồi thôi là đổi một con số sai lấy một con số không
+   * kiểm chứng được.
+   */
   activeUsers: number;
   sessions: number;
   screenPageViews: number;
+
+  /**
+   * Phiên CÓ TƯƠNG TÁC (GA4 engagedSessions): trên 10 giây, hoặc từ 2 lượt xem
+   * trang, hoặc có conversion. Đây là chỉ số chính, KHÔNG phải activeUsers.
+   *
+   * Vì sao không phải là một bộ lọc tốt hơn: mọi bộ lọc dựa trên dấu vết kỹ
+   * thuật (viewport, user agent, IP) đều mục đi khi client tự động đổi dấu
+   * vết, và mục trong im lặng — không ai thấy nó ngừng hoạt động. Còn "có
+   * tương tác" là định nghĩa HÀNH VI: một bot muốn qua được nó phải ở lại trang
+   * trên 10 giây hoặc xem hai trang, tức là phải trả chi phí thật.
+   */
+  engagedSessions: number;
+
+  /** Phiên còn lại sau khi loại HEADLESS_VIEWPORT. */
+  sessionsExcludingHeadless: number;
+
+  /** Số phiên bộ lọc đã loại. Tính ở đây chứ không để giao diện tự trừ hai số:
+   *  một phép trừ nằm trong JSX là một phép trừ không có chỗ để giải thích. */
+  headlessSessions: number;
 }
 
 export interface TrafficBreakdownRow {
   dimensionValue: string;
   sessions: number;
   activeUsers: number;
+  /** Có bao nhiêu phiên trong số đó là thật sự có tương tác. Thiếu cột này,
+   *  một dòng "Direct 50" đọc như 50 người quan tâm. */
+  engagedSessions: number;
 }
 
 /** Site-wide traffic totals for the Overview dashboard's "total traffic"
@@ -71,15 +141,39 @@ export interface TrafficBreakdownRow {
  * against Google's current docs (2026-09-06), no live property to test
  * against yet (see saveServiceAccountKey — no real site is connected). */
 export async function fetchSiteTrafficTotals(ga4PropertyId: string, days: number): Promise<SiteTrafficTotals> {
-  const rows = await runReport(ga4PropertyId, {
-    dateRanges: [{ startDate: `${days}daysAgo`, endDate: "today" }],
-    metrics: [{ name: "activeUsers" }, { name: "sessions" }, { name: "screenPageViews" }],
-  });
-  const row = rows[0];
+  const dateRanges = [{ startDate: `${days}daysAgo`, endDate: "today" }];
+  const metrics = [
+    { name: "activeUsers" },
+    { name: "sessions" },
+    { name: "screenPageViews" },
+    { name: "engagedSessions" },
+  ];
+
+  // HAI lần gọi, không phải một lần gọi kèm chiều screenResolution rồi tự cộng.
+  //
+  // Cách một-lần-gọi trông rẻ hơn và SAI: activeUsers là metric đã khử trùng
+  // lặp, một người xuất hiện ở nhiều dòng chiều vẫn là một người, nên cộng các
+  // dòng lại là đếm họ nhiều lần. Chỉ bản không có chiều mới cho con số đúng.
+  const [raw, filtered] = await Promise.all([
+    runReport(ga4PropertyId, { dateRanges, metrics }),
+    runReport(ga4PropertyId, { dateRanges, metrics: [{ name: "sessions" }], dimensionFilter: EXCLUDE_HEADLESS }),
+  ]);
+
+  const row = raw[0];
+  const metric = (i: number) => (row ? Number(row.metricValues[i]?.value ?? 0) : 0);
+  const sessions = metric(1);
+  const sessionsExcludingHeadless = filtered[0] ? Number(filtered[0].metricValues[0]?.value ?? 0) : 0;
+
   return {
-    activeUsers: row ? Number(row.metricValues[0]?.value ?? 0) : 0,
-    sessions: row ? Number(row.metricValues[1]?.value ?? 0) : 0,
-    screenPageViews: row ? Number(row.metricValues[2]?.value ?? 0) : 0,
+    activeUsers: metric(0),
+    sessions,
+    screenPageViews: metric(2),
+    engagedSessions: metric(3),
+    sessionsExcludingHeadless,
+    // Kẹp ở 0. Hai con số đến từ hai lần gọi riêng và không có gì đảm bảo GA4
+    // tính chúng trên cùng một ảnh chụp dữ liệu; một hiệu âm hiện lên giao
+    // diện dưới dạng "-3 phiên bot" thì vô nghĩa hơn là 0.
+    headlessSessions: Math.max(0, sessions - sessionsExcludingHeadless),
   };
 }
 
@@ -89,6 +183,10 @@ export interface LandingPageRow {
   activeUsers: number;
   /** Giây. GA4 trả averageSessionDuration theo giây, số thực. */
   avgSessionSeconds: number;
+  /** Phiên có tương tác vào đúng trang này. Với site pSEO đây là con số nói
+   *  mẫu trang nào ĐANG hoạt động: một cửa mở 48 lần mà không ai bước qua
+   *  ngưỡng thì cửa đó chưa hoạt động. */
+  engagedSessions: number;
 }
 
 /**
@@ -106,7 +204,12 @@ export async function fetchLandingPages(ga4PropertyId: string, days: number, lim
   const rows = await runReport(ga4PropertyId, {
     dateRanges: [{ startDate: `${days}daysAgo`, endDate: "today" }],
     dimensions: [{ name: "landingPagePlusQueryString" }],
-    metrics: [{ name: "sessions" }, { name: "activeUsers" }, { name: "averageSessionDuration" }],
+    metrics: [
+      { name: "sessions" },
+      { name: "activeUsers" },
+      { name: "averageSessionDuration" },
+      { name: "engagedSessions" },
+    ],
     limit,
   });
   const merged = new Map<string, LandingPageRow>();
@@ -116,6 +219,7 @@ export async function fetchLandingPages(ga4PropertyId: string, days: number, lim
     const sessions = Number(r.metricValues[0]?.value ?? 0);
     const activeUsers = Number(r.metricValues[1]?.value ?? 0);
     const avg = Number(r.metricValues[2]?.value ?? 0);
+    const engagedSessions = Number(r.metricValues[3]?.value ?? 0);
     const prev = merged.get(path);
     if (prev) {
       // Trung bình có TRỌNG SỐ theo phiên. Cộng rồi chia đôi sẽ cho một trang
@@ -126,9 +230,10 @@ export async function fetchLandingPages(ga4PropertyId: string, days: number, lim
         sessions: total,
         activeUsers: prev.activeUsers + activeUsers,
         avgSessionSeconds: total > 0 ? (prev.avgSessionSeconds * prev.sessions + avg * sessions) / total : 0,
+        engagedSessions: prev.engagedSessions + engagedSessions,
       });
     } else {
-      merged.set(path, { path, sessions, activeUsers, avgSessionSeconds: avg });
+      merged.set(path, { path, sessions, activeUsers, avgSessionSeconds: avg, engagedSessions });
     }
   }
   return [...merged.values()].sort((a, b) => b.sessions - a.sessions);
@@ -140,13 +245,14 @@ export async function fetchTrafficBySource(ga4PropertyId: string, days: number):
   const rows = await runReport(ga4PropertyId, {
     dateRanges: [{ startDate: `${days}daysAgo`, endDate: "today" }],
     dimensions: [{ name: "sessionDefaultChannelGroup" }],
-    metrics: [{ name: "sessions" }, { name: "activeUsers" }],
+    metrics: [{ name: "sessions" }, { name: "activeUsers" }, { name: "engagedSessions" }],
   });
   return rows
     .map((r) => ({
       dimensionValue: r.dimensionValues[0]?.value ?? "(not set)",
       sessions: Number(r.metricValues[0]?.value ?? 0),
       activeUsers: Number(r.metricValues[1]?.value ?? 0),
+      engagedSessions: Number(r.metricValues[2]?.value ?? 0),
     }))
     .sort((a, b) => b.sessions - a.sessions);
 }
@@ -165,6 +271,12 @@ async function runReport(
     /** GA4 mặc định trả 10.000 dòng. Đặt khi chỉ cần phần đầu — một bảng
      *  hiển thị 50 dòng không có lý do kéo về mười nghìn. */
     limit?: number;
+    /** FilterExpression của GA4 Data API. Để `unknown` thay vì dựng lại cây
+     *  kiểu của Google ở đây: cây đó lồng nhau nhiều tầng và chỉ có đúng một
+     *  chỗ trong file này dùng tới, nên một bản sao gần-đúng của nó sẽ là thứ
+     *  lệch khỏi API mà không ai phát hiện. Giá trị duy nhất truyền vào là
+     *  EXCLUDE_HEADLESS ở đầu file. */
+    dimensionFilter?: unknown;
   }
 ): Promise<RawGa4Row[]> {
   const accessToken = await getGoogleAccessToken([GA4_READONLY_SCOPE]);
