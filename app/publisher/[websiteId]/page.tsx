@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
+import { PublisherTabs } from "@/components/publisher-tabs";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Globe } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
@@ -72,39 +73,7 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
         </Link>
       </div>
 
-      <div className="flex gap-1 border-b">
-        <span className="border-b-2 border-foreground px-3 py-2 text-sm font-medium">Tổng quan</span>
-        <Link
-          href={`/publisher/${website.id}/onpage`}
-          className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
-        >
-          OnPage
-        </Link>
-        <Link
-          href={`/publisher/${websiteId}/posts`}
-          className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
-        >
-          Bài viết
-        </Link>
-        <Link
-          href={`/publisher/${websiteId}/articles`}
-          className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
-        >
-          Tạo bài viết
-        </Link>
-<Link
-          href={`/publisher/${websiteId}/index-log`}
-          className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
-        >
-          Theo dõi index
-        </Link>
-        <Link
-          href={`/publisher/${websiteId}/templates`}
-          className="border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground"
-        >
-          Template
-        </Link>
-      </div>
+      <PublisherTabs websiteId={website.id} active="overview" />
 
       <PageHeader
         icon={Globe}
