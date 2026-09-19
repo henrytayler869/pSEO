@@ -42,6 +42,17 @@ giờ khởi động cùng một app, cùng cổng 3002, từ cùng một thư m
 nghĩa, gọi từ đâu cũng ra đúng thứ đó. Nếu sau này sửa một bên thì phải sửa cả
 hai, nếu không cái bẫy cũ quay lại dưới tên mới.
 
+KHÔNG CỔNG NÀO KIỂM ĐƯỢC RÀNG BUỘC ĐÓ. CI của kho publisher không thấy file
+bên này (kho lồng, bị .gitignore che); CI của kho này không thấy file bên kia
+(không commit vào đây). Đây là một bất biến chỉ sống bằng đúng đoạn văn bạn
+đang đọc, trong một kho mà gần như mọi bất biến khác đều có cổng canh. Dựng
+cổng cho nó không xứng chi phí — nhưng người sửa sau cần biết mình đang cầm
+cái gì, vì ở đây không có gì đỏ lên khi làm sai.
+
+Và bề mặt trôi rộng hơn cái tên: CỔNG 3002 cũng khai ở hai nơi, và đã khai hai
+nơi từ trước khi có ai đổi tên. Cái tên không tạo ra ràng buộc; nó chỉ làm
+ràng buộc dễ thấy hơn.
+
 ## Ba điều phải biết
 
 1. `publisher/` được .gitignore che, và cũng bị loại khỏi `tsconfig.exclude`
