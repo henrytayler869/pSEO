@@ -141,6 +141,10 @@ const NOAA_MAX_PAGES = 20;
  * for the original PVWatts and GSC adapters.
  */
 export class NoaaClimateNormalsAdapter implements CollectorAdapter {
+  // NORMAL_MLY là chuẩn khí hậu 30 NĂM 1991–2020. NORMAL_PERIOD_START ở trên
+  // là ngày giả CDO đòi trong query, KHÔNG phải kỳ dữ liệu — lẫn hai thứ đó
+  // là khai một chuẩn 30 năm thành một năm.
+  temporalCoverage = "1991-01-01/2020-12-31";
   adapterKey = "noaa_climate_normals";
   // COUNTY, not ZIP — see the note on fetchOne. The dataset simply has no
   // station mapping for ZIP-type locations, so claiming ZIP resolution here

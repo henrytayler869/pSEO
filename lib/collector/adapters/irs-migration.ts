@@ -19,8 +19,14 @@ import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 // county FIPS — a real geography-vintage mismatch, not something to guess
 // a fix for. Both surface as ordinary per-zip collection failures, caught
 // by the Validator like any other gap.
-const INFLOW_URL = "https://www.irs.gov/pub/irs-soi/countyinflow2223.csv";
-const OUTFLOW_URL = "https://www.irs.gov/pub/irs-soi/countyoutflow2223.csv";
+// Năm thuế, lấy từ CHÍNH tên file IRS phát hành: "2223" = di chuyển giữa kỳ
+// khai 2022 và 2023. Đổi file mà quên đổi đây thì hai thứ lệch nhau lặng lẽ,
+// nên hằng số này là nguồn cho cả URL lẫn temporalCoverage.
+const SOI_FROM_YEAR = 2022;
+const SOI_TO_YEAR = 2023;
+const SOI_SUFFIX = `${String(SOI_FROM_YEAR).slice(2)}${String(SOI_TO_YEAR).slice(2)}`;
+const INFLOW_URL = `https://www.irs.gov/pub/irs-soi/countyinflow${SOI_SUFFIX}.csv`;
+const OUTFLOW_URL = `https://www.irs.gov/pub/irs-soi/countyoutflow${SOI_SUFFIX}.csv`;
 
 // Both files carry every origin/destination breakdown per county (same
 // state, different state, foreign, ...) plus subtotals — "96" is IRS's
@@ -50,6 +56,8 @@ interface CountyMigrationData {
  * geo-crosswalk fields, exactly what they were designed for.
  */
 export class IrsMigrationAdapter implements CollectorAdapter {
+  // Năm thuế lấy từ chính hậu tố tên file IRS.
+  temporalCoverage = `${SOI_FROM_YEAR}-01-01/${SOI_TO_YEAR}-12-31`;
   adapterKey = "irs_migration";
   nativeGeoResolution = "COUNTY" as const;
 

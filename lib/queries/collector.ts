@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { temporalCoverageByAdapter } from "@/lib/collector/registry";
 import { compareToPreviousSnapshot, type SnapshotComparison } from "@/lib/collector/compare";
 
 export async function getDataSources() {
@@ -67,6 +68,14 @@ export interface RealDataPointRow {
   confidence: number;
   snapshotVersion: number;
   fetchedAt: Date;
+  /**
+   * Khoảng thời gian dữ liệu MÔ TẢ, ISO 8601 — khác hẳn `fetchedAt`.
+   *
+   * Lấy từ adapter, nơi hằng số này cũng là thứ ghép nên URL tải về, nên nó
+   * không thể lệch khỏi dữ liệu thật. null = nguồn không có kỳ lịch (mô hình
+   * TMY, hoặc cửa sổ trượt theo ngày chạy).
+   */
+  temporalCoverage: string | null;
 }
 
 /** Every real collected DataPoint relevant to one (zip, vertical) pair, from
@@ -83,6 +92,12 @@ export interface RealDataPointRow {
 export async function getRealDataPointsForZipAndVertical(zip: string, vertical: string): Promise<RealDataPointRow[]> {
   const location = await prisma.location.findFirst({ where: { zip } });
   if (!location) return [];
+
+  // Kỳ phủ đọc từ ADAPTER, không từ DB. Hằng số trong adapter cũng là thứ
+  // ghép nên URL tải dữ liệu về, nên hai thứ không thể lệch nhau — còn một
+  // cột trong DB thì phải nhớ backfill mỗi lần nâng năm, và lần quên sẽ khai
+  // SAI chứ không khai thiếu.
+  const coverageByAdapter = await temporalCoverageByAdapter();
 
   const sources = await prisma.dataSource.findMany({
     where: { isActive: true, relevantVerticals: { has: vertical } },
@@ -120,6 +135,7 @@ export async function getRealDataPointsForZipAndVertical(zip: string, vertical: 
         confidence: point.confidence,
         snapshotVersion: snapshot.version,
         fetchedAt: snapshot.fetchedAt,
+        temporalCoverage: coverageByAdapter.get(source.adapterKey) ?? null,
       });
     }
   }

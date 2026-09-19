@@ -77,6 +77,12 @@ export class FemaDisasterDeclarationsAdapter implements CollectorAdapter {
     private readonly proxySecret: string | null = null
   ) {}
 
+  // CỬA SỔ TRƯỢT: `now - LOOKBACK_YEARS` tới now, nên kỳ phủ đổi theo ngày
+
+  // chạy. Khai một khoảng cố định ở đây là khai sai kể từ hôm sau.
+
+  temporalCoverage = null;
+
   adapterKey = "fema_disaster_declarations";
   nativeGeoResolution = "COUNTY" as const;
 
