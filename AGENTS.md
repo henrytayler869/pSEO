@@ -11,6 +11,26 @@ Kho publisher nằm LỒNG TRONG kho này, có chủ ý:
 19/9/2026. Một lệnh `cd` tới đường cũ thất bại lặng lẽ và các lệnh sau đó chạy
 nhầm kho; đã xảy ra đúng như vậy trong ngày.
 
+## `.claude/launch.json` chỉ khai dev server CỦA KHO NÀY
+
+Nó từng khai thêm hai mục `atmovingservices` và `theaccidentrecord`, cả hai
+`--prefix` vào `~/Documents/<tên site>` — đường đã chết từ 19/9/2026. Chạy là
+ENOENT ngay, và thông báo lỗi nói về `package.json` chứ không nói về đường dẫn
+sai, nên nó đọc như "kho hỏng" chứ không như "cấu hình cũ".
+
+Tệ hơn: kho publisher có mục TRÙNG TÊN `atmovingservices` trong launch.json
+của chính nó, và mục đó đúng. Gọi `preview_start` bằng tên đó từ thư mục
+publisher vẫn trúng mục chết ở đây. Một cái tên hai định nghĩa thì cái đúng
+không cứu được cái sai.
+
+Và một mục riêng cho mỗi site vốn đã sai: MỘT kho publisher phục vụ MỌI site
+(xem mục 3). Dev server của nó chạy một lần ở cổng 3002, phân biệt site bằng
+tiền tố đường dẫn — `/atmovingservices.com/...` hay `/theaccidentrecord.com/...`
+— chứ không bằng hai tiến trình.
+
+Muốn chạy publisher thì dùng launch.json của chính kho đó, từ
+`publisher/atmovingservices`.
+
 ## Ba điều phải biết
 
 1. `publisher/` được .gitignore che, và cũng bị loại khỏi `tsconfig.exclude`
