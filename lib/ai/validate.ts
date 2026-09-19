@@ -380,22 +380,28 @@ export function validateGeneratedText(text: string, factSet: FactSet): Validatio
    * chấm, và "there were 16 incidents. Separately, workers commute" đi qua
    * được — hai mệnh đề không liên quan, một cửa sổ nhìn thấy cả hai.
    */
-  const labelNumbers: { value: number; cues: string[] }[] = [];
+  const labelNumbers: { value: number; cues: string[]; scope: Fact["scope"] }[] = [];
   for (const f of factSet.facts) {
     const cues = f.label
       .toLowerCase()
       .split(/[^a-z]+/)
       .filter((w) => w.length >= 4 && !STOPWORDS.has(w));
     if (cues.length === 0) continue;
-    for (const { value } of extractNumbers(f.label)) labelNumbers.push({ value, cues });
+    for (const { value } of extractNumbers(f.label)) labelNumbers.push({ value, cues, scope: f.scope });
   }
 
   /** Câu chứa số đó — cắt ở dấu chấm câu, không cắt theo số ký tự. */
   const sentences = text.toLowerCase().split(/(?<=[.!?])\s+/);
 
-  /** Số này có đứng cùng câu với chữ của chính nhãn sinh ra nó không. */
-  const nearItsOwnLabel = (value: number, raw: string): boolean => {
-    const entries = labelNumbers.filter((l) => l.value === value);
+  /**
+   * Số này có đứng cùng câu với chữ của chính nhãn sinh ra nó không.
+   *
+   * `onlyScope` giới hạn ở nhãn của chỉ số cấp đó. Luật 1 không cần (nó hỏi
+   * "số này có đo được không", cấp nào cũng đo được); luật 2 thì cần, vì câu
+   * hỏi ở đó là "số này có được phép gán cho ZIP không".
+   */
+  const nearItsOwnLabel = (value: number, raw: string, onlyScope?: Fact["scope"]): boolean => {
+    const entries = labelNumbers.filter((l) => l.value === value && (!onlyScope || l.scope === onlyScope));
     if (entries.length === 0) return false;
     const needle = raw.toLowerCase();
     return sentences.some(
@@ -441,7 +447,7 @@ export function validateGeneratedText(text: string, factSet: FactSet): Validatio
       )
         continue;
       const zipFacts = factSet.facts.filter((f) => f.scope === "ZIP");
-      for (const { value } of extractNumbers(sentence)) {
+      for (const { raw, value } of extractNumbers(sentence)) {
         if (ALWAYS_ALLOWED.has(value)) continue;
         // A figure that was ALSO measured for this zip is legitimately
         // claimable for it, even if some county figure happens to land on
@@ -451,6 +457,36 @@ export function validateGeneratedText(text: string, factSet: FactSet): Validatio
         // overclaim. 16 such collisions across 3,324 measured facts — rare,
         // but they reject text that is right, which is the worse error here.
         if (matchesFact(value, zipFacts)) continue;
+        /**
+         * Số đến từ NHÃN của một chỉ số CẤP ZIP thì không phải gán sai phạm vi.
+         *
+         * Luật 1 đã có phép miễn này (pSEO #120). Luật 2 thì chưa, và cùng một
+         * con số đi qua cả hai — nên vá một luật để lại đúng lỗ ở luật kia.
+         *
+         * Đo 19/9/2026, ZIP 60085 (Waukegan, IL), 10 lần thử liên tiếp, 0 đạt,
+         * ~$0,18 cho cùng một câu ĐÚNG:
+         *
+         *   "In ZIP 60085, 34,994 workers aged 16 and over commute, and 86.9%
+         *    of them travel by car, truck or van; 6.19% have a commute of 60
+         *    minutes or more."
+         *
+         *   [scope_overclaim] gán số 60 cho ZIP 60085, nhưng chỉ số này đo ở
+         *   cấp COUNTY (Lake County)
+         *
+         * Vì "60" là số trong nhãn "share of workers whose commute takes 60
+         * minutes or more" — một chỉ số CẤP ZIP — mà cũng trùng giá trị của
+         * "people killed in traffic crashes in a year = 60 people", cấp
+         * COUNTY. Một trùng số thuần túy, giữa một nhãn và một giá trị.
+         *
+         * CHỈ nhãn cấp ZIP: nhãn của chính chỉ số county mà nói trong câu về
+         * ZIP thì vẫn là gán sai phạm vi, và đó là thứ luật này tồn tại để
+         * bắt.
+         *
+         * Vẫn đòi cùng câu và cùng chữ đặc trưng, như luật 1: "60 people were
+         * killed in ZIP 60085" không có chữ nào của nhãn commute, nên nó vẫn
+         * bị từ chối.
+         */
+        if (nearItsOwnLabel(value, raw, "ZIP")) continue;
         const fact = matchesFact(value, widerFacts);
         if (fact) {
           issues.push({
