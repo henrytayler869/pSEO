@@ -56,3 +56,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Script tạm khi chẩn đoán. Chúng từng được commit và nằm trong thư mục
+# deploy, nơi `npx tsc --noEmit` của bước build chạy trên TOÀN repo — nên một
+# file nháp viết vội làm ĐỎ deploy của một thay đổi không liên quan. Đã xảy ra
+# thật 19/9/2026: scripts/tmp-fillall.ts, 5 lỗi kiểu, deploy main đỏ.
+scripts/tmp-*.ts
