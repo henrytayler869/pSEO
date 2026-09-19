@@ -33,6 +33,14 @@ export interface SchemaEdge {
   fromType: string;
   property: string;
   toId: string;
+  /**
+   * LOẠI của node đích, giải trong cùng trang.
+   *
+   * Cần để vẽ được bản đồ: một cạnh chỉ có `@id` là một mũi tên trỏ vào
+   * chuỗi, không trỏ vào hộp nào. null khi cạnh đứt — và lúc đó bản đồ phải
+   * vẽ nó đi vào hư không thay vì lặng lẽ bỏ qua.
+   */
+  toType: string | null;
   /** @id đích có thật sự tồn tại trong đồ thị của cùng trang đó không. */
   resolved: boolean;
   seenOn: string[];
@@ -179,14 +187,17 @@ export async function buildSchemaGraph(siteUrl: string, vertical: string): Promi
       for (const r of refsOf(n)) {
         const ekey = `${type}|${r.property}|${r.toId}`;
         const resolved = idsHere.has(r.toId);
+        const toType = nodes.find((x) => x["@id"] === r.toId);
+        const toTypeName = toType ? typeOf(toType) : null;
         const pe = edgeMap.get(ekey);
         if (pe) {
           pe.seenOn.push(path);
           // Một cạnh giải được ở trang này mà không giải được ở trang khác vẫn
           // là vấn đề — giữ kết quả XẤU hơn.
           pe.resolved = pe.resolved && resolved;
+          pe.toType = pe.toType ?? toTypeName;
         } else {
-          edgeMap.set(ekey, { fromType: type, property: r.property, toId: r.toId, resolved, seenOn: [path] });
+          edgeMap.set(ekey, { fromType: type, property: r.property, toId: r.toId, toType: toTypeName, resolved, seenOn: [path] });
         }
       }
     }
