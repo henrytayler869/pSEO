@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { assertValidGscProperty, listSitemaps, submitSitemap } from "@/lib/google/search-console";
+import { setWordPressAdminPassword, generatePassword, MIN_PASSWORD_LENGTH, WpAdminPasswordError } from "@/lib/wordpress/admin-password";
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "@/lib/google/analytics-data";
 import { notifySiteConfigChanged } from "@/lib/publisher/notify-site";
 import { normalizeHost } from "@/lib/publisher/link-domain";
@@ -602,6 +603,84 @@ export async function fillClusterBatchAction(
     failed,
     remaining,
     costUsd: Number(costUsd.toFixed(4)),
+  };
+}
+
+export interface AdminPasswordResult {
+  ok: boolean;
+  message: string;
+  /**
+   * Mật khẩu mới, CHỈ trả về ngay sau khi đặt thành công và KHÔNG lưu ở đâu.
+   *
+   * Đây là bản sao duy nhất tồn tại ngoài hash của WordPress, và nó sống đúng
+   * một lần render. Lưu nó lại để "xem sau" biến CSDL này thành nơi một lần rò
+   * rỉ mở được mọi wp-admin — chính điều mà việc chỉ lưu hash tránh được.
+   */
+  password?: string;
+}
+
+/**
+ * Đặt mật khẩu mới cho tài khoản quản trị WordPress của một publisher.
+ *
+ * KHÔNG có action đọc mật khẩu hiện tại, và sẽ không có: WordPress lưu hash,
+ * không nơi nào giữ bản rõ. "Đổi rồi hiện một lần" giải đúng nhu cầu vào được
+ * wp-admin mà không tạo ra kho mật khẩu.
+ */
+export async function setAdminPasswordAction(
+  _prev: AdminPasswordResult,
+  formData: FormData
+): Promise<AdminPasswordResult> {
+  const websiteId = String(formData.get("websiteId") ?? "").trim();
+  const typed = String(formData.get("password") ?? "");
+  if (!websiteId) return { ok: false, message: "Thiếu website." };
+
+  const site = await prisma.website.findUnique({
+    where: { id: websiteId },
+    select: { url: true, wpApiBaseUrl: true, wpUsername: true, wpLoopbackSecret: true },
+  });
+  if (!site) return { ok: false, message: "Không tìm thấy website." };
+
+  if (!site.wpApiBaseUrl) {
+    return {
+      ok: false,
+      message: 'Site này chưa nối WordPress — ô "WordPress REST API" đang trống.',
+    };
+  }
+  if (!site.wpUsername) {
+    return {
+      ok: false,
+      message: 'Chưa biết tên tài khoản quản trị. Điền ô "WordPress username" trước.',
+    };
+  }
+
+  // Bỏ trống = sinh máy. Đó là đường mặc định vì mật khẩu người gõ ở một ô
+  // trên trang web đi qua nhiều tầng hơn một mật khẩu sinh ra rồi hiện một lần.
+  const password = typed.trim() || generatePassword();
+  if (typed.trim() && typed.trim().length < MIN_PASSWORD_LENGTH) {
+    return { ok: false, message: `Mật khẩu phải dài ít nhất ${MIN_PASSWORD_LENGTH} ký tự.` };
+  }
+
+  try {
+    await setWordPressAdminPassword({
+      wpApiBaseUrl: site.wpApiBaseUrl,
+      username: site.wpUsername,
+      password,
+      loopbackSecret: site.wpLoopbackSecret,
+    });
+  } catch (err) {
+    if (err instanceof WpAdminPasswordError) return { ok: false, message: err.message };
+    return { ok: false, message: err instanceof Error ? err.message : "Đổi mật khẩu thất bại." };
+  }
+
+  revalidatePath(`/publisher/${websiteId}`);
+  return {
+    ok: true,
+    message:
+      `Đã đổi mật khẩu cho "${site.wpUsername}". Mọi phiên đăng nhập của tài khoản này đã bị huỷ. ` +
+      `Mật khẩu hiện MỘT LẦN dưới đây và không lưu ở đâu — chép ngay.`,
+    // Chỉ trả khi người dùng KHÔNG tự gõ: họ đã có mật khẩu mình vừa gõ, và
+    // in lại nó chỉ thêm một bản sao vào chỗ khác.
+    password: typed.trim() ? undefined : password,
   };
 }
 

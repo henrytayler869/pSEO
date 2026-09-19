@@ -12,6 +12,7 @@ import { recommend, isGoal } from "@/lib/publisher/recommend";
 import { MeasurementIdForm } from "@/components/measurement-id-form";
 import { RevalidateSecretForm } from "@/components/revalidate-secret-form";
 import { WpAdminLinkCell } from "@/components/wp-admin-link";
+import { WpAdminPassword } from "@/components/wp-admin-password";
 import { SitemapSubmit } from "@/components/sitemap-submit";
 import { AiBudgetCard } from "@/components/ai-budget-card";
 import { getBudgetStatus } from "@/lib/ai/budget";
@@ -275,6 +276,24 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
         </CardHeader>
         <CardContent>
           <WpAdminLinkCell link={wpAdmin} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Tài khoản quản trị WordPress</CardTitle>
+          <CardDescription>
+            Xem tên tài khoản và đặt lại mật khẩu mà không cần SSH. KHÔNG xem được mật khẩu hiện tại: WordPress chỉ lưu
+            bản băm, nên không nơi nào giữ bản gốc — và để xem được thì Head Quarter phải tự lưu bản rõ của mọi
+            publisher, biến chỗ này thành nơi một lần rò rỉ mở được mọi wp-admin.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <WpAdminPassword
+            websiteId={website.id}
+            username={website.wpUsername}
+            wpConnected={Boolean(website.wpApiBaseUrl)}
+          />
         </CardContent>
       </Card>
 
