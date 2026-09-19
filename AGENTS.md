@@ -5,7 +5,7 @@ Kho publisher nằm LỒNG TRONG kho này, có chủ ý:
     pseo-control-panel/              ← kho Head Quarter (henrytayler869/pSEO)
       publisher/
         atmovingservices/            ← kho publisher (henrytayler869/pseo-publisher)
-        theaccidentrecord/           ← scaffold cũ, KHÔNG phục vụ site nào
+        _archive/                    ← bản lưu mã nguồn của thứ đã xoá
 
 `~/Documents/atmovingservices` KHÔNG còn tồn tại — nó đã chuyển vào đây ngày
 19/9/2026. Một lệnh `cd` tới đường cũ thất bại lặng lẽ và các lệnh sau đó chạy
@@ -22,18 +22,21 @@ nhầm kho; đã xảy ra đúng như vậy trong ngày.
 2. `git clean -xdf` AN TOÀN — git bỏ qua kho lồng ("Would skip repository").
    `git clean -xdff` (HAI f) thì XOÁ SẠCH cả hai kho publisher. Đo 19/9/2026.
 
-3. **`publisher/theaccidentrecord` không phục vụ site nào.** Nó là một
-   scaffold riêng từ 15/9: không remote, KHÔNG COMMIT NÀO, 24 file đang chờ,
-   469 MB. Site theaccidentrecord.com thật chạy từ `pseo-publisher` cùng với
-   atmovingservices.com — một kho, một build, nhiều host, phân biệt theo Host
-   header.
+3. MỘT kho publisher phục vụ MỌI site. atmovingservices.com và
+   theaccidentrecord.com chạy từ cùng `pseo-publisher`: một kho, một build,
+   nhiều host, phân biệt theo Host header. Không có "kho riêng cho mỗi site",
+   và một thư mục trông như thế là dấu hiệu có người đang nhầm.
 
-   Nó cũng đã lệch hẳn: không có `nodeId`, `wpBaseFor`, `labelNumbersOf`,
-   `chooseSite` — tức thiếu toàn bộ phần đa-site và các bản vá validator của
-   ngày 19/9. Sửa trong đó thì không có gì lên site.
+   `publisher/theaccidentrecord` từng là một thư mục như vậy — scaffold riêng
+   từ 15/9, không remote, không commit nào, 469 MB. Đã xoá 19/9 sau khi đối
+   chiếu từng file: 23/24 file khác kho thật, và cả sáu file "chỉ có ở đó" đều
+   là tên đời cũ của thứ đã được thay (`key.ts`→`key-store.ts`,
+   `verify-routes.ts`→`verify-static-routes.ts`,
+   `known-paths.json`→`data/sites/<host>/markets.json`). Không có gì độc bản.
 
-   Chưa xoá vì nó là 469 MB có 24 thay đổi chưa commit và không có bản sao ở
-   đâu khác. Cần người quyết định.
+   Mã nguồn (520 KB trong 469 MB) lưu ở
+   `publisher/_archive/theaccidentrecord-scaffold-20260915.tar.gz`, 94 KB.
+   Xoá được nếu không ai cần.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
