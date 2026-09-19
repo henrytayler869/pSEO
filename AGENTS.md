@@ -11,25 +11,47 @@ Kho publisher nằm LỒNG TRONG kho này, có chủ ý:
 19/9/2026. Một lệnh `cd` tới đường cũ thất bại lặng lẽ và các lệnh sau đó chạy
 nhầm kho; đã xảy ra đúng như vậy trong ngày.
 
-## `.claude/launch.json` chỉ khai dev server CỦA KHO NÀY
+## `.claude/launch.json` khai HAI dev server, và cả hai tên là thật
+
+    pseo-control-panel-dev   cổng 3000   kho này
+    publisher                cổng 3002   kho publisher, qua --prefix vào thư mục lồng
 
 Nó từng khai thêm hai mục `atmovingservices` và `theaccidentrecord`, cả hai
 `--prefix` vào `~/Documents/<tên site>` — đường đã chết từ 19/9/2026. Chạy là
 ENOENT ngay, và thông báo lỗi nói về `package.json` chứ không nói về đường dẫn
 sai, nên nó đọc như "kho hỏng" chứ không như "cấu hình cũ".
 
-Tệ hơn: kho publisher có mục TRÙNG TÊN `atmovingservices` trong launch.json
-của chính nó, và mục đó đúng. Gọi `preview_start` bằng tên đó từ thư mục
-publisher vẫn trúng mục chết ở đây. Một cái tên hai định nghĩa thì cái đúng
-không cứu được cái sai.
-
 Và một mục riêng cho mỗi site vốn đã sai: MỘT kho publisher phục vụ MỌI site
 (xem mục 3). Dev server của nó chạy một lần ở cổng 3002, phân biệt site bằng
 tiền tố đường dẫn — `/atmovingservices.com/...` hay `/theaccidentrecord.com/...`
 — chứ không bằng hai tiến trình.
 
-Muốn chạy publisher thì dùng launch.json của chính kho đó, từ
-`publisher/atmovingservices`.
+Vì sao vẫn giữ MỘT mục `publisher` ở đây thay vì bảo người ta sang kho kia.
+`preview_start` đọc launch.json của THƯ MỤC GỐC phiên làm việc. Kho publisher
+nằm LỒNG trong kho này, nên phiên nào gốc ở đây — phần lớn phiên — không có
+đường nào gọi tới launch.json của kho publisher. Bỏ hẳn mục này không làm cấu
+hình sạch hơn; nó làm dev server publisher trở thành thứ không khởi động được
+từ chỗ người ta đang đứng. Đo 19/9/2026: `preview_start publisher` lên 3002 và
+`/atmovingservices.com/moving-services/ny/brooklyn` trả HTTP 200.
+
+Kho publisher có mục TRÙNG TÊN `publisher` trong launch.json của chính nó, và
+đó là CỐ Ý. Cái bẫy trước đây không phải là trùng tên — nó là một tên HAI
+NGHĨA: mục `atmovingservices` ở đây đã chết trong khi mục cùng tên bên kia còn
+sống, nên gọi từ thư mục publisher vẫn trúng cái chết. Hai mục `publisher` bây
+giờ khởi động cùng một app, cùng cổng 3002, từ cùng một thư mục. Một tên, một
+nghĩa, gọi từ đâu cũng ra đúng thứ đó. Nếu sau này sửa một bên thì phải sửa cả
+hai, nếu không cái bẫy cũ quay lại dưới tên mới.
+
+KHÔNG CỔNG NÀO KIỂM ĐƯỢC RÀNG BUỘC ĐÓ. CI của kho publisher không thấy file
+bên này (kho lồng, bị .gitignore che); CI của kho này không thấy file bên kia
+(không commit vào đây). Đây là một bất biến chỉ sống bằng đúng đoạn văn bạn
+đang đọc, trong một kho mà gần như mọi bất biến khác đều có cổng canh. Dựng
+cổng cho nó không xứng chi phí — nhưng người sửa sau cần biết mình đang cầm
+cái gì, vì ở đây không có gì đỏ lên khi làm sai.
+
+Và bề mặt trôi rộng hơn cái tên: CỔNG 3002 cũng khai ở hai nơi, và đã khai hai
+nơi từ trước khi có ai đổi tên. Cái tên không tạo ra ràng buộc; nó chỉ làm
+ràng buộc dễ thấy hơn.
 
 ## Ba điều phải biết
 
