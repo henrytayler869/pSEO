@@ -37,7 +37,7 @@ import { parseCsv, headerIndex } from "../csv";
  * Nâng năm là một QUYẾT ĐỊNH, kèm chạy lại collector và kiểm lại mọi đoạn
  * văn đã sinh — vì fingerprint fact đổi, đúng như §3.5 mô tả.
  */
-const DATA_YEAR = 2022;
+import { FARS_DATA_YEAR as DATA_YEAR, TEMPORAL_COVERAGE } from "@/lib/collector/vintages";
 const URL = `https://static.nhtsa.gov/nhtsa/downloads/FARS/${DATA_YEAR}/National/FARS${DATA_YEAR}NationalCSV.zip`;
 
 interface CountyCrashData {
@@ -47,7 +47,7 @@ interface CountyCrashData {
 
 export class FarsFatalCrashesAdapter implements CollectorAdapter {
   // FARS là một năm lịch trọn vẹn, không phải ước lượng nhiều năm.
-  temporalCoverage = `${DATA_YEAR}-01-01/${DATA_YEAR}-12-31`;
+  temporalCoverage = TEMPORAL_COVERAGE.fars_fatal_crashes;
   adapterKey = "fars_fatal_crashes";
   nativeGeoResolution = "COUNTY" as const;
 
