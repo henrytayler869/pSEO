@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { temporalCoverageByAdapter } from "@/lib/collector/registry";
+import { TEMPORAL_COVERAGE } from "@/lib/collector/vintages";
 import { compareToPreviousSnapshot, type SnapshotComparison } from "@/lib/collector/compare";
 
 export async function getDataSources() {
@@ -93,11 +93,6 @@ export async function getRealDataPointsForZipAndVertical(zip: string, vertical: 
   const location = await prisma.location.findFirst({ where: { zip } });
   if (!location) return [];
 
-  // Kỳ phủ đọc từ ADAPTER, không từ DB. Hằng số trong adapter cũng là thứ
-  // ghép nên URL tải dữ liệu về, nên hai thứ không thể lệch nhau — còn một
-  // cột trong DB thì phải nhớ backfill mỗi lần nâng năm, và lần quên sẽ khai
-  // SAI chứ không khai thiếu.
-  const coverageByAdapter = await temporalCoverageByAdapter();
 
   const sources = await prisma.dataSource.findMany({
     where: { isActive: true, relevantVerticals: { has: vertical } },
@@ -135,7 +130,7 @@ export async function getRealDataPointsForZipAndVertical(zip: string, vertical: 
         confidence: point.confidence,
         snapshotVersion: snapshot.version,
         fetchedAt: snapshot.fetchedAt,
-        temporalCoverage: coverageByAdapter.get(source.adapterKey) ?? null,
+        temporalCoverage: TEMPORAL_COVERAGE[source.adapterKey] ?? null,
       });
     }
   }

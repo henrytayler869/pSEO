@@ -2,7 +2,7 @@ import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types
 import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
-const ACS_YEAR = 2023;
+import { ACS_YEAR, TEMPORAL_COVERAGE } from "@/lib/collector/vintages";
 
 /**
  * Mã biến ACS, tra thẳng từ `variables.json` ngày 15/9/2026 — KHÔNG lấy theo
@@ -66,7 +66,7 @@ interface ZctaCommute {
  */
 export class CensusCommuteAdapter implements CollectorAdapter {
   // ACS5: ước lượng 5 năm kết thúc ở ACS_YEAR.
-  temporalCoverage = `${ACS_YEAR - 4}-01-01/${ACS_YEAR}-12-31`;
+  temporalCoverage = TEMPORAL_COVERAGE.census_commute;
   adapterKey = "census_commute";
   nativeGeoResolution = "ZIP" as const;
 

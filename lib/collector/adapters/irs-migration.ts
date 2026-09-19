@@ -22,8 +22,7 @@ import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 // Năm thuế, lấy từ CHÍNH tên file IRS phát hành: "2223" = di chuyển giữa kỳ
 // khai 2022 và 2023. Đổi file mà quên đổi đây thì hai thứ lệch nhau lặng lẽ,
 // nên hằng số này là nguồn cho cả URL lẫn temporalCoverage.
-const SOI_FROM_YEAR = 2022;
-const SOI_TO_YEAR = 2023;
+import { SOI_FROM_YEAR, SOI_TO_YEAR, TEMPORAL_COVERAGE } from "@/lib/collector/vintages";
 const SOI_SUFFIX = `${String(SOI_FROM_YEAR).slice(2)}${String(SOI_TO_YEAR).slice(2)}`;
 const INFLOW_URL = `https://www.irs.gov/pub/irs-soi/countyinflow${SOI_SUFFIX}.csv`;
 const OUTFLOW_URL = `https://www.irs.gov/pub/irs-soi/countyoutflow${SOI_SUFFIX}.csv`;
@@ -57,7 +56,7 @@ interface CountyMigrationData {
  */
 export class IrsMigrationAdapter implements CollectorAdapter {
   // Năm thuế lấy từ chính hậu tố tên file IRS.
-  temporalCoverage = `${SOI_FROM_YEAR}-01-01/${SOI_TO_YEAR}-12-31`;
+  temporalCoverage = TEMPORAL_COVERAGE.irs_migration;
   adapterKey = "irs_migration";
   nativeGeoResolution = "COUNTY" as const;
 

@@ -2,7 +2,7 @@ import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types
 import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
-const ACS_YEAR = 2023;
+import { ACS_YEAR, TEMPORAL_COVERAGE } from "@/lib/collector/vintages";
 
 // ACS table B07003 — "Geographic Mobility in the Past Year by Sex for
 // Current Residence". Verified live 2026-09-07 at ZCTA resolution: the four
@@ -48,7 +48,7 @@ interface ZctaMobility {
  */
 export class CensusMobilityAdapter implements CollectorAdapter {
   // ACS5: ước lượng 5 năm kết thúc ở ACS_YEAR.
-  temporalCoverage = `${ACS_YEAR - 4}-01-01/${ACS_YEAR}-12-31`;
+  temporalCoverage = TEMPORAL_COVERAGE.census_mobility;
   adapterKey = "census_mobility";
   nativeGeoResolution = "ZIP" as const;
 
