@@ -66,6 +66,39 @@ export async function fetchTopPages(propertyUrl: string, days: number, limit = 5
     .sort((a, b) => b.clicks - a.clicks);
 }
 
+export interface QuerySearchRow {
+  query: string;
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+}
+
+/**
+ * Truy vấn nào đang đưa người tới site.
+ *
+ * Tách khỏi fetchTopPages vì nó trả lời câu khác: trang nào ĐƯỢC xem so với
+ * người ta GÕ gì. Với site pSEO, câu thứ hai là câu nói được mẫu từ khoá thật
+ * có khớp với mẫu mình nhắm không — thứ mà bảng trang không nói.
+ *
+ * GSC ẩn phần lớn truy vấn hiếm (anonymised queries), nên tổng của bảng này
+ * LUÔN nhỏ hơn tổng của site. Đó không phải lỗi và cũng không sửa được; nó là
+ * lý do màn hình phải hiện cả hai con số thay vì để người đọc tự cộng.
+ */
+export async function fetchTopQueries(propertyUrl: string, days: number, limit = 50): Promise<QuerySearchRow[]> {
+  const accessToken = await getGoogleAccessToken([GSC_READONLY_SCOPE]);
+  const { startDate, endDate } = dateRange(days);
+  const rows = await querySearchAnalytics(propertyUrl, accessToken, {
+    startDate,
+    endDate,
+    dimensions: ["query"],
+    rowLimit: limit,
+  });
+  return rows
+    .map((r) => ({ query: r.keys[0], clicks: r.clicks, impressions: r.impressions, ctr: r.ctr, position: r.position }))
+    .sort((a, b) => b.impressions - a.impressions);
+}
+
 /** Real per-URL index verdict (URL Inspection API) — the ground truth
  * fetchSiteSearchTotals()'s pagesWithImpressions can only approximate.
  * Quota-limited by Google (2,000/day, 600/min per property) so this is

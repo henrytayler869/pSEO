@@ -83,6 +83,57 @@ export async function fetchSiteTrafficTotals(ga4PropertyId: string, days: number
   };
 }
 
+export interface LandingPageRow {
+  path: string;
+  sessions: number;
+  activeUsers: number;
+  /** Giây. GA4 trả averageSessionDuration theo giây, số thực. */
+  avgSessionSeconds: number;
+}
+
+/**
+ * Trang nào là CỬA VÀO, không phải trang nào được xem nhiều.
+ *
+ * Với site pSEO đây là con số đáng đọc hơn pageviews: mỗi trang thị trường là
+ * một cửa riêng cho một truy vấn riêng, nên "cửa nào mở" nói thẳng mẫu nào
+ * đang hoạt động. Pageviews trộn cả lượt người đã vào rồi bấm quanh.
+ *
+ * `landingPagePlusQueryString` chứ không phải `pagePath`: GA4 chỉ có chiều
+ * landing page ở dạng kèm query string. Cắt query ở phía này để hai trang chỉ
+ * khác tham số UTM không thành hai dòng.
+ */
+export async function fetchLandingPages(ga4PropertyId: string, days: number, limit = 50): Promise<LandingPageRow[]> {
+  const rows = await runReport(ga4PropertyId, {
+    dateRanges: [{ startDate: `${days}daysAgo`, endDate: "today" }],
+    dimensions: [{ name: "landingPagePlusQueryString" }],
+    metrics: [{ name: "sessions" }, { name: "activeUsers" }, { name: "averageSessionDuration" }],
+    limit,
+  });
+  const merged = new Map<string, LandingPageRow>();
+  for (const r of rows) {
+    const raw = r.dimensionValues[0]?.value ?? "";
+    const path = raw.split("?")[0] || "/";
+    const sessions = Number(r.metricValues[0]?.value ?? 0);
+    const activeUsers = Number(r.metricValues[1]?.value ?? 0);
+    const avg = Number(r.metricValues[2]?.value ?? 0);
+    const prev = merged.get(path);
+    if (prev) {
+      // Trung bình có TRỌNG SỐ theo phiên. Cộng rồi chia đôi sẽ cho một trang
+      // 1 phiên cùng sức nặng với một trang 900 phiên.
+      const total = prev.sessions + sessions;
+      merged.set(path, {
+        path,
+        sessions: total,
+        activeUsers: prev.activeUsers + activeUsers,
+        avgSessionSeconds: total > 0 ? (prev.avgSessionSeconds * prev.sessions + avg * sessions) / total : 0,
+      });
+    } else {
+      merged.set(path, { path, sessions, activeUsers, avgSessionSeconds: avg });
+    }
+  }
+  return [...merged.values()].sort((a, b) => b.sessions - a.sessions);
+}
+
 /** Per-source breakdown (e.g. "organic search", "direct") for the website
  * detail view. */
 export async function fetchTrafficBySource(ga4PropertyId: string, days: number): Promise<TrafficBreakdownRow[]> {
@@ -107,7 +158,14 @@ interface RawGa4Row {
 
 async function runReport(
   ga4PropertyId: string,
-  body: { dateRanges: { startDate: string; endDate: string }[]; metrics: { name: string }[]; dimensions?: { name: string }[] }
+  body: {
+    dateRanges: { startDate: string; endDate: string }[];
+    metrics: { name: string }[];
+    dimensions?: { name: string }[];
+    /** GA4 mặc định trả 10.000 dòng. Đặt khi chỉ cần phần đầu — một bảng
+     *  hiển thị 50 dòng không có lý do kéo về mười nghìn. */
+    limit?: number;
+  }
 ): Promise<RawGa4Row[]> {
   const accessToken = await getGoogleAccessToken([GA4_READONLY_SCOPE]);
   const response = await fetch(`${GA4_DATA_API_BASE}/properties/${ga4PropertyId}:runReport`, {
