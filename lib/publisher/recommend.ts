@@ -218,13 +218,33 @@ const RULES: Rule[] = [
       if (m.trafficBySource === null || m.traffic === null) {
         return { status: "unmeasurable", missing: m.ga4Error ?? "Không đọc được GA4.", fix: "Nối GA4 trong Cài đặt (cùng Service Account với Search Console)." };
       }
-      const total = m.trafficBySource.reduce((s, r) => s + r.sessions, 0);
+      // engagedSessions, KHÔNG phải sessions — sửa 19/9/2026.
+      //
+      // Đo trên atmovingservices.com: 51 phiên thô, 50 trong đó là Direct, và
+      // 34 phiên đến từ viewport 800×600 với 0 tương tác. Tính trên số thô, tỷ
+      // trọng organic ra 2% và luật này kêu lên "phần lớn truy cập không đến từ
+      // tìm kiếm, thêm bài pSEO chưa chắc đáng làm" — một lời khuyên đúng theo
+      // công thức và sai theo thực tế, vì cái "phần lớn" đó là bot, không phải
+      // người chọn đường khác. Xem HEADLESS_VIEWPORT trong
+      // lib/google/analytics-data.ts.
+      const total = m.trafficBySource.reduce((s, r) => s + r.engagedSessions, 0);
       if (total === 0) {
-        return { status: "unmeasurable", missing: `GA4 báo 0 phiên trong ${m.windowDays} ngày.`, fix: "Kiểm measurement ID đã gắn đúng lên site — 0 phiên thường là chưa gắn, không phải không ai vào." };
+        const raw = m.trafficBySource.reduce((s, r) => s + r.sessions, 0);
+        return raw === 0
+          ? { status: "unmeasurable", missing: `GA4 báo 0 phiên trong ${m.windowDays} ngày.`, fix: "Kiểm measurement ID đã gắn đúng lên site — 0 phiên thường là chưa gắn, không phải không ai vào." }
+          : { status: "unmeasurable", missing: `${raw} phiên trong ${m.windowDays} ngày nhưng KHÔNG phiên nào có tương tác.`, fix: "Chưa có ai thật sự đọc trang nào, nên chưa có tỷ trọng nguồn để tính. Đây gần như luôn là lưu lượng tự động, không phải người." };
       }
-      const organic = m.trafficBySource.filter((r) => /organic/i.test(r.dimensionValue)).reduce((s, r) => s + r.sessions, 0);
+      // Ngưỡng tối thiểu để một TỶ TRỌNG có nghĩa. Đây là phán đoán, không phải
+      // hằng số đo được: dưới ngưỡng này một phiên lẻ làm tỷ trọng nhảy hàng
+      // chục điểm phần trăm, nên con số ra sẽ trông như một phát hiện trong khi
+      // nó là nhiễu. Thà nói "chưa đo được" còn hơn kêu lên vì một phiên.
+      const MIN_ENGAGED_FOR_SHARE = 30;
+      if (total < MIN_ENGAGED_FOR_SHARE) {
+        return { status: "unmeasurable", missing: `Chỉ ${total} phiên có tương tác trong ${m.windowDays} ngày — quá ít để tính tỷ trọng nguồn.`, fix: `Cần khoảng ${MIN_ENGAGED_FOR_SHARE} phiên có tương tác thì tỷ trọng mới không nhảy theo từng phiên lẻ. Chưa tới đó thì đọc số tuyệt đối, đừng đọc tỷ lệ.` };
+      }
+      const organic = m.trafficBySource.filter((r) => /organic/i.test(r.dimensionValue)).reduce((s, r) => s + r.engagedSessions, 0);
       const share = organic / total;
-      const note = `${organic}/${total} phiên đến từ tìm kiếm tự nhiên (${pct(share)}).`;
+      const note = `${organic}/${total} phiên CÓ TƯƠNG TÁC đến từ tìm kiếm tự nhiên (${pct(share)}).`;
       if (share < 0.3) {
         return { status: "fired", severity: "vừa", evidence: note, action: "Phần lớn truy cập không đến từ tìm kiếm, nên thêm bài pSEO chưa chắc là việc đáng làm tiếp theo. Xem nguồn nào đang mang người tới trước khi tăng sản lượng." };
       }

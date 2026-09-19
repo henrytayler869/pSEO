@@ -25,10 +25,17 @@ function healthy(): MetricsInput {
     sitemapError: null,
     postCount: 110,
     postCountError: null,
-    traffic: { activeUsers: 800, sessions: 1000, screenPageViews: 2200 },
+    traffic: {
+      activeUsers: 800,
+      sessions: 1000,
+      screenPageViews: 2200,
+      engagedSessions: 1000,
+      sessionsExcludingHeadless: 1000,
+      headlessSessions: 0,
+    },
     trafficBySource: [
-      { dimensionValue: "Organic Search", sessions: 700, activeUsers: 700 },
-      { dimensionValue: "Direct", sessions: 300, activeUsers: 300 },
+      { dimensionValue: "Organic Search", sessions: 700, activeUsers: 700, engagedSessions: 700 },
+      { dimensionValue: "Direct", sessions: 300, activeUsers: 300, engagedSessions: 300 },
     ],
     ga4Error: null,
   };
@@ -90,7 +97,36 @@ const CASES: Case[] = [
     goal: "leads",
     id: "organic-share",
     want: "fired",
-    make: (m) => ({ ...m, trafficBySource: [{ dimensionValue: "Organic Search", sessions: 50, activeUsers: 50 }, { dimensionValue: "Direct", sessions: 950, activeUsers: 950 }] }),
+    make: (m) => ({
+      ...m,
+      trafficBySource: [
+        { dimensionValue: "Organic Search", sessions: 50, activeUsers: 50, engagedSessions: 50 },
+        { dimensionValue: "Direct", sessions: 950, activeUsers: 950, engagedSessions: 950 },
+      ],
+    }),
+  },
+  {
+    name: "quá ít phiên có tương tác -> không đo được tỷ trọng",
+    goal: "leads",
+    id: "organic-share",
+    want: "unmeasurable",
+    make: (m) => ({
+      ...m,
+      trafficBySource: [
+        { dimensionValue: "Organic Search", sessions: 1, activeUsers: 1, engagedSessions: 0 },
+        { dimensionValue: "Direct", sessions: 50, activeUsers: 47, engagedSessions: 8 },
+      ],
+    }),
+  },
+  {
+    name: "có phiên nhưng không phiên nào tương tác -> không đo được",
+    goal: "leads",
+    id: "organic-share",
+    want: "unmeasurable",
+    make: (m) => ({
+      ...m,
+      trafficBySource: [{ dimensionValue: "Direct", sessions: 22, activeUsers: 22, engagedSessions: 0 }],
+    }),
   },
 
   // --- thiếu số liệu phải ra "không đo được", KHÔNG được ra "ổn" ---
