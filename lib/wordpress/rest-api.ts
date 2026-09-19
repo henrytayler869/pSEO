@@ -25,6 +25,14 @@ export async function fetchPublishedPostCount(wpApiBaseUrl: string): Promise<num
   return count;
 }
 
+/**
+ * Địa chỉ REST API mà WordPress SẼ nằm ở nếu nó phục vụ ngay trên origin công
+ * khai. Một GỢI Ý để điền sẵn ô nhập, KHÔNG phải một giá trị dùng được.
+ *
+ * KHÔNG dùng hàm này làm giá trị dự phòng cho `wpApiBaseUrl` rỗng. Đó là điều
+ * duy nhất đáng nói về nó, và nó từng bị dùng đúng như thế ở năm nơi — xem
+ * chú thích của `deriveWpAdminUrl` bên dưới.
+ */
 export function deriveWpApiBaseUrl(siteUrl: string): string {
   return `${siteUrl.replace(/\/+$/, "")}/wp-json/wp/v2`;
 }
@@ -53,13 +61,42 @@ export interface WpAdminLink {
  * clicked, it fails, and the failure looks like WordPress being down rather
  * than the address being wrong.
  */
-export function deriveWpAdminUrl(wpApiBaseUrl: string | null, siteUrl: string): WpAdminLink {
+/**
+ * KHÔNG CÓ wpApiBaseUrl NGHĨA LÀ KHÔNG CÓ WORDPRESS — trả null, đừng bịa.
+ *
+ * Bản trước rơi về `siteUrl`, và chú thích ngay trên chính nó đã nói vì sao
+ * điều đó sai: "On a headless install the public origin serves Next.js and has
+ * no /wp-admin at all — https://example.com/wp-admin is a 404 dressed up as a
+ * working link." Lời giải thích đúng, nằm ngay trên dòng mã làm điều ngược
+ * lại — lần thứ hai trong repo này.
+ *
+ * Đo 19/9/2026, và người dùng là người nhìn ra trước tôi: hai site hiện WP
+ * Admin khác nhau.
+ *
+ *   atmovingservices.com   wpApiBaseUrl = http://127.0.0.1:8090/wp-json/wp/v2
+ *                          → loopback → hiện địa chỉ + lệnh tunnel. ĐÚNG, và
+ *                            có WordPress thật ở đó (container atms-wp).
+ *   theaccidentrecord.com  wpApiBaseUrl = https://theaccidentrecord.com/...
+ *                          → host công khai → hiện link bấm được. Và:
+ *
+ *   theaccidentrecord.com/wp-admin   HTTP 404
+ *   theaccidentrecord.com/wp-json    HTTP 404
+ *
+ * Site đó KHÔNG có WordPress nào cả. Giá trị kia do chính panel bịa ra lúc
+ * nối site — `wpApiBaseUrlRaw || deriveWpApiBaseUrl(url)` — bằng phép nối
+ * chuỗi, không ai từng hỏi WordPress có trả lời ở đó không.
+ *
+ * Khác biệt trên màn hình không phải chuyện giao diện: một bên là địa chỉ
+ * thật cần tunnel, bên kia là một cái 404 mặc áo link.
+ */
+export function deriveWpAdminUrl(wpApiBaseUrl: string | null, siteUrl: string): WpAdminLink | null {
+  if (!wpApiBaseUrl) return null;
   // Strip the REST path back to the WordPress origin. Matching /wp-json rather
   // than assuming the full /wp-json/wp/v2 suffix: some installs proxy the REST
   // API under a different namespace depth, and cutting a fixed number of
   // segments would silently produce a wrong origin for them.
-  const base = wpApiBaseUrl ?? siteUrl;
-  const origin = base.replace(/\/wp-json(\/.*)?$/, "").replace(/\/+$/, "");
+  void siteUrl; // giữ chữ ký; site URL KHÔNG còn được dùng để đoán địa chỉ WP
+  const origin = wpApiBaseUrl.replace(/\/wp-json(\/.*)?$/, "").replace(/\/+$/, "");
   const url = `${origin}/wp-admin`;
 
   let host = "";

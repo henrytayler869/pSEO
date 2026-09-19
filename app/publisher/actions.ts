@@ -2,7 +2,6 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
-import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
 import { assertValidGscProperty, listSitemaps, submitSitemap } from "@/lib/google/search-console";
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "@/lib/google/analytics-data";
 import { notifySiteConfigChanged } from "@/lib/publisher/notify-site";
@@ -111,7 +110,11 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
         ga4PropertyId,
         ga4MeasurementId: ga4MeasurementIdRaw || null,
         revalidateSecret: revalidateSecretRaw || null,
-        wpApiBaseUrl: wpApiBaseUrlRaw || deriveWpApiBaseUrl(url),
+        // Bỏ trống thì LƯU TRỐNG. Bản trước điền deriveWpApiBaseUrl(url) —
+        // một địa chỉ dựng bằng phép nối chuỗi mà không ai hỏi WordPress có
+        // trả lời ở đó không. theaccidentrecord.com nhận đúng giá trị đó, và
+        // cả /wp-admin lẫn /wp-json của nó đều 404.
+        wpApiBaseUrl: wpApiBaseUrlRaw || null,
       },
     });
   } catch (err) {

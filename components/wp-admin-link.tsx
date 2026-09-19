@@ -48,7 +48,19 @@ function CopyChip({ value, label }: { value: string; label?: string }) {
  * still here to be copied — after the tunnel is up it is exactly what goes in
  * the address bar — but nothing on screen now promises a click will do it.
  */
-export function WpAdminLinkCell({ link }: { link: WpAdminLink }) {
+export function WpAdminLinkCell({ link }: { link: WpAdminLink | null }) {
+  /**
+   * Chưa nối WordPress thì KHÔNG hiện gì trông như mở được.
+   *
+   * Trạng thái này trước đây không tồn tại: hàm dựng địa chỉ rơi về URL công
+   * khai, nên mọi site đều có "một cái gì đó" để hiện. theaccidentrecord.com
+   * vì thế hiện link wp-admin bấm được, và nó 404 — site đó không có
+   * WordPress nào.
+   */
+  if (!link) {
+    return <span className="text-xs text-muted-foreground">chưa nối WordPress</span>;
+  }
+
   if (!link.serverOnly) {
     return (
       <a

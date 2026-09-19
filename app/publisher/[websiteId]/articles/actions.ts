@@ -7,7 +7,6 @@ import { fetchServedInventory } from "@/lib/publisher/inventory";
 import { logDependencyFailure } from "@/lib/observability/dependency-log";
 import { buildQcContext, writeArticle } from "@/lib/article-qc/write-loop";
 import { createPost, type WpCredentials } from "@/lib/wordpress/posts";
-import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
 import { SpendCapExceededError, getTotalSpendUsd, getAiConfig } from "@/lib/ai/anthropic";
 import { getBudgetStatus, type BudgetStatus } from "@/lib/ai/budget";
 import type { FactSet } from "@/lib/ai/facts";
@@ -406,12 +405,19 @@ export async function publishArticleAction(
     if (!w.wpUsername || !w.wpAppPassword) {
       return { ok: false, message: "Website chưa lưu Application Password nên chưa ghi được vào WordPress." };
     }
+    if (!w.wpApiBaseUrl) {
+      return {
+        ok: false,
+        message:
+          'Website chưa nối WordPress — ô "WordPress REST API" ở phần kết nối đang trống, nên không có chỗ nào để ghi bài.',
+      };
+    }
     const creds: WpCredentials = {
       username: w.wpUsername,
       applicationPassword: w.wpAppPassword,
       loopbackSecret: w.wpLoopbackSecret,
     };
-    const post = await createPost(w.wpApiBaseUrl ?? deriveWpApiBaseUrl(w.url), creds, {
+    const post = await createPost(w.wpApiBaseUrl, creds, {
       title: article.title,
       content: article.content,
       status: "draft",

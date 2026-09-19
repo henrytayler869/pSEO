@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { logDependencyFailure } from "@/lib/observability/dependency-log";
-import { fetchPublishedPostCount, deriveWpApiBaseUrl, deriveWpAdminUrl, type WpAdminLink } from "@/lib/wordpress/rest-api";
+import { fetchPublishedPostCount, deriveWpAdminUrl, type WpAdminLink } from "@/lib/wordpress/rest-api";
 import { fetchSitemapCounts, type SitemapCount } from "@/lib/sitemap/count";
 import { normalizeHost } from "@/lib/publisher/link-domain";
 import { checkRequiredPages, type RequiredPageStatus } from "@/lib/publisher/required-pages";
@@ -16,7 +16,8 @@ export interface WebsiteOverviewRow {
   sitemapCount: SitemapCount | null;
   /** Where WordPress's admin actually lives — derived from the REST base, not
    * from the public origin, which on a headless site has no /wp-admin. */
-  wpAdmin: WpAdminLink;
+  /** null = site này chưa nối WordPress. KHÔNG bịa địa chỉ từ URL công khai. */
+  wpAdmin: WpAdminLink | null;
   /**
    * pagesWithImpressions / sitemap total.
    *
@@ -81,7 +82,8 @@ export interface WebsiteDetail {
    * Domain screen, and until now nothing on this page said to go look.
    */
   domain: { id: string; name: string; cloudflareStatus: string | null; cloudflareError: string | null } | null;
-  wpAdmin: WpAdminLink;
+  /** null = site này chưa nối WordPress. KHÔNG bịa địa chỉ từ URL công khai. */
+  wpAdmin: WpAdminLink | null;
   /** Trust pages every publisher must serve, checked live. */
   requiredPages: RequiredPageStatus[] | null;
   requiredPagesError: string | null;
@@ -119,7 +121,13 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
   });
   const domain = domains.find((d) => normalizeHost(d.name) === host) ?? null;
 
-  const wpApiBaseUrl = website.wpApiBaseUrl ?? deriveWpApiBaseUrl(website.url);
+  /**
+   * KHÔNG rơi về địa chỉ đoán. Chưa nối WordPress thì các phép lấy dữ liệu WP
+   * phải nói "chưa nối", chứ không được gọi một URL bịa rồi báo "WordPress
+   * REST API thất bại ... HTTP 404" — câu đó gửi người đọc đi sửa WordPress
+   * trong khi WordPress không tồn tại.
+   */
+  const wpApiBaseUrl = website.wpApiBaseUrl;
   const [requiredPagesResult, sitemapsResult, sitemapResult, postCountResult, gscResult, ga4Result] = await Promise.all([
     buildContentRules()
       .then((rules) => checkRequiredPages(website.url, rules.requiredPages))
@@ -144,7 +152,10 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
         return { ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." };
       }
     ),
-    fetchPublishedPostCount(wpApiBaseUrl).then(
+    (wpApiBaseUrl
+      ? fetchPublishedPostCount(wpApiBaseUrl)
+      : Promise.reject(new Error("Site này chưa nối WordPress (wpApiBaseUrl trống)."))
+    ).then(
       (v) => ({ ok: true as const, value: v }),
       (err) => {
         logDependencyFailure("wordpress-posts", err, { websiteId, site: website.url });
