@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { PublisherTabs } from "@/components/publisher-tabs";
 import { prisma } from "@/lib/db/prisma";
 import { buildSchemaGraph } from "@/lib/publisher/schema-graph";
+import { SchemaMap } from "@/components/schema-map";
 
 function shortId(id: string | null): string {
   if (!id) return "—";
@@ -43,6 +44,20 @@ export default async function SchemaPage({ params }: { params: Promise<{ website
         title="Schema Graph"
         description="Các node JSON-LD có NỐI ĐƯỢC vào nhau không. Khác với cổng kiểm cú pháp: một node hợp lệ mà thiếu @id vẫn qua mọi phép kiểm, và vẫn là một hòn đảo."
       />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Bản đồ liên kết</CardTitle>
+          <CardDescription>
+            Hình dạng CHÍNH LÀ nội dung: một node treo lơ lửng nhìn ra ngay, còn đọc hai mươi dòng bảng rồi tự ghép
+            trong đầu thì không ai làm. Hộp nét đứt đỏ = không có <code>@id</code>; mũi tên đứt đỏ = cạnh khai rồi không
+            giao được.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <SchemaMap nodes={graph.nodes} edges={graph.edges} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -132,8 +147,11 @@ export default async function SchemaPage({ params }: { params: Promise<{ website
 
       <Card>
         <CardHeader>
-          <CardTitle>Node</CardTitle>
-          <CardDescription>Loại schema nào có mặt, và trên bao nhiêu khuôn trang.</CardDescription>
+          <CardTitle>Node — chi tiết</CardTitle>
+          <CardDescription>
+            Bản đồ ở trên gộp theo LOẠI. Bảng này giữ phần bản đồ cố tình bỏ: `@id` đầy đủ và đúng những khuôn nào
+            chứa node đó.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <table className="w-full text-xs">
@@ -159,8 +177,8 @@ export default async function SchemaPage({ params }: { params: Promise<{ website
 
       <Card>
         <CardHeader>
-          <CardTitle>Liên kết</CardTitle>
-          <CardDescription>Node nào trỏ tới node nào, qua thuộc tính nào.</CardDescription>
+          <CardTitle>Liên kết — chi tiết</CardTitle>
+          <CardDescription>Từng cạnh một, kèm `@id` đích và số khuôn có nó.</CardDescription>
         </CardHeader>
         <CardContent>
           {graph.edges.length === 0 ? (
