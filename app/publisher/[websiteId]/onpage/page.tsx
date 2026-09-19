@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PublisherTabs } from "@/components/publisher-tabs";
+import { PublisherTabs, PublisherSubTabs, postsSubTabs } from "@/components/publisher-tabs";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Globe } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -29,7 +29,8 @@ export default async function OnPagePage({ params }: { params: Promise<{ website
 
       <PageHeader icon={Globe} title={website.name} description={website.url} />
 
-      <PublisherTabs websiteId={websiteId} active="onpage" />
+      <PublisherTabs websiteId={websiteId} active="posts" />
+      <PublisherSubTabs items={postsSubTabs(websiteId)} active="onpage" />
 
       <Card>
         <CardHeader>

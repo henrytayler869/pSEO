@@ -18,6 +18,11 @@ const eslintConfig = defineConfig([
     // sạch, thư mục này untracked), nên cổng tại chỗ và cổng CI bất đồng, và
     // bất đồng theo chiều làm người ta ngừng tin cổng tại chỗ.
     ".claude/worktrees/**",
+    // Kho publisher nếu ai đó đặt nó LỒNG TRONG kho này. Cùng lý do với
+    // dòng trên, và cùng hình dạng: đo 19/9/2026, `eslint .` trả 13.206 vấn
+    // đề, trong đó 744 lỗi, và KHÔNG cái nào thuộc kho này. Một cổng tại chỗ
+    // trả về lỗi của người khác là một cổng người ta học cách bỏ qua.
+    "publisher/**",
   ]),
 ]);
 

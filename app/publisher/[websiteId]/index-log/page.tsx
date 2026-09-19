@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PublisherTabs } from "@/components/publisher-tabs";
+import { PublisherTabs, PublisherSubTabs, gscSubTabs } from "@/components/publisher-tabs";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Activity, AlertTriangle } from "lucide-react";
 import { prisma } from "@/lib/db/prisma";
@@ -42,7 +42,8 @@ export default async function IndexLogPage({ params }: { params: Promise<{ websi
         </Link>
       </div>
 
-      <PublisherTabs websiteId={websiteId} active="index-log" />
+      <PublisherTabs websiteId={websiteId} active="gsc" />
+      <PublisherSubTabs items={gscSubTabs(websiteId)} active="index-log" />
 
       <PageHeader
         icon={Activity}

@@ -62,3 +62,16 @@ next-env.d.ts
 # file nháp viết vội làm ĐỎ deploy của một thay đổi không liên quan. Đã xảy ra
 # thật 19/9/2026: scripts/tmp-fillall.ts, 5 lỗi kiểu, deploy main đỏ.
 scripts/tmp-*.ts
+
+# Kho publisher nếu ai đó đặt nó LỒNG TRONG kho này.
+#
+# Ngày 19/9/2026 thư mục ~/Documents/atmovingservices xuất hiện tại
+# publisher/atmovingservices — 980 MB, có .git riêng, và KHÔNG được che. Một
+# `git add -A` sẽ nuốt nó vào kho này dưới dạng embedded repo: commit thành
+# công, CI đỏ ở chỗ không liên quan, và gỡ ra thì phải viết lại lịch sử.
+#
+# Che ở đây KHÔNG phải là quyết định rằng cấu trúc lồng nhau là đúng — đó là
+# câu hỏi kiến trúc riêng. Đây chỉ là để một lần `git add -A` không quyết định
+# hộ.
+publisher/
+.DS_Store
