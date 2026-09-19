@@ -21,6 +21,7 @@ export function ContentFillQueue({
   budgetUsd,
   spentUsd,
   excluded,
+  needsReview,
   unavailable,
 }: {
   websiteId: string;
@@ -29,7 +30,8 @@ export function ContentFillQueue({
   pending: RankedCandidate[];
   budgetUsd: number | null;
   spentUsd: number;
-  excluded: { cluster: number; noPage: number; noData: number };
+  excluded: { cluster: number; noPage: number; noData: number; repeatedlyRejected: number };
+  needsReview: string[];
   unavailable?: string;
 }) {
   const [state, action, running] = useActionState(fillContentBatchAction, initial);
@@ -44,7 +46,7 @@ export function ContentFillQueue({
   }
 
   const pct = summary.total === 0 ? 0 : Math.round((summary.served / summary.total) * 100);
-  const skipped = excluded.cluster + excluded.noPage + excluded.noData;
+  const skipped = excluded.cluster + excluded.noPage + excluded.noData + excluded.repeatedlyRejected;
   const after = spentUsd + summary.estimatedUsd;
   const overBudget = budgetUsd !== null && after > budgetUsd;
 
@@ -77,7 +79,21 @@ export function ContentFillQueue({
             {excluded.cluster > 0 && (excluded.noPage > 0 || excluded.noData > 0) ? ", " : ""}
             {excluded.noPage > 0 && <>{excluded.noPage} chưa có trang nào phục vụ</>}
             {excluded.noPage > 0 && excluded.noData > 0 ? ", " : ""}
-            {excluded.noData > 0 && <>{excluded.noData} chưa thu được dữ liệu</>}.
+            {excluded.noData > 0 && <>{excluded.noData} chưa thu được dữ liệu</>}
+            {excluded.repeatedlyRejected > 0 && (
+              <>
+                {excluded.cluster + excluded.noPage + excluded.noData > 0 ? ", " : ""}
+                {excluded.repeatedlyRejected} đã trả tiền ≥3 lần mà chưa lần nào đạt
+              </>
+            )}
+            .
+          </p>
+        )}
+        {/* Nêu tên, không chỉ đếm: đây là việc cần người xem, và một con số
+            không kèm ZIP thì không ai xem được gì. */}
+        {needsReview.length > 0 && (
+          <p className="text-xs text-amber-700 dark:text-amber-500">
+            Cần xem lại (đã trả tiền ≥3 lần, chưa đạt): <span className="font-mono">{needsReview.join(", ")}</span>
           </p>
         )}
       </div>

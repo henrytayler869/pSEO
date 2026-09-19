@@ -66,6 +66,7 @@ export default async function ContentPage({ params }: { params: Promise<{ websit
             budgetUsd={site.aiBudgetUsd}
             spentUsd={spent}
             excluded={queue.excluded}
+            needsReview={queue.needsReview}
             unavailable={queue.unavailable}
           />
         </CardContent>

@@ -237,6 +237,44 @@ const CASES: Case[] = [
   // --- ordinary prose that merely looks like a proportion ---
   { name: "not a proportion: 'one thing to check in three minutes'", text: () => `There is one thing to check in three minutes.`, shouldPass: true },
   { name: "not a proportion: 'one of the best'", text: () => `This is one of the best neighbourhoods for movers.`, shouldPass: true },
+  /**
+   * Số trong NHÃN của chỉ số cấp ZIP, TRÙNG giá trị của một chỉ số cấp county.
+   *
+   * Ca thật, đo 19/9/2026: ZIP 60085 trượt 10 lần liên tiếp, ~$0,18, cho đúng
+   * một câu đúng. Nhãn "commute takes 60 minutes or more" là cấp ZIP; giá trị
+   * "60 people killed" là cấp COUNTY. Luật 2 thấy "60" trong câu nói về ZIP và
+   * đọc thành gán sai phạm vi.
+   *
+   * Cặp trùng này dựng tay: nó cần một nhãn chứa số VÀ một giá trị county
+   * trùng đúng số đó, và chờ dữ liệu thật rơi vào hình dạng ấy nghĩa là nhánh
+   * này không bao giờ được chạy.
+   */
+  {
+    name: "số nhãn cấp ZIP trùng giá trị cấp county — không phải overclaim",
+    shouldPass: true,
+    factsOverride: (f: FactSet): FactSet => ({
+      ...f,
+      facts: [
+        { key: "commute_60", label: "share of workers whose commute takes 60 minutes or more", value: 6.19, display: "6.19%", unit: "%", scope: "ZIP", scopeName: f.zip },
+        { key: "fars_deaths", label: "people killed in traffic crashes in a year", value: 60, display: "60 people", unit: "people/yr", scope: "COUNTY", scopeName: "Lake County" },
+      ],
+    }),
+    text: (f) => `In ZIP ${f.zip}, 6.19% of workers have a commute of 60 minutes or more.`,
+  },
+  {
+    /** Cùng con số, cùng fact set, KHÔNG có chữ nào của nhãn commute. */
+    name: "cùng số đó gán cho người chết trong ZIP — vẫn phải chặn",
+    shouldPass: false,
+    factsOverride: (f: FactSet): FactSet => ({
+      ...f,
+      facts: [
+        { key: "commute_60", label: "share of workers whose commute takes 60 minutes or more", value: 6.19, display: "6.19%", unit: "%", scope: "ZIP", scopeName: f.zip },
+        { key: "fars_deaths", label: "people killed in traffic crashes in a year", value: 60, display: "60 people", unit: "people/yr", scope: "COUNTY", scopeName: "Lake County" },
+      ],
+    }),
+    text: (f) => `In ZIP ${f.zip}, 60 people were killed in traffic crashes.`,
+    expectRules: ["scope_overclaim"],
+  },
 ];
 
 /** Chuỗi mà prompt THẬT SỰ in ra cho fact này — mốc duy nhất mà validator
