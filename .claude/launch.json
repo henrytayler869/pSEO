@@ -4,20 +4,13 @@
     {
       "name": "pseo-control-panel-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "/Users/user/Documents/pseo-control-panel", "run", "dev"],
+      "runtimeArgs": [
+        "--prefix",
+        "/Users/user/Documents/pseo-control-panel",
+        "run",
+        "dev"
+      ],
       "port": 3000
-    },
-    {
-      "name": "atmovingservices",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "/Users/user/Documents/atmovingservices", "run", "dev", "--", "--port", "3002"],
-      "port": 3002
-    },
-    {
-      "name": "theaccidentrecord",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "/Users/user/Documents/theaccidentrecord", "run", "dev", "--", "--port", "3003"],
-      "port": 3003
     }
   ]
 }
