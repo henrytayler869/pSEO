@@ -275,6 +275,37 @@ const CASES: Case[] = [
     text: (f) => `In ZIP ${f.zip}, 60 people were killed in traffic crashes.`,
     expectRules: ["scope_overclaim"],
   },
+  /**
+   * Số cấp hạt, trong câu KHÔNG gọi tên ZIP và KHÔNG ghi phạm vi.
+   *
+   * Ca thật: ZIP 85364 (Yuma, AZ), trang duy nhất trong 158 trang thiếu đoạn
+   * diễn giải. HQ cho ĐẠT, publisher chặn — vì luật cũ ở đây chỉ soi câu có
+   * "in 85364"/"this area", còn guide đòi ghi phạm vi KHÔNG ĐIỀU KIỆN.
+   */
+  {
+    name: "số cấp hạt, câu không gọi tên ZIP, không ghi phạm vi",
+    shouldPass: false,
+    factsOverride: (f: FactSet): FactSet => ({
+      ...f,
+      facts: [
+        { key: "irs_net", label: "net households moving in", value: 112, display: "112 households", unit: "households/yr", scope: "COUNTY", scopeName: "Yuma County" },
+      ],
+    }),
+    text: () => 'A net figure of 112 is easy to misread as "little movement," when it is the difference between two large flows.',
+    expectRules: ["scope_overclaim"],
+  },
+  {
+    /** Cùng câu, có thêm chữ "county" — ghi phạm vi rồi thì đạt. */
+    name: "cùng số đó, có ghi phạm vi bằng chữ county",
+    shouldPass: true,
+    factsOverride: (f: FactSet): FactSet => ({
+      ...f,
+      facts: [
+        { key: "irs_net", label: "net households moving in", value: 112, display: "112 households", unit: "households/yr", scope: "COUNTY", scopeName: "Yuma County" },
+      ],
+    }),
+    text: () => "Across the county, a net figure of 112 households is the difference between two large flows.",
+  },
 ];
 
 /** Chuỗi mà prompt THẬT SỰ in ra cho fact này — mốc duy nhất mà validator

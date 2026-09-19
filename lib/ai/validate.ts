@@ -215,8 +215,24 @@ const UNIT_WORDS_IN_TEXT: Record<string, string[]> = {
   kwh: ["kWh/yr", "kWh/m2/day"],
 };
 
-/** Phrases that claim a figure describes this specific zip. */
-const ZIP_SCOPE_CLAIM = /\b(in|for|within|across)\s+(zip\s*(code)?\s*)?\d{5}\b|\bthis\s+(zip|neighbou?rhood|area)\b/i;
+/**
+ * Câu này có GHI RÕ PHẠM VI THẬT của một chỉ số rộng hơn ZIP không.
+ *
+ * Guide §"governmentData" nói không điều kiện: "Bắt buộc: khi hiển thị, phải
+ * ghi rõ phạm vi thật." Chữ "county" trần là đủ — "across Bexar County" ghi
+ * phạm vi qua chính từ đó — và tên hạt lo phần còn lại, vì có hạt không mang
+ * chữ "county" trong tên: District of Columbia, Norfolk city, Virginia Beach
+ * city, Parish ở Louisiana, Borough ở Alaska.
+ *
+ * Cùng điều kiện với validateScope bên publisher. Hai bộ kiểm là có chủ ý,
+ * nhưng chúng phải đọc CÙNG một hợp đồng.
+ */
+function namesItsArea(sentence: string, fact: Fact, state: string): boolean {
+  const lower = sentence.toLowerCase();
+  if (fact.scopeName && lower.includes(fact.scopeName.toLowerCase())) return true;
+  if (fact.scope === "COUNTY") return /\b(county|parish|borough)\b/i.test(sentence);
+  return lower.includes("statewide") || lower.includes(state.toLowerCase());
+}
 
 /**
  * Proportions written as words — "one in five", "a third", "half of".
@@ -427,25 +443,45 @@ export function validateGeneratedText(text: string, factSet: FactSet): Validatio
   // --- Rule 2: wider-area figures must not be claimed for the zip ---
   const widerFacts = factSet.facts.filter((f) => f.scope !== "ZIP");
   if (widerFacts.length > 0) {
+    /**
+     * MỌI CÂU, không chỉ câu gọi tên ZIP.
+     *
+     * Bản trước bỏ qua câu không khớp ZIP_SCOPE_CLAIM — tức chỉ xét câu có
+     * "in 85364", "this zip", "this area". Guide thì nói không điều kiện:
+     * "Bắt buộc: khi hiển thị, phải ghi rõ phạm vi thật."
+     *
+     * Chênh lệch đó để lọt đúng một loại câu: nêu số cấp hạt mà không gọi
+     * tên ZIP lẫn tên hạt. Trên một trang nói về ZIP 85364, câu đó đọc như
+     * số của ZIP.
+     *
+     * Đo 19/9/2026, ZIP 85364 (Yuma, AZ) — trang duy nhất trong 158 trang của
+     * site thiếu đoạn diễn giải:
+     *
+     *   HQ:        ĐẠT
+     *   publisher: [scope-unattributed] "112 households"
+     *              (irs_migration_net_households) stated without naming its
+     *              coverage area: "A net figure of 112 is easy to misread as
+     *              'little movement,' when in fact it is the small difference
+     *              between two large flows in opposite directions."
+     *
+     * Publisher làm đúng hợp đồng; HQ mới là bên lỏng. Và HQ lỏng nghĩa là HQ
+     * TRẢ TIỀN cho văn bản site sẽ không bao giờ hiện.
+     *
+     * BÁN KÍNH ẢNH HƯỞNG, đo trên toàn bộ dữ liệu: 232 đoạn đang ĐẠT có chỉ
+     * số rộng hơn ZIP, và siết luật làm đổ ĐÚNG 1 — chính đoạn này. Con số
+     * đầu tôi đo là 5, nhưng 4 trong đó là lỗi của phép đo: ba câu có ghi
+     * phạm vi bằng chữ "county" mà phép đo chỉ tìm TÊN hạt, và một câu bị
+     * chính phép đo cắt nhầm ở dấu chấm của "St.".
+     *
+     * Đường cache tự kiểm lại theo luật hiện hành rồi sinh lại nếu không còn
+     * đạt, nên không cần cờ ép: đoạn này sẽ tự viết lại ở lần hỏi kế tiếp.
+     */
     for (const sentence of text.split(/(?<=[.!?])\s+/)) {
-      if (!ZIP_SCOPE_CLAIM.test(sentence)) continue;
-      // A sentence that names the wider area AND explicitly disclaims the
-      // zip is doing exactly what rule 2 asks for. Without this, correct
-      // text was rejected: "…runs about 14,800 monthly searches across
-      // Chicago, IL, not the ZIP" was flagged purely because the zip
-      // appeared elsewhere in the same sentence.
-      // Matching the real county NAME rather than the word "county" —
-      // plenty of county equivalents don't contain it. Three already in
-      // this dataset: "District of Columbia", "Norfolk city", "Virginia
-      // Beach city". Louisiana uses Parish and Alaska uses Borough.
-      const namesTheWiderArea = widerFacts.some(
-        (f) => f.scopeName && sentence.toLowerCase().includes(f.scopeName.toLowerCase())
-      );
-      if (
-        namesTheWiderArea ||
-        /\bnot (the |just the )?zip\b|\bacross the (county|parish|borough|state|metro)\b|\bcounty-wide\b/i.test(sentence)
-      )
-        continue;
+      // Câu vừa gọi tên vùng rộng VỪA nói rõ "không phải ZIP" là câu đang làm
+      // đúng thứ luật này đòi. Thiếu nhánh này, văn bản đúng từng bị từ chối:
+      // "…runs about 14,800 monthly searches across Chicago, IL, not the ZIP"
+      // bị bắt chỉ vì mã ZIP xuất hiện ở chỗ khác trong cùng câu.
+      if (/\bnot (the |just the )?zip\b|\bcounty-wide\b/i.test(sentence)) continue;
       const zipFacts = factSet.facts.filter((f) => f.scope === "ZIP");
       for (const { raw, value } of extractNumbers(sentence)) {
         if (ALWAYS_ALLOWED.has(value)) continue;
@@ -488,7 +524,7 @@ export function validateGeneratedText(text: string, factSet: FactSet): Validatio
          */
         if (nearItsOwnLabel(value, raw, "ZIP")) continue;
         const fact = matchesFact(value, widerFacts);
-        if (fact) {
+        if (fact && !namesItsArea(sentence, fact, factSet.state)) {
           issues.push({
             rule: "scope_overclaim",
             detail:
