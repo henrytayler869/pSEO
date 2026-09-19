@@ -65,6 +65,8 @@ interface ZctaCommute {
  * không thuộc adapter — ghi ở đây để người viết prompt đọc được.
  */
 export class CensusCommuteAdapter implements CollectorAdapter {
+  // ACS5: ước lượng 5 năm kết thúc ở ACS_YEAR.
+  temporalCoverage = `${ACS_YEAR - 4}-01-01/${ACS_YEAR}-12-31`;
   adapterKey = "census_commute";
   nativeGeoResolution = "ZIP" as const;
 

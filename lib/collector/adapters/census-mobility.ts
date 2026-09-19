@@ -47,6 +47,8 @@ interface ZctaMobility {
  * fetching per zip would re-download the country for each location.
  */
 export class CensusMobilityAdapter implements CollectorAdapter {
+  // ACS5: ước lượng 5 năm kết thúc ở ACS_YEAR.
+  temporalCoverage = `${ACS_YEAR - 4}-01-01/${ACS_YEAR}-12-31`;
   adapterKey = "census_mobility";
   nativeGeoResolution = "ZIP" as const;
 

@@ -52,6 +52,10 @@ const REFERENCE_SYSTEM = {
  * only as good as this file's assumptions.
  */
 export class PvWattsAdapter implements CollectorAdapter {
+  // PVWatts là MÔ HÌNH chạy trên năm khí tượng điển hình (TMY), không phải đo
+  // một khoảng lịch. Không có kỳ nào để khai, và bịa một khoảng là biến một
+  // mô hình thành một phép đo.
+  temporalCoverage = null;
   adapterKey = "nrel_pvwatts";
   nativeGeoResolution = "ZIP" as const;
 

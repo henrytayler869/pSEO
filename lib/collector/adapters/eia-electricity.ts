@@ -17,6 +17,10 @@ import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
  * directly — no crosswalk needed.
  */
 export class EiaElectricityAdapter implements CollectorAdapter {
+  // EIA trả nhiều năm, adapter lấy dòng MỚI NHẤT mỗi bang. Kỳ phủ vì thế thay
+  // đổi theo dữ liệu chứ không theo hằng số — null cho tới khi adapter đọc kỳ
+  // thật từ trường `period` của dòng nó chọn. Đoán một năm ở đây là khai sai.
+  temporalCoverage = null;
   adapterKey = "eia_electricity";
   nativeGeoResolution = "STATE" as const;
 

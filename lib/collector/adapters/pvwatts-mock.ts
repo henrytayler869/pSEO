@@ -13,6 +13,8 @@ import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types
  * 2026-05-29, not just unreachable — see pvwatts.ts.)
  */
 export class PvWattsMockAdapter implements CollectorAdapter {
+  // Bản giả của PVWatts — cùng lý do: mô hình, không phải phép đo.
+  temporalCoverage = null;
   adapterKey = "nrel_pvwatts";
   nativeGeoResolution = "ZIP" as const;
 

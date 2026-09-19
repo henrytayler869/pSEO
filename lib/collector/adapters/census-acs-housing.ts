@@ -35,6 +35,9 @@ interface ZctaHousingData {
  * rather than re-fetching the entire nationwide dataset per zip.
  */
 export class CensusAcsHousingAdapter implements CollectorAdapter {
+  // ACS5 là ước lượng 5 NĂM: bản 2023 mô tả 2019–2023, không phải riêng 2023.
+  // Khai mỗi "2023" là thu hẹp bốn năm dữ liệu thành một điểm.
+  temporalCoverage = `${ACS_YEAR - 4}-01-01/${ACS_YEAR}-12-31`;
   adapterKey = "census_acs_housing";
   nativeGeoResolution = "ZIP" as const;
 

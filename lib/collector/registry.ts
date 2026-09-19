@@ -143,3 +143,29 @@ export async function resolveAdapter(adapterKey: string): Promise<CollectorAdapt
       throw new Error(`Chưa có adapter được triển khai cho "${adapterKey}".`);
   }
 }
+
+/**
+ * Kỳ phủ thời gian của từng adapter, theo adapterKey.
+ *
+ * Dựng bằng cách HỎI CHÍNH adapter, không bằng một bảng tra viết tay: bảng
+ * tra sẽ đúng vào ngày viết rồi lệch lặng lẽ ở lần ai đó nâng ACS_YEAR — và
+ * không gì kêu, vì cả hai đều là chuỗi hợp lệ.
+ *
+ * Adapter nào cần khoá API mà môi trường không có thì bỏ qua: hàm này chỉ đọc
+ * một hằng số, nhưng resolveAdapter() dựng cả đối tượng và vài adapter đòi
+ * khoá trong constructor. Bỏ qua chứ không ném — thiếu kỳ phủ của một nguồn
+ * không được làm hỏng cả phản hồi API.
+ */
+export async function temporalCoverageByAdapter(): Promise<Map<string, string | null>> {
+  const out = new Map<string, string | null>();
+  for (const key of ALL_ADAPTER_KEYS) {
+    try {
+      const adapter = await resolveAdapter(key);
+      out.set(key, adapter.temporalCoverage);
+    } catch {
+      // Không có khoá, hoặc adapter chưa triển khai. Không đặt gì — người gọi
+      // đọc ra null và xử như "không biết", đúng nghĩa.
+    }
+  }
+  return out;
+}

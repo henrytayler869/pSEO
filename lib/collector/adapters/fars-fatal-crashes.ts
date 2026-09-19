@@ -46,6 +46,8 @@ interface CountyCrashData {
 }
 
 export class FarsFatalCrashesAdapter implements CollectorAdapter {
+  // FARS là một năm lịch trọn vẹn, không phải ước lượng nhiều năm.
+  temporalCoverage = `${DATA_YEAR}-01-01/${DATA_YEAR}-12-31`;
   adapterKey = "fars_fatal_crashes";
   nativeGeoResolution = "COUNTY" as const;
 
