@@ -52,7 +52,7 @@ export default async function PublisherPage() {
                   <TableHead>WP Admin</TableHead>
                   <TableHead>URL trong sitemap</TableHead>
                   <TableHead>Tỷ lệ index (ước tính)</TableHead>
-                  <TableHead>Total traffic (28 ngày)</TableHead>
+                  <TableHead>Phiên có tương tác (28 ngày)</TableHead>
                   <TableHead></TableHead>
                 </TableRow>
               </TableHeader>
@@ -114,7 +114,9 @@ export default async function PublisherPage() {
                         <TableCell>
                           {row.indexRateEstimate !== null ? `${(row.indexRateEstimate * 100).toFixed(0)}%` : "—"}
                         </TableCell>
-                        <TableCell>{row.totalUsers?.toLocaleString()} users</TableCell>
+                        <TableCell>
+                          {row.engagedSessions !== null ? `${row.engagedSessions.toLocaleString()} phiên có tương tác` : "—"}
+                        </TableCell>
                       </>
                     )}
                                         <TableCell>

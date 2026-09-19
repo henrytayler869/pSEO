@@ -28,7 +28,17 @@ export interface WebsiteOverviewRow {
    * and it would have rendered as an ordinary percentage.
    */
   indexRateEstimate: number | null;
-  totalUsers: number | null;
+  /**
+   * PHIÊN CÓ TƯƠNG TÁC, không phải activeUsers.
+   *
+   * Đổi tên khỏi `totalUsers` ngày 19/9/2026 vì cái tên cũ là chỗ lỗi thật sự,
+   * không phải con số. activeUsers của GA4 trả về đúng 48 cho
+   * atmovingservices.com; nhưng 34 phiên trong đó đến từ viewport 800×600 với
+   * 0 tương tác, và gọi chúng là "users" trên một bảng tổng quan biến số liệu
+   * bot thành số liệu khách hàng. Xem HEADLESS_VIEWPORT trong
+   * lib/google/analytics-data.ts.
+   */
+  engagedSessions: number | null;
   error: string | null; // set (and other fields null) when any live fetch failed for this site
 }
 
@@ -54,7 +64,7 @@ export async function getWebsiteOverviewRows(): Promise<WebsiteOverviewRow[]> {
           sitemapCount,
           indexRateEstimate:
             sitemapCount.total > 0 ? searchTotals.pagesWithImpressions / sitemapCount.total : null,
-          totalUsers: trafficTotals.activeUsers,
+          engagedSessions: trafficTotals.engagedSessions,
           error: null,
         };
       } catch (err) {
@@ -63,7 +73,7 @@ export async function getWebsiteOverviewRows(): Promise<WebsiteOverviewRow[]> {
           wpAdmin: deriveWpAdminUrl(website.wpApiBaseUrl, website.url),
           sitemapCount: null,
           indexRateEstimate: null,
-          totalUsers: null,
+          engagedSessions: null,
           error: err instanceof Error ? err.message : "Lỗi không rõ khi lấy dữ liệu.",
         };
       }
