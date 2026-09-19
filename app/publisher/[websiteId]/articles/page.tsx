@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PublisherTabs } from "@/components/publisher-tabs";
+import { PublisherTabs, PublisherSubTabs, postsSubTabs } from "@/components/publisher-tabs";
 import { notFound } from "next/navigation";
 import { ArrowLeft, Globe } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -93,7 +93,8 @@ export default async function ArticlesPage({
 
       <PageHeader icon={Globe} title={website.name} description={`${website.url} · ${website.vertical}`} />
 
-      <PublisherTabs websiteId={websiteId} active="articles" />
+      <PublisherTabs websiteId={websiteId} active="posts" />
+      <PublisherSubTabs items={postsSubTabs(websiteId)} active="articles" />
 
       <Card>
         <CardHeader>

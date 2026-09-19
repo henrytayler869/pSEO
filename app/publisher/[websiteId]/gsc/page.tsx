@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft, Search } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
-import { PublisherTabs } from "@/components/publisher-tabs";
+import { PublisherTabs, PublisherSubTabs, gscSubTabs } from "@/components/publisher-tabs";
 import { WindowPicker } from "@/components/window-picker";
 import { getGscTabData, parseWindow } from "@/lib/queries/publisher-analytics";
 
@@ -39,6 +39,7 @@ export default async function GscPage({
       </div>
 
       <PublisherTabs websiteId={websiteId} active="gsc" />
+      <PublisherSubTabs items={gscSubTabs(websiteId)} active="gsc" />
 
       <PageHeader
         icon={Search}

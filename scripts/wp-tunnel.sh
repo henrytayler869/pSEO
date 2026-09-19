@@ -17,10 +17,24 @@
 # mơ hồ đó đã khiến một lần đặt mật khẩu quản trị vào database laptop trong
 # khi mọi người tin là đã đặt lên server.
 #
-# Ở đây chỉ có MỘT WordPress. Không có bản local nào để nhầm, nên soi gương
-# cổng là an toàn — và nó khiến wpApiBaseUrl lưu trong database
-# (http://127.0.0.1:8090/wp-json/wp/v2) chạy nguyên vẹn ở cả hai nơi: trên VPS
+# Ở đây không có WordPress bản local nào để nhầm, nên soi gương cổng là an
+# toàn — và nó khiến wpApiBaseUrl lưu trong database
+# (http://127.0.0.1:8091/wp-json/wp/v2) chạy nguyên vẹn ở cả hai nơi: trên VPS
 # vì đó là loopback thật, trên máy này vì tunnel đưa đúng cổng ấy về.
+#
+# NHIỀU WORDPRESS, VÀ DANH SÁCH CỔNG KHÔNG VIẾT CỨNG.
+#
+# Đoạn này từng ghi "Ở đây chỉ có MỘT WordPress". Câu đó đúng cho tới ngày
+# 19/9/2026, khi publisher thứ hai được cấp WordPress riêng ở cổng 8091 —
+# và script vẫn chỉ chuyển tiếp 8090. Hậu quả hiện thẳng trên màn hình
+# Control Panel:
+#
+#   http://127.0.0.1:8091/wp-json/wp/v2 — fetch failed
+#
+# Cổng giờ HỎI MÁY CHỦ chứ không đọc một hằng số: mọi container tên *-wp đang
+# nghe cổng nào thì chuyển tiếp đúng cổng đó. Publisher thứ ba sẽ tự có tunnel
+# mà không ai phải sửa file này — và một danh sách cứng thì đúng vào ngày viết
+# ra rồi sai lặng lẽ sau đó.
 #
 # Nếu sau này có ai chạy một WordPress local ở 8090 thì sự mơ hồ xuất hiện —
 # và ssh sẽ TỪ CHỐI mở (ExitOnForwardFailure) thay vì im lặng dùng cái sai.
@@ -34,16 +48,68 @@ set -euo pipefail
 # shellcheck source=scripts/tunnel-config.sh
 source "$(dirname "${BASH_SOURCE[0]}")/tunnel-config.sh"
 VPS_USER="$WP_SSH_USER"
-LOCAL_PORT="$WP_LOCAL_PORT"
-REMOTE_PORT="$WP_REMOTE_PORT"
+
+# Cổng của MỌI WordPress đang chạy trên VPS, hỏi thẳng docker.
+#
+# Hỏng đường mạng thì rơi về cổng mặc định thay vì bỏ trống: một tunnel thiếu
+# còn dùng được một nửa, còn không mở tunnel nào thì hỏng hoàn toàn.
+discover_ports() {
+  local found
+  found=$(ssh -o BatchMode=yes -o ConnectTimeout=8 -i "$SSH_KEY" "$VPS_USER@$VPS_HOST" \
+    "docker ps --filter name=-wp --format '{{.Ports}}' | grep -oE '127\\.0\\.0\\.1:[0-9]+' | cut -d: -f2 | sort -u" 2>/dev/null || true)
+  if [[ -z "$found" ]]; then
+    echo "$WP_LOCAL_PORT"
+    return
+  fi
+  echo "$found"
+}
+
+PORTS=$(discover_ports)
+# shellcheck disable=SC2206
+PORT_LIST=($PORTS)
+LOCAL_PORT="${PORT_LIST[0]}"
+
+# Cổng nào ĐÃ có người phục vụ thì không tranh.
+#
+# ssh chạy với ExitOnForwardFailure=yes, nên xin một cổng đang bận làm HỎNG CẢ
+# LƯỢT — kể cả những cổng còn trống. Đo 19/9/2026: một tunnel cũ giữ 8090, và
+# lần mở mới cho {8090, 8091} thất bại hoàn toàn, để 8091 không có đường trong
+# khi nó mới là cổng đang thiếu.
+#
+# Bỏ qua chứ không giết tunnel cũ: cái đang chạy có thể là của launchd hoặc
+# của một phiên khác, và giết nó là sửa triệu chứng của mình bằng cách gây
+# triệu chứng cho người khác.
+serves() {
+  curl -s -m 3 -o /dev/null -w "%{http_code}" \
+    "http://127.0.0.1:$1/wp-json/wp/v2/posts?per_page=1" 2>/dev/null | grep -q "^2"
+}
+
+NEEDED=()
+for _p in "${PORT_LIST[@]}"; do
+  if serves "$_p"; then
+    echo "Cổng $_p đã có WordPress trả lời — bỏ qua."
+  else
+    NEEDED+=("$_p")
+  fi
+done
 
 tunnel_alive() {
-  lsof -ti:"$LOCAL_PORT" >/dev/null 2>&1
+  # Sống = MỌI cổng đều đã mở. Một cổng mở còn cổng kia chưa vẫn là hỏng, và
+  # kiểm mỗi cổng đầu sẽ báo "đang chạy" cho một tunnel thiếu một nửa.
+  local p
+  for p in "${PORT_LIST[@]}"; do
+    lsof -ti:"$p" >/dev/null 2>&1 || return 1
+  done
+  return 0
 }
 
 wp_answers() {
-  curl -s -m 5 -o /dev/null -w "%{http_code}" \
-    "http://127.0.0.1:$LOCAL_PORT/wp-json/wp/v2/posts?per_page=1" 2>/dev/null | grep -q "^2"
+  local p
+  for p in "${PORT_LIST[@]}"; do
+    curl -s -m 5 -o /dev/null -w "%{http_code}" \
+      "http://127.0.0.1:$p/wp-json/wp/v2/posts?per_page=1" 2>/dev/null | grep -q "^2" || return 1
+  done
+  return 0
 }
 
 PID_FILE="${TMPDIR:-/tmp}/pseo-wp-tunnel.pid"
@@ -52,6 +118,19 @@ LOG_FILE="${TMPDIR:-/tmp}/pseo-wp-tunnel.log"
 # Vòng lặp nối lại. `|| code=$?` chứ KHÔNG phải gán ở dòng sau: với set -e, một
 # lệnh thất bại sẽ giết cả script trước khi kịp đọc mã thoát, và vòng lặp thử
 # lại chết lặng lẽ — đúng lỗi đã đo được ở db-tunnel.sh.
+# Một cờ -L cho mỗi cổng. Soi gương cổng: cổng local = cổng trên VPS, nên
+# wpApiBaseUrl trong database chạy nguyên ở cả hai nơi.
+FORWARDS=()
+for _p in "${NEEDED[@]}"; do
+  FORWARDS+=(-L "$_p:127.0.0.1:$_p")
+done
+
+if [[ ${#FORWARDS[@]} -eq 0 ]]; then
+  echo "Mọi WordPress (${PORT_LIST[*]}) đã có đường — không cần mở thêm."
+  exit 0
+fi
+echo "Sẽ mở: ${NEEDED[*]}"
+
 connect_loop() {
   while true; do
     code=0
@@ -62,7 +141,7 @@ connect_loop() {
       -o ServerAliveInterval=30 \
       -o ServerAliveCountMax=3 \
       -i "$SSH_KEY" \
-      -L "$LOCAL_PORT:127.0.0.1:$REMOTE_PORT" \
+      "${FORWARDS[@]}" \
       "$VPS_USER@$VPS_HOST" || code=$?
 
     [[ $code -eq 0 ]] && { echo "Tunnel đóng."; break; }
@@ -96,7 +175,7 @@ if [[ "${1:-}" == "--ensure" ]]; then
     # Cổng mở CHƯA CHẮC là tunnel còn sống: ssh có thể đã chết mà cổng vẫn bị
     # một tiến trình khác giữ. Hỏi thẳng WordPress thay vì tin vào cổng.
     if wp_answers; then
-      echo "Tunnel WordPress đã mở sẵn ở cổng $LOCAL_PORT."
+      echo "Tunnel WordPress đã mở sẵn: ${PORT_LIST[*]}."
       exit 0
     fi
     echo "Cổng $LOCAL_PORT đang bị chiếm nhưng WordPress không trả lời."
@@ -114,7 +193,7 @@ if [[ "${1:-}" == "--ensure" ]]; then
   echo $! > "$PID_FILE"
 
   for _ in $(seq 1 15); do
-    wp_answers && { echo "Tunnel WordPress đã mở ở cổng $LOCAL_PORT (tự nối lại khi đứt)."; exit 0; }
+    wp_answers && { echo "Tunnel WordPress đã mở: ${NEEDED[*]} (đang phục vụ: ${PORT_LIST[*]}) (tự nối lại khi đứt)."; exit 0; }
     sleep 1
   done
   echo "Mở tunnel rồi nhưng WordPress không trả lời trong 15 giây. Log: $LOG_FILE" >&2
