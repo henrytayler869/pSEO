@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db/prisma";
 import { createPost, updatePost, trashPost, WordPressError, type WpCredentials } from "@/lib/wordpress/posts";
-import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
 
 export interface PostActionResult {
   ok: boolean;
@@ -25,6 +24,15 @@ async function loadWritable(
   const website = await prisma.website.findUnique({ where: { id: websiteId } });
   if (!website) return { error: "Không tìm thấy website." };
 
+  if (!website.wpApiBaseUrl) {
+    return {
+      error:
+        "Website này chưa nối WordPress — ô \"WordPress REST API\" ở phần kết nối đang trống. " +
+        "Điền địa chỉ REST thật (ví dụ http://127.0.0.1:8090/wp-json/wp/v2) rồi thử lại. " +
+        "Không đoán từ URL công khai: địa chỉ đoán sẽ 404 và trông y như WordPress hỏng.",
+    };
+  }
+
   if (!website.wpUsername || !website.wpAppPassword) {
     return {
       error:
@@ -35,7 +43,7 @@ async function loadWritable(
   }
 
   return {
-    base: website.wpApiBaseUrl ?? deriveWpApiBaseUrl(website.url),
+    base: website.wpApiBaseUrl,
     creds: {
       username: website.wpUsername,
       applicationPassword: website.wpAppPassword,

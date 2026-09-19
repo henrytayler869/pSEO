@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { PageHeader } from "@/components/page-header";
 import { prisma } from "@/lib/db/prisma";
 import { listPosts } from "@/lib/wordpress/posts";
-import { deriveWpApiBaseUrl } from "@/lib/wordpress/rest-api";
 import { logDependencyFailure } from "@/lib/observability/dependency-log";
 import { WpPostsManager, type PostRow } from "@/components/wp-posts-manager";
 import { SitePages, type SitePageRow } from "@/components/site-pages";
@@ -16,7 +15,7 @@ export default async function PostsPage({ params }: { params: Promise<{ websiteI
   const website = await prisma.website.findUnique({ where: { id: websiteId } });
   if (!website) notFound();
 
-  const base = website.wpApiBaseUrl ?? deriveWpApiBaseUrl(website.url);
+  const base = website.wpApiBaseUrl;
   const creds =
     website.wpUsername && website.wpAppPassword
       ? {
@@ -30,6 +29,13 @@ export default async function PostsPage({ params }: { params: Promise<{ websiteI
   let sawAllStatuses = false;
   let loadError: string | null = null;
   try {
+    if (!base) {
+      // Không đoán địa chỉ. Một URL dựng từ site công khai sẽ 404 và câu báo
+      // lỗi sẽ nói về WordPress thay vì nói về cấu hình còn trống.
+      throw new Error(
+        'Website này chưa nối WordPress — ô "WordPress REST API" ở phần kết nối đang trống.'
+      );
+    }
     const result = await listPosts(base, creds);
     posts = result.posts;
     sawAllStatuses = result.sawAllStatuses;

@@ -565,13 +565,13 @@ const CASES: Case[] = [
     // cái hỏng đó trông như WordPress chết chứ không như địa chỉ sai.
     name: "REGRESSION wp-admin: suy từ REST base chứ không từ URL công khai",
     expect: "http://127.0.0.1:8090/wp-admin",
-    run: () => deriveWpAdminUrl("http://127.0.0.1:8090/wp-json/wp/v2", "https://atmovingservices.com").url,
+    run: () => deriveWpAdminUrl("http://127.0.0.1:8090/wp-json/wp/v2", "https://atmovingservices.com")!.url,
   },
   {
     name: "wp-admin: host loopback -> đánh dấu chỉ-mở-từ-máy-chủ, kèm lệnh tunnel",
     expect: "serverOnly + tunnel 8090",
     run: () => {
-      const r = deriveWpAdminUrl("http://127.0.0.1:8090/wp-json/wp/v2", "https://x.com");
+      const r = deriveWpAdminUrl("http://127.0.0.1:8090/wp-json/wp/v2", "https://x.com")!;
       return r.serverOnly && r.tunnelHint?.includes("8090:127.0.0.1:8090") ? "serverOnly + tunnel 8090" : `sai: ${JSON.stringify(r)}`;
     },
   },
@@ -579,7 +579,7 @@ const CASES: Case[] = [
     name: "wp-admin: host công khai -> mở thẳng, không cần tunnel",
     expect: "https://cms.example.com/wp-admin|false",
     run: () => {
-      const r = deriveWpAdminUrl("https://cms.example.com/wp-json/wp/v2", "https://example.com");
+      const r = deriveWpAdminUrl("https://cms.example.com/wp-json/wp/v2", "https://example.com")!;
       return `${r.url}|${r.serverOnly}`;
     },
   },
@@ -588,17 +588,29 @@ const CASES: Case[] = [
     // REST API ở độ sâu namespace khác, và cắt cứng sẽ ra origin sai cho họ.
     name: "wp-admin: cắt theo /wp-json bất kể độ sâu namespace",
     expect: "https://cms.example.com/wp-admin",
-    run: () => deriveWpAdminUrl("https://cms.example.com/wp-json/custom/v3/abc", "https://example.com").url,
+    run: () => deriveWpAdminUrl("https://cms.example.com/wp-json/custom/v3/abc", "https://example.com")!.url,
   },
   {
-    name: "wp-admin: chưa cấu hình REST base -> suy từ URL site",
-    expect: "https://example.com/wp-admin",
-    run: () => deriveWpAdminUrl(null, "https://example.com/").url,
+    /**
+     * CA NÀY TỪNG KHOÁ CHÍNH CÁI LỖI LẠI THÀNH HÀNH VI MONG MUỐN.
+     *
+     * Nó ghi "chưa cấu hình REST base -> suy từ URL site" và đòi
+     * "https://example.com/wp-admin" — tức đòi đúng thứ mà chú thích của
+     * deriveWpAdminUrl gọi là "a 404 dressed up as a working link". Một ca
+     * kiểm khẳng định điều sai thì không chỉ bỏ sót lỗi, nó BẢO VỆ lỗi: ai
+     * định sửa sẽ thấy suite đỏ và tưởng mình sai.
+     *
+     * Đo 19/9/2026: theaccidentrecord.com nhận đúng địa chỉ suy ra đó, và cả
+     * /wp-admin lẫn /wp-json của nó đều trả 404 — site ấy không có WordPress.
+     */
+    name: "wp-admin: chưa cấu hình REST base -> KHÔNG có link, không đoán",
+    expect: "null",
+    run: () => String(deriveWpAdminUrl(null, "https://example.com/")),
   },
   {
     name: "wp-admin: IP mạng nội bộ 192.168.x cũng là chỉ-mở-từ-máy-chủ",
     expect: "true",
-    run: () => String(deriveWpAdminUrl("http://192.168.1.50:8080/wp-json/wp/v2", "https://x.com").serverOnly),
+    run: () => String(deriveWpAdminUrl("http://192.168.1.50:8080/wp-json/wp/v2", "https://x.com")!.serverOnly),
   },
 
   // --- formatPercentChange ---
