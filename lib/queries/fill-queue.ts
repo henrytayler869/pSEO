@@ -42,10 +42,29 @@ export interface FillQueue {
   unavailable?: string;
 }
 
-export async function buildFillQueue(
-  site: { vertical: string; url: string },
-  limit = 400
-): Promise<FillQueue> {
+/**
+ * KHÔNG CÒN TRẦN SỐ THỊ TRƯỜNG XÉT TỚI.
+ *
+ * Bản trước cắt ở 400 thị trường đầu. Trần đó có từ khi buildFactSet chạy cho
+ * MỌI thị trường đã xếp hạng — lúc ấy nó là cái giá phải trả. Từ khi phép lọc
+ * tồn kho chạy TRƯỚC và rẻ (một lần tra Map), phần đắt chỉ còn chạy cho ZIP
+ * thật sự có trang riêng — khoảng 63 với site này, không phải 582.
+ *
+ * Nên trần chỉ còn là mất mát, và nó mất trong im lặng. Đo 19/9/2026, sau khi
+ * điền hết cho theaccidentrecord.com: 82/90 trang có đoạn. Một là ZIP 60085
+ * (lỗi validator, vá cùng commit này). BẢY trang còn lại chưa bao giờ vào
+ * hàng đợi:
+ *
+ *   94112 hạng 416    33033 hạng 441    87114 hạng 421
+ *   34711 hạng 449    33024 hạng 458    27519 hạng 436
+ *   33311 hạng 446
+ *
+ * Cả bảy đều có trang, có đủ 5 fact, chưa từng sinh lần nào. Màn hình báo
+ * "56 trang", nút ghi "Điền tất cả", và bảy trang này không lần bấm nào với
+ * tới được. Một trần cắt trong im lặng khiến báo cáo "đã phủ hết" đọc như
+ * đúng — và ở đây nó sai 11%.
+ */
+export async function buildFillQueue(site: { vertical: string; url: string }): Promise<FillQueue> {
   const { vertical } = site;
   const empty = { total: 0, served: 0, stale: 0, never: 0, estimatedUsd: 0 };
   const noExclusions = { cluster: 0, noPage: 0, noData: 0, repeatedlyRejected: 0 };
@@ -126,7 +145,7 @@ export async function buildFillQueue(
   const excluded = { cluster: 0, noPage: 0, noData: 0, repeatedlyRejected: 0 };
   const needsReview: string[] = [];
   const candidates: FillCandidate[] = [];
-  for (const m of markets.slice(0, limit)) {
+  for (const m of markets) {
     const kind = inventory.kindByZip.get(m.zip);
     if (kind === undefined) {
       excluded.noPage++;
