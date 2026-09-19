@@ -6,7 +6,9 @@ import { PageHeader } from "@/components/page-header";
 import { PublisherTabs } from "@/components/publisher-tabs";
 import { prisma } from "@/lib/db/prisma";
 import { buildSchemaGraph } from "@/lib/publisher/schema-graph";
+import { buildPageGraph } from "@/lib/publisher/page-graph";
 import { SchemaMap } from "@/components/schema-map";
+import { PageLinkMap } from "@/components/page-link-map";
 
 function shortId(id: string | null): string {
   if (!id) return "—";
@@ -27,7 +29,12 @@ export default async function SchemaPage({ params }: { params: Promise<{ website
   });
   if (!website) notFound();
 
-  const graph = await buildSchemaGraph(website.url, website.vertical);
+  const [graph, pages] = await Promise.all([
+    buildSchemaGraph(website.url, website.vertical),
+    buildPageGraph(website.url),
+  ]);
+
+  const linked = pages.total - pages.orphans.length - pages.noBreadcrumb.length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -42,86 +49,89 @@ export default async function SchemaPage({ params }: { params: Promise<{ website
       <PageHeader
         icon={Share2}
         title="Schema Graph"
-        description="Các node JSON-LD có NỐI ĐƯỢC vào nhau không. Khác với cổng kiểm cú pháp: một node hợp lệ mà thiếu @id vẫn qua mọi phép kiểm, và vẫn là một hòn đảo."
+        description="Trang nào nối với trang nào, và trang nào không ai trỏ tới. Liên kết trang↔trang trong schema nằm ở breadcrumb: mỗi trang tự khai chuỗi tổ tiên của nó, gộp lại thì ra cấu trúc Google đọc được."
       />
 
       <Card>
         <CardHeader>
-          <CardTitle>Bản đồ liên kết</CardTitle>
+          <CardTitle>Bản đồ liên kết trang</CardTitle>
           <CardDescription>
-            Hình dạng CHÍNH LÀ nội dung: một node treo lơ lửng nhìn ra ngay, còn đọc hai mươi dòng bảng rồi tự ghép
-            trong đầu thì không ai làm. Hộp nét đứt đỏ = không có <code>@id</code>; mũi tên đứt đỏ = cạnh khai rồi không
-            giao được.
+            Quét cả {pages.total} trang trong sitemap ({(pages.elapsedMs / 1000).toFixed(1)} giây).{" "}
+            <strong>{linked}</strong> trang nằm trong cây,{" "}
+            <strong className={pages.orphans.length > 0 ? "text-destructive" : undefined}>{pages.orphans.length}</strong> mồ
+            côi, {pages.noBreadcrumb.length} không có breadcrumb.
+            <br />
+            Nút nhánh vẽ riêng, trang lá gộp thành số — 127 lá cùng một cha vẽ ra một đám mây không đọc được. Mồ côi thì
+            KHÔNG gộp: nó là thứ duy nhất người ta mở tab này để tìm.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <SchemaMap nodes={graph.nodes} edges={graph.edges} />
+          <PageLinkMap graph={pages} />
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Mẫu đã soi</CardTitle>
-          <CardDescription>
-            Đồ thị schema là thuộc tính của KHUÔN trang, không phải của từng trang — 127 trang thị trường sinh từ cùng
-            một component nên cùng hình dạng. Quét cả site tốn 158 request để trả lời câu mà {graph.sampled.length} request
-            đã trả lời.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <table className="w-full text-xs">
-            <thead className="text-left text-muted-foreground">
-              <tr>
-                <th className="py-1 pr-3">Khuôn</th>
-                <th className="py-1 pr-3">Đường dẫn</th>
-                <th className="py-1">Node JSON-LD</th>
-              </tr>
-            </thead>
-            <tbody>
-              {graph.sampled.map((s) => (
-                <tr key={s.path} className="border-t">
-                  <td className="py-1 pr-3">{s.kind}</td>
-                  <td className="py-1 pr-3 font-mono">{s.path}</td>
-                  <td className="py-1">
-                    {s.blocks === null ? (
-                      <span className="text-destructive">không soi được — {s.error}</span>
-                    ) : s.blocks === 0 ? (
-                      <span className="text-destructive">0 — trang này không phát JSON-LD nào</span>
-                    ) : (
-                      s.blocks
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {graph.notSampled.length > 0 && (
-            <p className="text-xs text-amber-700 dark:text-amber-500">
-              Khuôn CHƯA được soi: {graph.notSampled.join(", ")}. Bản đồ dưới đây không nói gì về chúng.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      {(pages.orphans.length > 0 || pages.noBreadcrumb.length > 0 || pages.failed.length > 0) && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Trang cần xử lý</CardTitle>
+            <CardDescription>
+              Mồ côi vẫn nằm trong sitemap, vẫn trả 200, vẫn được index — nhưng về cấu trúc nó treo lơ lửng, và không
+              phép kiểm nào khác trong hệ này nhìn thấy điều đó.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            {pages.orphans.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-destructive">Mồ côi — không breadcrumb nào trỏ tới</h3>
+                <ul className="mt-1 flex flex-col gap-0.5 font-mono text-xs">
+                  {pages.orphans.map((o) => (
+                    <li key={o}>{o}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {pages.noBreadcrumb.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium">Không phát BreadcrumbList — không tự khai tổ tiên</h3>
+                <ul className="mt-1 flex flex-col gap-0.5 font-mono text-xs">
+                  {pages.noBreadcrumb.map((o) => (
+                    <li key={o}>{o}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {pages.failed.length > 0 && (
+              <div>
+                <h3 className="text-sm font-medium text-destructive">Không soi được</h3>
+                <ul className="mt-1 flex flex-col gap-0.5 font-mono text-xs">
+                  {pages.failed.map((f) => (
+                    <li key={f.path}>
+                      {f.path} — {f.reason}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {(graph.islands.length > 0 || graph.dangling.length > 0) && (
         <Card>
           <CardHeader>
-            <CardTitle>Chỗ đứt nối</CardTitle>
+            <CardTitle>Chỗ đứt nối bên trong một trang</CardTitle>
             <CardDescription>
-              Đây là thứ mà cổng kiểm cú pháp không bắt: schema vẫn hợp lệ, trình đọc vẫn nhận, và liên kết thì không
-              tồn tại.
+              Khác với mồ côi ở trên: đây là node hợp lệ mà không gì tham chiếu tới được. Cổng kiểm cú pháp không bắt.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
             {graph.islands.length > 0 && (
               <div>
-                <h3 className="text-sm font-medium">Node không có @id — không gì tham chiếu tới được</h3>
+                <h3 className="text-sm font-medium">Node không có @id</h3>
                 <ul className="mt-1 flex flex-col gap-1 text-xs">
                   {graph.islands.map((n) => (
                     <li key={n.type}>
-                      <code className="font-mono">{n.type}</code> — thấy trên {n.seenOn.length} khuôn (
-                      {n.seenOn.slice(0, 3).join(", ")}
-                      {n.seenOn.length > 3 ? "…" : ""})
+                      <code className="font-mono">{n.type}</code> — {n.seenOn.length} khuôn
                     </li>
                   ))}
                 </ul>
@@ -133,9 +143,8 @@ export default async function SchemaPage({ params }: { params: Promise<{ website
                 <ul className="mt-1 flex flex-col gap-1 text-xs">
                   {graph.dangling.map((e) => (
                     <li key={`${e.fromType}-${e.property}-${e.toId}`}>
-                      <code className="font-mono">{e.fromType}</code> →{" "}
-                      <code className="font-mono">{e.property}</code> → <code className="font-mono">{shortId(e.toId)}</code>{" "}
-                      <span className="text-muted-foreground">({e.seenOn.length} khuôn)</span>
+                      <code className="font-mono">{e.fromType}</code> → <code className="font-mono">{e.property}</code> →{" "}
+                      <code className="font-mono">{shortId(e.toId)}</code>
                     </li>
                   ))}
                 </ul>
@@ -147,68 +156,15 @@ export default async function SchemaPage({ params }: { params: Promise<{ website
 
       <Card>
         <CardHeader>
-          <CardTitle>Node — chi tiết</CardTitle>
+          <CardTitle>Cấu trúc schema bên trong một trang</CardTitle>
           <CardDescription>
-            Bản đồ ở trên gộp theo LOẠI. Bảng này giữ phần bản đồ cố tình bỏ: `@id` đầy đủ và đúng những khuôn nào
-            chứa node đó.
+            Hình này giống nhau trên mọi khuôn — nó nói các node trong MỘT trang nối với nhau ra sao, không nói trang
+            nối với trang. Giữ lại vì nó là chỗ duy nhất thấy được node thiếu <code>@id</code> hoặc cạnh không giao
+            được.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <table className="w-full text-xs">
-            <thead className="text-left text-muted-foreground">
-              <tr>
-                <th className="py-1 pr-3">@type</th>
-                <th className="py-1 pr-3">@id</th>
-                <th className="py-1">Khuôn</th>
-              </tr>
-            </thead>
-            <tbody>
-              {graph.nodes.map((n) => (
-                <tr key={`${n.type}-${n.id ?? ""}`} className="border-t">
-                  <td className="py-1 pr-3 font-mono">{n.type}</td>
-                  <td className={`py-1 pr-3 font-mono ${n.id ? "" : "text-destructive"}`}>{shortId(n.id)}</td>
-                  <td className="py-1 text-muted-foreground">{n.seenOn.join(", ")}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Liên kết — chi tiết</CardTitle>
-          <CardDescription>Từng cạnh một, kèm `@id` đích và số khuôn có nó.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {graph.edges.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Không có cạnh nào — mọi node đều đứng rời. Với một @graph thì đó là dấu hiệu nó chưa thật sự là một đồ thị.
-            </p>
-          ) : (
-            <table className="w-full text-xs">
-              <thead className="text-left text-muted-foreground">
-                <tr>
-                  <th className="py-1 pr-3">Từ</th>
-                  <th className="py-1 pr-3">Thuộc tính</th>
-                  <th className="py-1 pr-3">Tới</th>
-                  <th className="py-1">Giải được</th>
-                </tr>
-              </thead>
-              <tbody>
-                {graph.edges.map((e) => (
-                  <tr key={`${e.fromType}-${e.property}-${e.toId}`} className="border-t">
-                    <td className="py-1 pr-3 font-mono">{e.fromType}</td>
-                    <td className="py-1 pr-3 font-mono">{e.property}</td>
-                    <td className="py-1 pr-3 font-mono">{shortId(e.toId)}</td>
-                    <td className={`py-1 ${e.resolved ? "text-muted-foreground" : "text-destructive"}`}>
-                      {e.resolved ? "có" : "KHÔNG"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+          <SchemaMap nodes={graph.nodes} edges={graph.edges} />
         </CardContent>
       </Card>
     </div>
