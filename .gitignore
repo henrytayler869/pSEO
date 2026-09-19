@@ -61,7 +61,12 @@ next-env.d.ts
 # deploy, nơi `npx tsc --noEmit` của bước build chạy trên TOÀN repo — nên một
 # file nháp viết vội làm ĐỎ deploy của một thay đổi không liên quan. Đã xảy ra
 # thật 19/9/2026: scripts/tmp-fillall.ts, 5 lỗi kiểu, deploy main đỏ.
+# Mẫu bắt CẢ hai tiền tố. Bản trước chỉ có `tmp-`, và một file tên
+# `_tmp-index-coverage.ts` đi lọt — `eslint .` đỏ vì nó, ở một kho mà mọi thứ
+# khác sạch. Một mẫu ignore đúng với tên mình vừa nghĩ ra thì sai với tên
+# người khác nghĩ ra.
 scripts/tmp-*.ts
+scripts/_tmp-*.ts
 
 # Kho publisher nếu ai đó đặt nó LỒNG TRONG kho này.
 #

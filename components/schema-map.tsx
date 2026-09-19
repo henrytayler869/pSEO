@@ -1,41 +1,41 @@
 import type { SchemaNode, SchemaEdge } from "@/lib/publisher/schema-graph";
 
 /**
- * Bản đồ liên kết schema, vẽ bằng SVG dựng sẵn trên máy chủ.
+ * Bản đồ liên kết schema — điểm và đường, vẽ sẵn trên máy chủ.
  *
- * Bảng nói được "có những gì"; nó KHÔNG nói được "nối vào đâu". Với một đồ
- * thị, hình dạng CHÍNH LÀ nội dung: một node treo lơ lửng nhìn ra ngay, còn
- * đọc hai mươi dòng bảng rồi tự ghép trong đầu thì không ai làm.
+ * SƠN BẰNG `currentColor`, KHÔNG BẰNG CLASS TAILWIND.
  *
- * Không thư viện, không JS phía trình duyệt: SVG tĩnh, dựng lúc render. Đồ
- * thị này có 9–16 node và dưới 12 cạnh — một bộ layout lực đẩy cho chừng đó
- * node là thêm 100 KB để giải một bài toán không tồn tại.
+ * Bản trước dùng `fill-(--color-surface)` và `stroke-(--color-border-subtle)`.
+ * Ba biến đó tồn tại ở kho PUBLISHER, không tồn tại ở kho này — tôi bê quy
+ * ước từ repo bên kia sang mà không kiểm. Hậu quả trên màn hình: `fill` nhận
+ * giá trị rỗng nên trình duyệt vẽ hộp ĐEN ĐẶC, chữ bên trong chìm hẳn, và
+ * `stroke` rỗng khiến mọi đường nối BIẾN MẤT — chỉ còn mũi tên trôi giữa
+ * không trung, với nhãn thuộc tính không gắn vào gì cả.
  *
- * BA TẦNG, theo PHẠM VI của @id chứ không theo loại:
+ * `currentColor` không phụ thuộc biến nào: nó lấy `color` của phần tử cha,
+ * nên đổi theme là đổi theo, và một biến bị đổi tên không làm bản đồ đen sì.
+ * Màu cảnh báo đặt bằng class `text-destructive` trên CHÍNH phần tử đó rồi
+ * để `stroke="currentColor"` hứng — cùng cơ chế, không thêm phụ thuộc.
  *
- *   tầng 0  node cấp SITE     @id là `<site>/#...`  — Organization, WebSite
- *   tầng 1  WebPage           trang hiện tại
- *   tầng 2  phần CỦA trang    breadcrumb, dataset, faq
- *
- * Xếp theo phạm vi vì đó là thứ quyết định node nào dùng lại được: node cấp
- * site xuất hiện y hệt trên mọi trang, node cấp trang thì mỗi trang một cái.
- * Xếp theo loại sẽ trộn hai thứ đó vào nhau.
+ * ĐIỂM thay vì HỘP: hộp 168px buộc phải xếp thưa, và với sáu node thì nửa
+ * bản đồ là khoảng trống trong khi nhãn vẫn chen nhau. Một chấm cộng nhãn
+ * dưới chân chiếm đúng chỗ của chữ.
  */
 
-const W = 920;
-const ROW_H = 132;
-const BOX_H = 42;
-const BOX_W = 168;
+const W = 900;
+const ROW_H = 150;
+const TOP = 54;
+const R = 7;
+
+const LAYER_LABELS = ["cấp site — dùng lại trên mọi trang", "trang", "phần của trang"];
 
 function layerOf(node: SchemaNode): 0 | 1 | 2 {
   if (node.type === "WebPage") return 1;
-  // @id cấp site không có đường dẫn trước dấu #: `https://x.com/#organization`.
   const id = node.id ?? "";
   const hash = id.indexOf("#");
   if (hash < 0) return 2;
-  const before = id.slice(0, hash);
   try {
-    return new URL(before).pathname.replace(/\/+$/, "") === "" ? 0 : 2;
+    return new URL(id.slice(0, hash)).pathname.replace(/\/+$/, "") === "" ? 0 : 2;
   } catch {
     return 2;
   }
@@ -46,8 +46,7 @@ export function SchemaMap({ nodes, edges }: { nodes: SchemaNode[]; edges: Schema
     return <p className="text-sm text-muted-foreground">Không có node nào để vẽ.</p>;
   }
 
-  // Gộp theo LOẠI: bản đồ nói về hình dạng của khuôn, không phải về từng
-  // trang. Ba mươi WebPage của ba mươi trang là một hộp WebPage.
+  // Gộp theo LOẠI: bản đồ nói về hình dạng của khuôn, không về từng trang.
   const byType = new Map<string, SchemaNode>();
   for (const n of nodes) if (!byType.has(n.type)) byType.set(n.type, n);
   const unique = [...byType.values()];
@@ -58,43 +57,49 @@ export function SchemaMap({ nodes, edges }: { nodes: SchemaNode[]; edges: Schema
   const pos = new Map<string, { x: number; y: number }>();
   layers.forEach((row, li) => {
     const gap = W / (row.length + 1);
-    row.forEach((n, i) => {
-      pos.set(n.type, { x: gap * (i + 1), y: 46 + li * ROW_H });
-    });
+    row.forEach((n, i) => pos.set(n.type, { x: gap * (i + 1), y: TOP + li * ROW_H }));
   });
 
-  const H = 46 + (layers.length - 1) * ROW_H + BOX_H + 30;
+  const H = TOP + (layers.length - 1) * ROW_H + 60;
 
-  // Cạnh gộp theo (loại nguồn → loại đích) để hai cạnh cùng cặp không vẽ chồng.
-  const drawn = new Map<string, { from: string; to: string | null; labels: string[]; resolved: boolean }>();
+  const drawn = new Map<string, { from: string; to: string | null; labels: string[] }>();
   for (const e of edges) {
     const key = `${e.fromType}->${e.toType ?? "?"}`;
     const prev = drawn.get(key);
     if (prev) {
       if (!prev.labels.includes(e.property)) prev.labels.push(e.property);
-      prev.resolved = prev.resolved && e.resolved;
     } else {
-      drawn.set(key, { from: e.fromType, to: e.toType, labels: [e.property], resolved: e.resolved });
+      drawn.set(key, { from: e.fromType, to: e.toType, labels: [e.property] });
     }
   }
 
   return (
-    <div className="overflow-x-auto">
-      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full min-w-[720px]" role="img" aria-label="Bản đồ liên kết schema">
+    <div className="overflow-x-auto text-foreground">
+      <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full min-w-[680px]" role="img" aria-label="Bản đồ liên kết schema">
         <defs>
-          <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" className="fill-(--color-ink-faint)" />
+          <marker id="sm-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M0 0 L8 4 L0 8 z" fill="currentColor" fillOpacity={0.45} />
           </marker>
-          <marker id="arrow-broken" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="currentColor" className="text-destructive" />
+          <marker id="sm-arrow-red" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+            <path d="M0 0 L8 4 L0 8 z" fill="currentColor" />
           </marker>
         </defs>
 
-        {["cấp site — dùng lại trên mọi trang", "trang", "phần của trang"].map((label, i) =>
-          layers[i].length === 0 ? null : (
-            <text key={label} x={8} y={46 + i * ROW_H - 12} className="fill-(--color-ink-faint) text-[11px]">
-              {label}
-            </text>
+        {layers.map((row, i) =>
+          row.length === 0 ? null : (
+            <g key={LAYER_LABELS[i]}>
+              <line
+                x1={0}
+                x2={W}
+                y1={TOP + i * ROW_H - 26}
+                y2={TOP + i * ROW_H - 26}
+                stroke="currentColor"
+                strokeOpacity={0.08}
+              />
+              <text x={0} y={TOP + i * ROW_H - 32} fill="currentColor" fillOpacity={0.45} fontSize={11}>
+                {LAYER_LABELS[i]}
+              </text>
+            </g>
           )
         )}
 
@@ -102,37 +107,47 @@ export function SchemaMap({ nodes, edges }: { nodes: SchemaNode[]; edges: Schema
           const a = pos.get(d.from);
           const b = d.to ? pos.get(d.to) : null;
           if (!a) return null;
-          // Cạnh đứt: vẽ ĐI RA NGOÀI chứ không bỏ qua. Một liên kết được khai
-          // mà không giao được phải nhìn thấy, không phải biến mất.
-          const end = b ?? { x: a.x, y: a.y + ROW_H - 18 };
-          /**
-           * Điểm neo theo HƯỚNG, không cố định đáy→đỉnh.
-           *
-           * Sáu cạnh của đồ thị này không cùng chiều: `WebPage → WebSite` và
-           * `Dataset → Organization` đi NGƯỢC LÊN. Nối đáy nguồn tới đỉnh
-           * đích cho mọi cạnh thì hai đường đó xuyên thẳng qua hộp của chính
-           * nguồn — bản đồ vẽ sai đúng chỗ nó sinh ra để làm rõ.
-           */
+          const broken = !b;
+          const end = b ?? { x: a.x, y: a.y + 62 };
+
+          // Cạnh đi LÊN vòng ra ngoài. Nối thẳng thì nó xuyên qua hàng giữa và
+          // cắt ngang nhãn ở đó — đo được ở bản trước: "creator" nằm đè lên
+          // hộp WebPage.
           const up = b !== null && end.y < a.y;
-          const x1 = a.x;
-          const y1 = up ? a.y : a.y + BOX_H;
-          const x2 = end.x;
-          const y2 = b ? (up ? end.y + BOX_H : end.y) : end.y;
-          const mx = (x1 + x2) / 2;
-          const my = (y1 + y2) / 2;
+          const bow = up ? (a.x < W / 2 ? -1 : 1) * 110 : 0;
+          const cx1 = a.x + bow;
+          const cy1 = (a.y + end.y) / 2;
+          const path = `M ${a.x} ${a.y} C ${cx1} ${cy1}, ${end.x + bow} ${cy1}, ${end.x} ${end.y}`;
+
+          // Nhãn đặt ở 1/3 quãng đường tính từ nguồn, lệch ra phía vòng cung:
+          // giữa đường là nơi nhiều cạnh cùng đi qua nhất.
+          const lx = a.x + (end.x - a.x) * 0.34 + bow * 0.6;
+          const ly = a.y + (end.y - a.y) * 0.34;
+
           return (
-            <g key={`${d.from}-${d.to}`}>
+            <g key={`${d.from}-${d.to}`} className={broken ? "text-destructive" : undefined}>
               <path
-                d={`M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`}
+                d={path}
                 fill="none"
+                stroke="currentColor"
+                strokeOpacity={broken ? 1 : 0.28}
                 strokeWidth={1.5}
-                strokeDasharray={b ? undefined : "4 3"}
-                className={b ? "stroke-(--color-border-subtle)" : "stroke-current text-destructive"}
-                markerEnd={b ? "url(#arrow)" : "url(#arrow-broken)"}
+                strokeDasharray={broken ? "5 4" : undefined}
+                markerEnd={broken ? "url(#sm-arrow-red)" : "url(#sm-arrow)"}
               />
-              <text x={mx} y={my - 4} textAnchor="middle" className="fill-(--color-ink-faint) text-[10px]">
+              <text
+                x={lx}
+                y={ly}
+                textAnchor="middle"
+                fontSize={11}
+                fill="currentColor"
+                fillOpacity={broken ? 1 : 0.6}
+                stroke="var(--background)"
+                strokeWidth={3}
+                paintOrder="stroke"
+              >
                 {d.labels.join(" · ")}
-                {b ? "" : " → không giao được"}
+                {broken ? " ✕" : ""}
               </text>
             </g>
           );
@@ -143,26 +158,24 @@ export function SchemaMap({ nodes, edges }: { nodes: SchemaNode[]; edges: Schema
           if (!p) return null;
           const island = n.id === null;
           return (
-            <g key={n.type}>
-              <rect
-                x={p.x - BOX_W / 2}
-                y={p.y}
-                width={BOX_W}
-                height={BOX_H}
-                rx={8}
-                className={
-                  island
-                    ? "fill-transparent stroke-current text-destructive"
-                    : "fill-(--color-surface) stroke-(--color-border-subtle)"
-                }
-                strokeWidth={1.5}
-                strokeDasharray={island ? "4 3" : undefined}
-              />
-              <text x={p.x} y={p.y + 18} textAnchor="middle" className="fill-current text-[12px] font-medium">
+            <g key={n.type} className={island ? "text-destructive" : undefined}>
+              {island && <circle cx={p.x} cy={p.y} r={R + 5} fill="none" stroke="currentColor" strokeWidth={1.5} strokeDasharray="3 3" />}
+              <circle cx={p.x} cy={p.y} r={R} fill="currentColor" />
+              <text
+                x={p.x}
+                y={p.y + 26}
+                textAnchor="middle"
+                fontSize={13}
+                fontWeight={500}
+                fill="currentColor"
+                stroke="var(--background)"
+                strokeWidth={3}
+                paintOrder="stroke"
+              >
                 {n.type}
               </text>
-              <text x={p.x} y={p.y + 32} textAnchor="middle" className="fill-(--color-ink-faint) text-[10px]">
-                {island ? "không có @id — hòn đảo" : `${n.seenOn.length} khuôn`}
+              <text x={p.x} y={p.y + 41} textAnchor="middle" fontSize={10} fill="currentColor" fillOpacity={island ? 1 : 0.5}>
+                {island ? "không có @id" : `${n.seenOn.length} khuôn`}
               </text>
             </g>
           );

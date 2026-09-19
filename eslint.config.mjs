@@ -23,6 +23,14 @@ const eslintConfig = defineConfig([
     // đề, trong đó 744 lỗi, và KHÔNG cái nào thuộc kho này. Một cổng tại chỗ
     // trả về lỗi của người khác là một cổng người ta học cách bỏ qua.
     "publisher/**",
+    // Script tạm khi chẩn đoán. Chúng untracked nên CI (checkout sạch) không
+    // bao giờ thấy chúng — nhưng `eslint .` tại chỗ thì thấy, và một cổng tại
+    // chỗ đỏ vì thứ CI không thấy là cổng người ta ngừng tin. Cùng lý do với
+    // hai dòng trên.
+    //
+    // Hai tiền tố vì đã gặp cả hai: `tmp-fillall.ts` và `_tmp-index-coverage.ts`.
+    "scripts/tmp-*.ts",
+    "scripts/_tmp-*.ts",
   ]),
 ]);
 
