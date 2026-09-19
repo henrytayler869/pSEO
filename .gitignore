@@ -78,5 +78,15 @@ scripts/_tmp-*.ts
 # Che ở đây KHÔNG phải là quyết định rằng cấu trúc lồng nhau là đúng — đó là
 # câu hỏi kiến trúc riêng. Đây chỉ là để một lần `git add -A` không quyết định
 # hộ.
-publisher/
+#
+# DẤU / ĐẦU LÀ BẮT BUỘC. `publisher/` không neo, nên nó khớp MỌI thư mục tên
+# publisher ở mọi cấp — kể cả lib/publisher/ và app/publisher/, hai thư mục
+# mã nguồn thật của kho này.
+#
+# Hậu quả đo được ngay: lib/publisher/page-graph.ts KHÔNG được commit. File đã
+# tracked thì gitignore không đuổi, nên mười file cũ trong lib/publisher/ vẫn
+# còn và mọi thứ trông bình thường — chỉ file MỚI biến mất, và biến mất trong
+# im lặng. CI đỏ với "Cannot find module '@/lib/publisher/page-graph'", một
+# thông báo chỉ vào import chứ không chỉ vào .gitignore.
+/publisher/
 .DS_Store
