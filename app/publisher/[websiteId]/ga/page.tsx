@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, BarChart3 } from "lucide-react";
+import { ArrowLeft, BarChart3, ShieldCheck, ShieldAlert } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { PageHeader } from "@/components/page-header";
 import { PublisherTabs } from "@/components/publisher-tabs";
 import { WindowPicker } from "@/components/window-picker";
 import { getGaTabData, parseWindow } from "@/lib/queries/publisher-analytics";
+import { GTAG_FIX_DATE } from "@/lib/publisher/host-leak";
 
 function mmss(seconds: number): string {
   const s = Math.round(seconds);
@@ -28,7 +29,7 @@ export default async function GaPage({
   const data = await getGaTabData(websiteId, days);
   if (!data) notFound();
 
-  const { website, totals, bySource, landing } = data;
+  const { website, totals, bySource, landing, hostLeak, lastScheduled } = data;
   const base = `/publisher/${websiteId}/ga`;
 
   return (
@@ -48,6 +49,64 @@ export default async function GaPage({
       />
 
       <WindowPicker base={base} active={days} />
+
+      {/*
+        Hồi quy phép chặn gtag.
+
+        Thẻ đo chỉ được bắn từ tên miền của site. Đo 19/9/2026, TRƯỚC khi vá:
+        một phiên hostName=localhost đã vào property production, vì route của
+        publisher là /[host]/... nên máy dev mở
+        localhost:3002/atmovingservices.com/... và nhận đúng measurement ID
+        thật.
+
+        Card này KHÔNG lấy mẫu, khác pipeline đo index: GA4 tự giữ lịch sử theo
+        ngày, nên nhìn muộn vẫn thấy đủ. Bản chạy theo lịch (12 giờ/lần) chỉ để
+        biết sớm, và dòng cuối nói nó có còn chạy không.
+      */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            {!hostLeak.ok || !hostLeak.value.ok ? (
+              <ShieldAlert className="h-4 w-4 text-destructive" />
+            ) : (
+              <ShieldCheck className="h-4 w-4" />
+            )}
+            Chặn đo từ máy dev
+          </CardTitle>
+          <CardDescription>
+            Thẻ GA4 chỉ được bắn từ {website.url}. Một phiên từ localhost nghĩa là còn đường bắn chưa bịt — và GA4 không
+            cho xoá sự kiện đã thu, nên biết sớm là thứ duy nhất làm được.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 text-sm">
+          {!hostLeak.ok ? (
+            <Failed error={hostLeak.error} />
+          ) : hostLeak.value.ok ? (
+            <p>
+              Sạch: không phiên nào từ host lạ trong {hostLeak.value.days} ngày, tính từ mốc vá {GTAG_FIX_DATE}.
+            </p>
+          ) : (
+            <>
+              <p className="text-destructive">
+                {hostLeak.value.leakedSessions} phiên báo cáo từ host KHÔNG phải {hostLeak.value.expectedHost}:
+              </p>
+              <ul className="ml-4 list-disc text-destructive">
+                {hostLeak.value.leaks.slice(0, 8).map((l) => (
+                  <li key={`${l.host}-${l.date}`}>
+                    <code>{l.host}</code> — ngày {l.date}, {l.sessions} phiên
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <p className="text-muted-foreground">
+            {lastScheduled
+              ? `Máy chủ tự kiểm lần cuối ${lastScheduled.checkedAt.toLocaleString("vi-VN")} — ${lastScheduled.detail}`
+              : "Chưa có lần tự kiểm nào theo lịch. Card này vẫn đúng vì nó hỏi GA4 trực tiếp mỗi lần mở."}
+          </p>
+        </CardContent>
+      </Card>
+
 
       <Card>
         <CardHeader>

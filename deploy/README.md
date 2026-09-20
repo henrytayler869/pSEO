@@ -297,3 +297,23 @@ Xem nó có chạy không:
 Màn hình Publisher → tab GSC → Theo dõi index cũng nói ba câu riêng: đo lần
 cuối lúc nào, tới hạn tiếp lúc nào, và nhịp tim còn đập không. Câu thứ ba là
 câu mà một lịch chạy đã chết sẽ không tự nói ra.
+
+## Hồi quy phép chặn gtag
+
+Cặp unit thứ hai, RIÊNG với cặp đo index — gộp thì một phép kiểm gãy sẽ che
+phép kia và `systemctl --failed` nói sai tên:
+
+    deploy/pseo-analytics-guard.service   chạy `npx tsx scripts/check-analytics-guard.ts`
+    deploy/pseo-analytics-guard.timer     mỗi 12 giờ
+
+    scp deploy/pseo-analytics-guard.{service,timer} root@HOST:/etc/systemd/system/
+    ssh root@HOST 'systemctl daemon-reload && systemctl enable --now pseo-analytics-guard.timer'
+
+Nhịp ở đây KHÔNG có hằng số đối ứng trong mã, khác pipeline đo index — và đó
+là chủ ý. GA4 tự giữ lịch sử theo ngày, nên nhìn muộn không mất bằng chứng;
+chạy định kỳ chỉ mua được "biết sớm". Vì vậy phép kiểm đọc thẳng GA4 mỗi lần
+chạy, không có lớp "đã tới hạn chưa", và timer LÀ nhịp thật.
+
+Publisher → tab GA4 có card "Chặn đo từ máy dev": nó tự hỏi GA4 mỗi lần mở
+trang nên luôn đúng kể cả khi timer đã chết, và dòng cuối nói lần tự kiểm gần
+nhất là khi nào.

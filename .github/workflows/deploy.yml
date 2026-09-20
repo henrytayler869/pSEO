@@ -79,8 +79,8 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
-      - name: Nhịp pipeline đo index khớp unit systemd
-        run: npm run test:recheck-schedule
+      - name: Unit systemd khớp mã trong kho
+        run: npm run test:schedule-units
 
       - name: Lint
         run: npx eslint .

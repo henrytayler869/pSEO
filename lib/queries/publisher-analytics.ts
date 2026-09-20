@@ -15,6 +15,7 @@ import {
   type TrafficBreakdownRow,
   type LandingPageRow,
 } from "@/lib/google/analytics-data";
+import { checkHostLeak, getLastHostLeakCheck, type HostLeakResult, type LastCheck } from "@/lib/publisher/host-leak";
 import { logDependencyFailure } from "@/lib/observability/dependency-log";
 
 /**
@@ -77,6 +78,12 @@ export interface GaTabData {
   totals: Loaded<SiteTrafficTotals>;
   bySource: Loaded<TrafficBreakdownRow[]>;
   landing: Loaded<LandingPageRow[]>;
+  /** Hồi quy phép chặn gtag, tính TRỰC TIẾP mỗi lần mở — GA4 tự giữ lịch sử
+   *  nên không cần lấy mẫu, chỉ cần hỏi. */
+  hostLeak: Loaded<HostLeakResult>;
+  /** Lần chạy theo lịch gần nhất. Trả lời "nếu không ai mở màn hình thì có ai
+   *  kiểm không". Null = chưa lần nào. */
+  lastScheduled: LastCheck | null;
 }
 
 export async function getGaTabData(websiteId: string, days: Window): Promise<GaTabData | null> {
@@ -86,10 +93,15 @@ export async function getGaTabData(websiteId: string, days: Window): Promise<GaT
   });
   if (!website) return null;
 
-  const [totals, bySource, landing] = await Promise.all([
+  const [totals, bySource, landing, hostLeak, lastScheduled] = await Promise.all([
     load("ga4-totals", websiteId, fetchSiteTrafficTotals(website.ga4PropertyId, days)),
     load("ga4-source", websiteId, fetchTrafficBySource(website.ga4PropertyId, days)),
     load("ga4-landing", websiteId, fetchLandingPages(website.ga4PropertyId, days)),
+    // KHÔNG theo `days` của bộ chọn khoảng: câu hỏi "còn đường bắn nào không"
+    // không phải câu hỏi về khoảng đang xem. Người chọn 7 ngày để đọc lưu
+    // lượng không có ý nói "chỉ quan tâm rò rỉ trong 7 ngày".
+    load("ga4-host-leak", websiteId, checkHostLeak(website, 28)),
+    getLastHostLeakCheck(websiteId),
   ]);
-  return { website, days, totals, bySource, landing };
+  return { website, days, totals, bySource, landing, hostLeak, lastScheduled };
 }

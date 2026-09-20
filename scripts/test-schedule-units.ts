@@ -21,6 +21,7 @@ function check(ok: boolean, label: string) {
 }
 
 const timer = readFileSync("deploy/pseo-index-recheck.timer", "utf8");
+console.log("pseo-index-recheck:");
 const m = /^OnUnitActiveSec=(\d+)(h|min|s)$/m.exec(timer);
 check(m !== null, "timer khai OnUnitActiveSec ở dạng đọc được");
 
@@ -42,6 +43,31 @@ check(/^ExecStart=.*scripts\/recheck-index\.ts$/m.test(service), "service gọi 
 // bên kho publisher sáng nay, cùng cách sửa: săn chỉ thị, không săn chữ.
 check(!/^EnvironmentFile=/m.test(service), "service KHÔNG có EnvironmentFile — .env do Prisma tự nạp, nạp hai lần là hai luật trích dẫn");
 check(/^Persistent=true$/m.test(timer), "Persistent=true — reboot qua một nhịp thì chạy bù, không để trống chuỗi đo");
+
+/**
+ * Cặp unit thứ hai — hồi quy gtag.
+ *
+ * KHÔNG kiểm "nhịp khớp hằng số" như cặp trên, và đó là chủ ý chứ không phải
+ * bỏ sót: pipeline index có một nhịp CHÍNH SÁCH trong mã (24h) mà timer chỉ
+ * là nhịp tim, nên hai con số phải khớp. Phép kiểm gtag đọc thẳng GA4 mỗi lần
+ * chạy, không có lớp "đã tới hạn chưa", nên timer LÀ nhịp thật và không có
+ * hằng số nào để lệch với nó. Bịa ra một phép so ở đây sẽ là một cổng canh
+ * không canh gì.
+ */
+console.log("\npseo-analytics-guard:");
+const guardTimer = readFileSync("deploy/pseo-analytics-guard.timer", "utf8");
+const guardService = readFileSync("deploy/pseo-analytics-guard.service", "utf8");
+check(/^OnUnitActiveSec=\d+(h|min|s)$/m.test(guardTimer), "timer khai OnUnitActiveSec ở dạng đọc được");
+check(/^Unit=pseo-analytics-guard\.service$/m.test(guardTimer), "timer trỏ đúng service");
+check(/^ExecStart=.*scripts\/check-analytics-guard\.ts$/m.test(guardService), "service gọi đúng script");
+check(!/^EnvironmentFile=/m.test(guardService), "service KHÔNG có EnvironmentFile");
+check(/^Persistent=true$/m.test(guardTimer), "Persistent=true");
+check(
+  // Hai unit RIÊNG. Gộp thì một phép kiểm gãy che phép kia, và systemctl
+  // --failed sẽ nói sai tên thứ đang hỏng.
+  !guardService.includes("recheck-index") && !service.includes("check-analytics-guard"),
+  "hai service gọi hai script khác nhau — không unit nào ôm cả hai phép kiểm",
+);
 
 if (failed > 0) {
   console.error(`\n✗ ${failed} phép kiểm hỏng.`);

@@ -257,6 +257,37 @@ export async function fetchTrafficBySource(ga4PropertyId: string, days: number):
     .sort((a, b) => b.sessions - a.sessions);
 }
 
+
+export interface HostSessionRow {
+  hostName: string;
+  /** YYYYMMDD như GA4 trả về. */
+  date: string;
+  sessions: number;
+}
+
+/**
+ * Phiên theo TÊN MIỀN và theo NGÀY.
+ *
+ * KHÔNG lọc headless ở đây, khác mọi hàm còn lại trong file. Câu hỏi là "có
+ * lưu lượng nào báo cáo từ một host không phải site không" — và một phiên bot
+ * từ localhost vẫn là bằng chứng rằng thẻ đo đang bắn ở chỗ không được phép.
+ * Lọc nó đi là bỏ mất đúng thứ cần tìm.
+ */
+export async function fetchSessionsByHost(ga4PropertyId: string, days: number): Promise<HostSessionRow[]> {
+  assertValidGa4PropertyId(ga4PropertyId);
+  const rows = await runReport(ga4PropertyId, {
+    dateRanges: [{ startDate: `${days}daysAgo`, endDate: "today" }],
+    dimensions: [{ name: "hostName" }, { name: "date" }],
+    metrics: [{ name: "sessions" }],
+    limit: 500,
+  });
+  return rows.map((r) => ({
+    hostName: r.dimensionValues?.[0]?.value ?? "(không rõ)",
+    date: r.dimensionValues?.[1]?.value ?? "",
+    sessions: Number(r.metricValues?.[0]?.value ?? 0),
+  }));
+}
+
 interface RawGa4Row {
   dimensionValues: { value: string }[];
   metricValues: { value: string }[];
