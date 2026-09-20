@@ -111,6 +111,20 @@ export interface NicheClusterSpec {
  * Chỗ thay: {zip} {place} {detail}.
  */
 export interface NicheMarketSpec {
+  /**
+   * Chỉ số mở đầu mô tả, theo thứ tự.
+   *
+   * Mô tả dẫn bằng con số PHÂN BIỆT trang này với mọi trang khác của site,
+   * thay vì lặp lại tiêu đề. Publisher từng ghim cứng hai chỉ số cho việc đó
+   * — irs_migration_net_households và census_median_home_value_usd — nên với
+   * nghề không có hai chỉ số ấy, câu dẫn lặng lẽ rỗng và mọi trang dùng chung
+   * một mô tả không phân biệt gì.
+   *
+   * `phrase` có đúng một chỗ thay: {display} — chuỗi HQ đã định dạng sẵn, thứ
+   * trang in ra nguyên văn. Không dựng lại số ở đây: hai nơi định dạng một
+   * con số là hai câu trả lời cho một câu hỏi.
+   */
+  leadMetrics: readonly { metric: string; phrase: string }[];
   /** Meta khi trang không có câu dẫn riêng. */
   description: string;
   /** Meta khi có — `{detail}` là câu dẫn đó, đặt lên đầu. */
@@ -223,6 +237,10 @@ const MOVING: NicheContentSpec = {
   },
   market: {
     // Nguyên văn thứ publisher đang in cho nghề này.
+    leadMetrics: [
+      { metric: "irs_migration_net_households", phrase: "Net household migration {display} a year countywide" },
+      { metric: "census_median_home_value_usd", phrase: "median home value {display}" },
+    ],
     description:
       "Federal migration and housing data for ZIP {zip} in {place}, with the source and collection date for every figure.",
     descriptionWithDetail:
@@ -285,6 +303,10 @@ const AUTO_ACCIDENT: NicheContentSpec = {
     topicsHeading: "By kind of exposure",
   },
   market: {
+    leadMetrics: [
+      { metric: "fars_fatal_crashes_1yr", phrase: "{display} fatal crashes a year countywide" },
+      { metric: "commute_car_share_pct", phrase: "{display} of workers drive to work" },
+    ],
     description:
       "Fatal crashes recorded in the county containing ZIP {zip} in {place}, and how residents get to work, with the source and collection date for every figure.",
     descriptionWithDetail:

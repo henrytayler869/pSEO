@@ -197,6 +197,23 @@ function checkMarketSpec(spec: NicheContentSpec): string[] {
       }
     }
   }
+  const named = metricsNamedBy(spec);
+  for (const lead of m.leadMetrics) {
+    if (!named.has(lead.metric)) {
+      errors.push(`${spec.vertical}: market.leadMetrics trỏ chỉ số "${lead.metric}" mà đặc tả không nhắc tới`);
+    }
+    // {display} là chỗ thay DUY NHẤT ở đây: câu dẫn nói về một chỉ số, và nó
+    // không biết gì khác ngoài giá trị đã định dạng của chỉ số đó.
+    for (const ph of lead.phrase.matchAll(/\{([^}]*)\}/g)) {
+      if (ph[1] !== "display") {
+        errors.push(`${spec.vertical}: leadMetrics["${lead.metric}"] dùng chỗ thay "{${ph[1]}}" — chỉ {display} hợp lệ`);
+      }
+    }
+    if (!lead.phrase.includes("{display}")) {
+      errors.push(`${spec.vertical}: leadMetrics["${lead.metric}"] không chứa {display} — câu dẫn sẽ không có số nào`);
+    }
+  }
+
   // Bản có câu dẫn PHẢI dùng {detail}; không thì hai bản giống hệt nhau và
   // câu dẫn biến mất mà không ai thấy.
   if (!m.descriptionWithDetail.includes("{detail}")) {
