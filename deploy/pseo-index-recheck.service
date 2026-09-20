@@ -1,0 +1,35 @@
+# Pipeline đo lại trạng thái index.
+#
+# Thay cho một routine trong sổ tay ("đo lại ngày 26/9 và 3/10"). Câu hỏi của
+# phép thử Omega là 8 trang đưa vào có Ở LẠI không, và câu đó chỉ trả lời được
+# bằng chuỗi phép đo đều đặn — một lần bỏ lỡ không đo bù được vì quá khứ đã
+# trôi.
+#
+# Cùng User=deploy và WorkingDirectory=/opt/pseo với pseo.service, và cùng lý
+# do KHÔNG có EnvironmentFile: Next (và @prisma/client) tự nạp /opt/pseo/.env
+# từ thư mục làm việc. Trỏ systemd vào cùng file sẽ đọc nó lần hai dưới luật
+# trích dẫn khác.
+#
+# Type=oneshot: nó chạy rồi thoát. Không Restart= — hỏng thì chờ nhịp sau,
+# vì thử lại ngay chỉ đập vào cùng một lỗi mạng hoặc cùng một quota.
+[Unit]
+Description=pSEO — đo lại trạng thái index
+After=network-online.target pseo.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/pseo
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npx tsx scripts/recheck-index.ts
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pseo-index-recheck
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/pseo

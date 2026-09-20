@@ -1,0 +1,24 @@
+# Nhịp tim, KHÔNG phải chính sách.
+#
+# Nhịp đo thật (24 giờ) nằm ở RECHECK_INTERVAL_HOURS trong
+# lib/indexing/schedule.ts. Timer chỉ gọi thường xuyên hơn và để mã quyết định
+# đã tới hạn chưa — nên đổi nhịp đo là sửa một hằng số trong kho, không phải
+# ssh vào máy sửa unit, và hai bên không thể nói hai con số khác nhau.
+#
+# OnUnitActiveSec PHẢI khớp HEARTBEAT_HOURS trong cùng file đó.
+# scripts/test-recheck-schedule.ts đọc cả hai và đỏ khi lệch.
+#
+# Persistent=true: máy tắt qua một nhịp thì chạy bù ngay khi bật lại. Không có
+# nó, một lần reboot đúng giờ sẽ tạo một khoảng trống trong chuỗi đo mà sau
+# này không ai giải thích được.
+[Unit]
+Description=pSEO — nhịp đo lại trạng thái index
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=6h
+Persistent=true
+Unit=pseo-index-recheck.service
+
+[Install]
+WantedBy=timers.target
