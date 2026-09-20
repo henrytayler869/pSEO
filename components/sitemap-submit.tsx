@@ -36,11 +36,13 @@ export function SitemapSubmit({
                 {s.errors > 0 ? ` · ${s.errors} lỗi` : ""}
                 {s.warnings > 0 ? ` · ${s.warnings} cảnh báo` : ""}
                 {s.lastSubmitted ? ` · nộp ${new Date(s.lastSubmitted).toLocaleDateString()}` : ""}
-                {/* Google ĐÃ TẢI chưa — câu khác hẳn "ta đã nộp chưa". Nộp
-                    xong mà chưa tải thì sitemap chưa có tác dụng gì. */}
+                {/* "GẦN NHẤT", không phải lần đầu. Google chỉ trả một dấu
+                    thời gian, nên nhãn phải nói đúng thứ nó là — nếu không,
+                    người đọc sẽ trừ nó cho ngày nộp và gọi kết quả là độ trễ.
+                    Tôi vừa làm đúng việc đó và ra con số sai 21 giờ. */}
                 {s.lastDownloaded
-                  ? ` · Google tải ${new Date(s.lastDownloaded).toLocaleDateString()}`
-                  : " · Google CHƯA tải"}
+                  ? ` · Google tải gần nhất ${new Date(s.lastDownloaded).toLocaleDateString()}`
+                  : " · Google CHƯA tải lần nào"}
               </span>
             </li>
           ))}
