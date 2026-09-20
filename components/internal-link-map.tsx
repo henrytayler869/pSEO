@@ -23,8 +23,8 @@ import type { PageGraph, PageKind } from "@/lib/publisher/page-graph";
  * (0 trên cả hai site hôm nay) và là lý do người ta mở tab này.
  */
 
-const W = 860;
-const H = 420;
+const W = 900;
+const H = 480;
 
 /** Vị trí CỐ ĐỊNH theo loại, không phải bố cục tự sinh.
  *
@@ -33,14 +33,14 @@ const H = 420;
  *  khác gì". Vị trí cố định đọc theo chiều sâu: trang chủ trái, trang lá phải.
  */
 const POS: Record<PageKind, { x: number; y: number; label: string }> = {
-  home: { x: 70, y: 210, label: "Trang chủ" },
-  niche: { x: 215, y: 120, label: "Trang ngành" },
-  state: { x: 370, y: 120, label: "Trang bang" },
-  cluster: { x: 540, y: 120, label: "Trang cụm" },
-  market: { x: 720, y: 210, label: "Trang ZIP" },
-  pillar: { x: 540, y: 320, label: "Trang trụ" },
-  blog: { x: 370, y: 320, label: "Blog" },
-  static: { x: 215, y: 320, label: "Trang tĩnh" },
+  home: { x: 80, y: 250, label: "Trang chủ" },
+  niche: { x: 245, y: 130, label: "Trang ngành" },
+  state: { x: 430, y: 110, label: "Trang bang" },
+  cluster: { x: 615, y: 140, label: "Trang cụm" },
+  market: { x: 790, y: 250, label: "Trang ZIP" },
+  pillar: { x: 615, y: 380, label: "Trang trụ" },
+  blog: { x: 430, y: 405, label: "Blog" },
+  static: { x: 245, y: 375, label: "Trang tĩnh" },
 };
 
 const ORDER: PageKind[] = ["home", "niche", "state", "cluster", "market", "pillar", "blog", "static"];
@@ -59,12 +59,25 @@ function widthFor(weight: number): number {
 
 /** Nhãn số chỉ cho cạnh nặng. Ba mươi nhãn chồng lên nhau thì không nhãn nào
  *  đọc được; cạnh nhẹ vẫn có <title> khi rê chuột. */
-const LABEL_MIN = 100;
+const LABEL_MIN = 200;
+
+/**
+ * Độ đậm theo trọng số — thứ làm hình này đọc được.
+ *
+ * Bản đầu vẽ mọi cạnh cùng một độ mờ 0,5. Kết quả: ba mươi đường xám như nhau
+ * cắt nhau giữa hình, và cấu trúc thật (market→market 1.165, market→static
+ * 635) chìm nghỉm giữa những cạnh 1 liên kết. Vẫn vẽ ĐỦ mọi cạnh — cắt bớt là
+ * nói dối — nhưng cạnh nhẹ lùi thành nền mờ để mắt đi theo cạnh nặng.
+ */
+function opacityFor(weight: number, max: number): number {
+  return 0.1 + 0.55 * (Math.log10(weight + 1) / Math.log10(max + 1));
+}
 
 export function InternalLinkMap({ graph }: { graph: PageGraph }) {
   const { links } = graph;
   const present = ORDER.filter((k) => (links.countByKind.get(k) ?? 0) > 0);
 
+  const maxWeight = Math.max(1, ...links.byKind.values());
   const edges = [...links.byKind.entries()]
     .map(([key, weight]) => {
       const [from, to] = key.split("→") as [PageKind, PageKind];
@@ -91,14 +104,12 @@ export function InternalLinkMap({ graph }: { graph: PageGraph }) {
             // đó ở site này — bỏ qua thì hình nói sai về thứ dày đặc nhất.
             const r = radiusFor(links.countByKind.get(e.from) ?? 1);
             return (
-              <g key={`${e.from}-self`} opacity={0.55}>
+              <g key={`${e.from}-self`} opacity={opacityFor(e.weight, maxWeight) + 0.15}>
                 <title>{`${a.label} → ${a.label}: ${e.weight} liên kết`}</title>
-                <path
-                  d={`M ${a.x - r * 0.6} ${a.y - r * 0.8} a ${r * 0.9} ${r * 0.9} 0 1 1 ${r * 1.2} 0`}
-                  fill="none" stroke="currentColor" strokeWidth={widthFor(e.weight)}
-                  markerEnd="url(#ilm-arrow)"
-                />
-                <text x={a.x} y={a.y - r - 16} textAnchor="middle" className="fill-current text-[10px]" opacity={0.7}>
+                <circle cx={a.x} cy={a.y - r - 13} r={13} fill="none" stroke="currentColor"
+                  strokeWidth={widthFor(e.weight)} />
+                <text x={a.x} y={a.y - r - 32} textAnchor="middle" paintOrder="stroke"
+                  className="fill-current stroke-card text-[11px] font-medium" strokeWidth={3.5}>
                   ↻ {e.weight}
                 </text>
               </g>
@@ -114,12 +125,13 @@ export function InternalLinkMap({ graph }: { graph: PageGraph }) {
           const cx = mx - (dy / len) * off;
           const cy = my + (dx / len) * off;
           return (
-            <g key={`${e.from}-${e.to}`} opacity={0.5}>
+            <g key={`${e.from}-${e.to}`} opacity={opacityFor(e.weight, maxWeight)}>
               <title>{`${a.label} → ${b.label}: ${e.weight} liên kết`}</title>
               <path d={`M ${a.x} ${a.y} Q ${cx} ${cy} ${b.x} ${b.y}`} fill="none" stroke="currentColor"
                 strokeWidth={widthFor(e.weight)} markerEnd="url(#ilm-arrow)" />
               {e.weight >= LABEL_MIN ? (
-                <text x={cx} y={cy} textAnchor="middle" dy="-3" className="fill-current text-[10px]" opacity={0.85}>
+                <text x={cx} y={cy} textAnchor="middle" dy="-3" paintOrder="stroke"
+                  className="fill-current stroke-card text-[11px] font-medium" strokeWidth={3.5} opacity={1.6}>
                   {e.weight}
                 </text>
               ) : null}
@@ -134,12 +146,16 @@ export function InternalLinkMap({ graph }: { graph: PageGraph }) {
           return (
             <g key={k}>
               <title>{`${p.label}: ${count} trang`}</title>
-              <circle cx={p.x} cy={p.y} r={r} fill="currentColor" opacity={0.12} />
+              {/* Nền ĐẶC theo màu nền thẻ, không phải màu mờ: đường đi phía
+                  sau nút sẽ xuyên qua một hình mờ và làm số trong nút khó đọc. */}
+              <circle cx={p.x} cy={p.y} r={r} className="fill-card" />
+              <circle cx={p.x} cy={p.y} r={r} fill="currentColor" opacity={0.1} />
               <circle cx={p.x} cy={p.y} r={r} fill="none" stroke="currentColor" strokeWidth={1.5} />
               <text x={p.x} y={p.y + 4} textAnchor="middle" className="fill-current text-[11px] font-semibold">
                 {count}
               </text>
-              <text x={p.x} y={p.y + r + 14} textAnchor="middle" className="fill-current text-[11px]" opacity={0.75}>
+              <text x={p.x} y={p.y + r + 16} textAnchor="middle" paintOrder="stroke"
+                className="fill-current stroke-card text-[12px] font-medium" strokeWidth={4}>
                 {p.label}
               </text>
             </g>
@@ -159,6 +175,9 @@ export function InternalLinkMap({ graph }: { graph: PageGraph }) {
 /** Trang không ai trỏ tới, vẽ từng cái. Đây là thứ cần nhìn theo trang. */
 export function UnlinkedPages({ graph }: { graph: PageGraph }) {
   const { unlinked, deadEnds, inbound } = graph.links;
+  const ranked = [...inbound.entries()].sort((a, b) => a[1] - b[1]);
+  const least = ranked.slice(0, 5);
+  const most = ranked.slice(-5).reverse();
   const values = [...inbound.values()].sort((a, b) => a - b);
   const median = values.length > 0 ? values[Math.floor(values.length / 2)] : 0;
 
@@ -174,6 +193,40 @@ export function UnlinkedPages({ graph }: { graph: PageGraph }) {
           {graph.links.edges}
         </span>
       </div>
+
+      {/*
+        Nêu TÊN, không chỉ nêu số.
+        
+        "ít nhất 2 · trung vị 10 · nhiều nhất 193" nói hình dạng phân bố và
+        không nói phải làm gì. Trang đáy bảng là chỗ một liên kết thêm vào có
+        giá trị nhất, và không có tên thì không ai thêm được.
+      */}
+      {least.length > 0 ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div>
+            <p className="mb-1 text-muted-foreground">Được trỏ tới ÍT nhất</p>
+            <ul className="space-y-0.5">
+              {least.map(([path, n]) => (
+                <li key={path} className="flex justify-between gap-3">
+                  <code className="truncate">{path}</code>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">{n}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <p className="mb-1 text-muted-foreground">Được trỏ tới NHIỀU nhất</p>
+            <ul className="space-y-0.5">
+              {most.map(([path, n]) => (
+                <li key={path} className="flex justify-between gap-3">
+                  <code className="truncate">{path}</code>
+                  <span className="shrink-0 tabular-nums text-muted-foreground">{n}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      ) : null}
 
       {unlinked.length === 0 ? (
         <p className="text-muted-foreground">
