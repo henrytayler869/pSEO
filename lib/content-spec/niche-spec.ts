@@ -34,6 +34,64 @@
 
 export type Scope = "ZIP" | "COUNTY" | "STATE";
 
+/**
+ * Trang CỤM: nhiều ZIP trên một trang, và nó cần chữ riêng.
+ *
+ * ═══ VÌ SAO KHÔNG DÙNG LẠI `sections` ═══
+ *
+ * `sections` mô tả trang MỘT ZIP: mỗi mục là một bộ chỉ số của chính ZIP đó.
+ * Trang cụm gộp 23 ZIP, nên thứ nó nói được mà trang lẻ không nói nổi là DẢI
+ * — và thứ nó KHÔNG nói được là "giá trị ở đây", vì không có "đây".
+ *
+ * Nên đây là một khối riêng, không phải thêm một scope vào enum cũ. Một mục
+ * scope="CLUSTER" nằm chung danh sách sẽ bị buildSpecSections của trang ZIP
+ * đọc trúng, và trang ZIP sẽ in một mục nói về dải giữa các ZIP khác.
+ *
+ * ═══ VÌ SAO Ở HQ ═══
+ *
+ * Đo 20/9/2026 trên production: 27 trang cụm của theaccidentrecord.com — một
+ * site luật sư tai nạn — in meta description "Household migration across Kings
+ * County and Census housing estimates…", H2 "Migration across Kings County",
+ * và câu dẫn "the only nationwide source that tracks household moves directly".
+ * cluster-view.tsx không import gì về niche: mọi chữ của nó là văn xuôi chuyển
+ * nhà viết cứng. Nhánh trang ZIP đã được làm niche-aware từ lâu; nhánh cụm
+ * chưa bao giờ.
+ *
+ * Cùng nguyên nhân với lần trước, cùng cách chữa: quyết định nội dung về HQ,
+ * publisher chỉ render.
+ *
+ * ═══ CHỖ THAY ═══
+ *
+ * Chuỗi đi qua API dưới dạng JSON nên KHÔNG thể là hàm. Ba chỗ thay, và chỉ
+ * ba — thêm nữa thì đây thành một ngôn ngữ mẫu, và một ngôn ngữ mẫu không có
+ * trình kiểm tra là thứ sẽ in ra "{cuont}" trên trang thật:
+ *
+ *   {count}     số ZIP trên trang        "23"
+ *   {place}     tên nơi đã có phẩm cách  "Brooklyn, NY"
+ *   {counties}  hạt, đã nối bằng "and"   "Kings County"
+ */
+export interface NicheClusterSpec {
+  /** Meta description. Chỉ được nhắc thứ trang thật sự in ra. */
+  description: string;
+  /** Mục bảng so sánh từng ZIP. */
+  comparison: { heading: string; lead: string };
+  /** Mục số liệu cấp hạt. `headingMulti` dùng khi cụm trải nhiều hạt. */
+  county: { heading: string; headingMulti: string; lead: string };
+  /**
+   * Ô thống kê ở đầu trang, theo chỉ số.
+   *
+   * Chỉ số vắng mặt thì KHÔNG render ô đó — không có ô "—". Một ô trống nói
+   * "chúng tôi định đo cái này nhưng không có", và đó là câu không trang nào
+   * cần nói.
+   */
+  tiles: readonly { metric: string; label: string }[];
+  /** Loại số liệu phân biệt các ZIP với nhau, dùng trong câu "vì sao một
+   *  trang thay vì nhiều trang". Danh từ, ghép được vào giữa câu. */
+  distinguishing: string;
+  /** Tiêu đề mục liệt kê trang trụ. */
+  topicsHeading: string;
+}
+
 export interface NicheSection {
   key: string;
   /** Tiêu đề mục trên trang. Người đọc thấy chuỗi này. */
@@ -62,6 +120,13 @@ export interface NicheSection {
 export interface NicheContentSpec {
   vertical: string;
   sections: readonly NicheSection[];
+  /**
+   * Chữ cho trang cụm. Vắng mặt = nghề này KHÔNG được dựng trang cụm có chữ
+   * riêng; publisher sẽ chỉ render phần trung tính. Không có đường rơi về chữ
+   * của nghề khác — chính cái fallback ấy là thứ đã cho 90 trang tai nạn nói
+   * về chuyển nhà.
+   */
+  cluster?: NicheClusterSpec;
   /** Chỉ số thuộc nguồn liên quan nhưng CỐ Ý không dùng, kèm lý do. */
   excluded: readonly { metric: string; why: string }[];
 }
@@ -100,6 +165,33 @@ const MOVING: NicheContentSpec = {
         "KHÔNG suy ra giá dịch vụ từ đây: không nguồn nào trong hệ này đo giá.",
     },
   ],
+  cluster: {
+    // Nguyên văn những chuỗi cluster-view đang in, chuyển từ mã sang dữ liệu.
+    // Site chuyển nhà phải KHÔNG đổi một ký tự nào sau lần này.
+    description:
+      "Household migration across {counties} and Census housing estimates for {count} {place} ZIP codes, " +
+      "side by side, with the source and collection date for every figure.",
+    comparison: {
+      heading: "How these {count} ZIP codes differ",
+      lead:
+        "Census Bureau five-year estimates, measured for each ZIP code individually — including how many of " +
+        "its residents moved in the past year.",
+    },
+    county: {
+      heading: "Migration across {counties}",
+      headingMulti: "Migration, county by county",
+      lead:
+        "Counted from federal tax returns — the only nationwide source that tracks household moves directly. " +
+        "These figures cover whole counties, not any single ZIP code above.",
+    },
+    tiles: [
+      { metric: "irs_migration_inflow_households", label: "Households in/yr" },
+      { metric: "irs_migration_outflow_households", label: "Households out/yr" },
+      { metric: "irs_migration_net_households", label: "Net households/yr" },
+    ],
+    distinguishing: "housing and mobility estimates",
+    topicsHeading: "By kind of move",
+  },
   excluded: [],
 };
 
@@ -128,6 +220,33 @@ const AUTO_ACCIDENT: NicheContentSpec = {
         "không dữ liệu nào ở đây đo quan hệ đó.",
     },
   ],
+  cluster: {
+    // Chỉ nhắc thứ nghề này THẬT SỰ có: FARS cấp hạt, và cách đi làm cấp ZIP.
+    // Không có "migration", không có "housing" — hai chữ đó không mô tả gì
+    // trên một site về tai nạn giao thông.
+    description:
+      "Fatal crashes recorded across {counties} and how people get to work in {count} {place} ZIP codes, " +
+      "side by side, with the source and collection date for every figure.",
+    comparison: {
+      heading: "How these {count} ZIP codes differ",
+      lead:
+        "Census Bureau five-year estimates of how residents of each ZIP code get to work — the exposure the " +
+        "county crash figures below sit on top of. Measured for each ZIP code individually.",
+    },
+    county: {
+      heading: "Fatal crashes recorded across {counties}",
+      headingMulti: "Fatal crashes, county by county",
+      lead:
+        "Counted by NHTSA from police reports of crashes in which someone died. These are crashes with a " +
+        "fatality, not all crashes, and the figures cover whole counties — not any single ZIP code above.",
+    },
+    tiles: [
+      { metric: "fars_fatal_crashes_1yr", label: "Fatal crashes/yr" },
+      { metric: "fars_fatalities_1yr", label: "People killed/yr" },
+    ],
+    distinguishing: "commuting estimates",
+    topicsHeading: "By kind of exposure",
+  },
   excluded: [],
 };
 
