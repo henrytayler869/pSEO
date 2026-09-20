@@ -36,6 +36,11 @@ export function SitemapSubmit({
                 {s.errors > 0 ? ` · ${s.errors} lỗi` : ""}
                 {s.warnings > 0 ? ` · ${s.warnings} cảnh báo` : ""}
                 {s.lastSubmitted ? ` · nộp ${new Date(s.lastSubmitted).toLocaleDateString()}` : ""}
+                {/* Google ĐÃ TẢI chưa — câu khác hẳn "ta đã nộp chưa". Nộp
+                    xong mà chưa tải thì sitemap chưa có tác dụng gì. */}
+                {s.lastDownloaded
+                  ? ` · Google tải ${new Date(s.lastDownloaded).toLocaleDateString()}`
+                  : " · Google CHƯA tải"}
               </span>
             </li>
           ))}
