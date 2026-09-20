@@ -317,3 +317,29 @@ chạy, không có lớp "đã tới hạn chưa", và timer LÀ nhịp thật.
 Publisher → tab GA4 có card "Chặn đo từ máy dev": nó tự hỏi GA4 mỗi lần mở
 trang nên luôn đúng kể cả khi timer đã chết, và dòng cuối nói lần tự kiểm gần
 nhất là khi nào.
+
+## IP thật của khách trong access log
+
+`deploy/nginx-cloudflare-real-ip.conf` — bản sao của
+`/etc/nginx/conf.d/cloudflare-real-ip.conf` trên máy, cài TAY như mọi unit
+khác (máy là nguồn sự thật, file trong kho là bản lưu để đọc).
+
+Bật lúc **2026-09-20T14:54:25Z**. TRƯỚC mốc đó cột IP trong access.log là IP
+Cloudflare cho mọi khách; SAU mốc là IP khách thật. Cùng một cột, hai ý nghĩa
+— nên access.log có một dòng `### … real_ip BẬT …` tại đúng thời điểm chuyển:
+
+    grep "real_ip BẬT" /var/log/nginx/access.log
+
+Ai quét log bắc qua mốc đó mà không biết sẽ thấy phần trước cho ra "0 dòng
+Googlebot xác minh được", giống hệt kết quả thật nếu Google ngừng crawl.
+
+Đặt lại khi dựng máy mới:
+
+    scp deploy/nginx-cloudflare-real-ip.conf root@HOST:/etc/nginx/conf.d/
+    ssh root@HOST 'nginx -t && systemctl reload nginx'
+
+Hoàn tác là xoá file đó rồi reload — đó là lý do nó nằm trong conf.d chứ không
+phải trong nginx.conf.
+
+Danh sách dải lấy SỐNG từ cloudflare.com/ips-v4 và ips-v6 lúc bật (15 + 7).
+Cloudflare đổi dải thì bản này cũ đi và hỏng IM LẶNG.
