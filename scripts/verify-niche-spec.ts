@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { specFor, metricsNamedBy } from "@/lib/content-spec/niche-spec";
+import { specFor, metricsNamedBy, allSpecs, type NicheContentSpec } from "@/lib/content-spec/niche-spec";
 
 /**
  * Chạy: npm run verify:niche-spec
@@ -113,3 +113,76 @@ async function main() {
 }
 
 void main().finally(() => prisma.$disconnect());
+
+/**
+ * Khối đặc tả trang CỤM.
+ *
+ * Ba phép kiểm, mỗi phép cho một cách hỏng đã thấy hoặc thấy được trước:
+ *
+ * 1. Chỗ thay phải nằm trong tập đã khai. Chuỗi đi qua JSON nên không trình
+ *    biên dịch nào đọc chúng; một "{cuont}" gõ sai sẽ in nguyên văn lên trang
+ *    production và trông như một lỗi hiển thị chứ không như lỗi đặc tả.
+ * 2. Chỉ số trong `tiles` phải là chỉ số nghề này thật sự có — tức phải được
+ *    chính đặc tả nhắc tới ở đâu đó. Một ô thống kê trỏ chỉ số không tồn tại
+ *    thì im lặng biến mất, và không ai biết nó từng được định hiện.
+ * 3. Chữ của nghề này KHÔNG được nhắc nghề khác. Đây là phép kiểm thô và nó
+ *    bắt đúng ca đã xảy ra: 27 trang của site tai nạn in "Household migration"
+ *    và "household moves".
+ */
+const PLACEHOLDERS = new Set(["count", "place", "counties"]);
+
+function checkClusterSpec(spec: NicheContentSpec): string[] {
+  const c = spec.cluster;
+  if (!c) return [];
+  const errors: string[] = [];
+
+  const strings: [string, string][] = [
+    ["description", c.description],
+    ["comparison.heading", c.comparison.heading],
+    ["comparison.lead", c.comparison.lead],
+    ["county.heading", c.county.heading],
+    ["county.headingMulti", c.county.headingMulti],
+    ["county.lead", c.county.lead],
+    ["distinguishing", c.distinguishing],
+    ["topicsHeading", c.topicsHeading],
+  ];
+
+  for (const [where, text] of strings) {
+    for (const m of text.matchAll(/\{([^}]*)\}/g)) {
+      if (!PLACEHOLDERS.has(m[1])) {
+        errors.push(`${spec.vertical}: ${where} dùng chỗ thay "{${m[1]}}" không có trong tập [${[...PLACEHOLDERS].join(", ")}]`);
+      }
+    }
+  }
+
+  const named = metricsNamedBy(spec);
+  for (const tile of c.tiles) {
+    if (!named.has(tile.metric)) {
+      errors.push(`${spec.vertical}: tiles trỏ chỉ số "${tile.metric}" mà đặc tả không nhắc tới ở đâu cả`);
+    }
+  }
+
+  // Từ của nghề KHÁC. Danh sách nhỏ và cụ thể, không phải bộ lọc chung: nó
+  // canh đúng ca đã xảy ra, và một danh sách rộng sẽ chặn cả câu hợp lệ.
+  const FOREIGN: Record<string, readonly string[]> = {
+    "auto-accident-attorney": ["household moves", "Household migration", "moving company", "housing stock"],
+    "moving-services": ["fatal crash", "crash fatalit"],
+  };
+  for (const word of FOREIGN[spec.vertical] ?? []) {
+    for (const [where, text] of strings) {
+      if (text.toLowerCase().includes(word.toLowerCase())) {
+        errors.push(`${spec.vertical}: ${where} nhắc "${word}" — chữ của nghề khác`);
+      }
+    }
+  }
+
+  return errors;
+}
+
+const clusterErrors = allSpecs().flatMap(checkClusterSpec);
+if (clusterErrors.length > 0) {
+  for (const e of clusterErrors) console.error(`  ✗ ${e}`);
+  console.error(`\n✗ ${clusterErrors.length} vấn đề trong khối đặc tả trang cụm.`);
+  process.exit(1);
+}
+console.log(`  ✓ khối trang cụm: ${allSpecs().filter((s) => s.cluster).length}/${allSpecs().length} nghề có, chỗ thay hợp lệ, không nghề nào nhắc chữ của nghề khác.`);
