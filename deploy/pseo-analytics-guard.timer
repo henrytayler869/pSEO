@@ -1,0 +1,22 @@
+# Mỗi 12 giờ.
+#
+# Thưa hơn nhịp đo index (6 giờ) và CÓ LÝ DO: GA4 tự giữ lịch sử theo ngày,
+# nên nhìn muộn không mất bằng chứng — chạy dày chỉ mua được "biết sớm hơn vài
+# giờ". Phép đo index thì ngược lại: GSC chỉ nói trạng thái bây giờ, không lấy
+# mẫu đều là mất hẳn quá khứ.
+#
+# Không có nhịp "chính sách" riêng ở tầng mã như pipeline index: phép kiểm này
+# đọc thẳng GA4 mỗi lần chạy và không tốn quota đáng kể, nên thêm một lớp
+# "đã tới hạn chưa" chỉ là máy móc thừa. Vì vậy timer Ở ĐÂY là nhịp thật, và
+# scripts/test-schedule-units.ts biết sự khác biệt đó.
+[Unit]
+Description=pSEO — nhịp hồi quy phép chặn gtag
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=12h
+Persistent=true
+Unit=pseo-analytics-guard.service
+
+[Install]
+WantedBy=timers.target

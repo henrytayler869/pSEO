@@ -1,0 +1,30 @@
+# Hồi quy phép chặn gtag: có phiên GA4 nào báo cáo từ host không phải site.
+#
+# Unit RIÊNG, không gộp vào pseo-index-recheck, dù cả hai đều là "kiểm định
+# kỳ". Gộp lại thì một phép kiểm gãy sẽ làm cả service failed và che phép kia;
+# tách ra thì mỗi cái hỏng một mình, và `systemctl --failed` nói đúng tên thứ
+# đang hỏng.
+#
+# Cùng lý do KHÔNG có EnvironmentFile như pseo.service: @prisma/client tự nạp
+# /opt/pseo/.env từ thư mục làm việc.
+[Unit]
+Description=pSEO — hồi quy phép chặn gtag
+After=network-online.target pseo.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+WorkingDirectory=/opt/pseo
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npx tsx scripts/check-analytics-guard.ts
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=pseo-analytics-guard
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/pseo

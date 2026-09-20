@@ -983,6 +983,7 @@ model Website {
   // model — sẽ đỏ sẵn, tức là một cổng người ta sẽ tắt.
   @@index([vertical])
   indexRecheckRuns IndexRecheckRun[]
+  scheduledChecks  ScheduledCheck[]
 }
 
 /// Một lần ĐO trạng thái index của một URL.
@@ -1055,6 +1056,30 @@ model IndexRecheckRun {
   error String?
 
   @@index([websiteId, startedAt])
+}
+
+/// Kết quả MỘT lần chạy của một phép kiểm định kỳ, kể cả khi sạch.
+///
+/// Ghi cả lần sạch vì câu "kiểm lần cuối lúc nào" chỉ trả lời được như thế —
+/// và một bảng chỉ chứa lần hỏng thì im lặng có hai nghĩa: mọi thứ ổn, hoặc
+/// phép kiểm đã ngừng chạy. Đó đúng là sự nhập nhằng mà IndexRecheckRun dựng
+/// ra để chặn, ở một chỗ khác.
+model ScheduledCheck {
+  id        String  @id @default(cuid())
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  /// Loại kiểm. "gtag-host-leak" = có phiên GA4 nào từ host không phải site.
+  kind String
+
+  ok     Boolean
+  /// Câu người đọc được. Với lần hỏng, nó phải NÊU TÊN thứ hỏng chứ không chỉ
+  /// đếm — một con số không kèm host thì không ai đi tìm được gì.
+  detail String
+
+  checkedAt DateTime @default(now())
+
+  @@index([websiteId, kind, checkedAt])
 }
 
 model PublisherApiKey {
