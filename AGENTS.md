@@ -53,6 +53,22 @@ Và bề mặt trôi rộng hơn cái tên: CỔNG 3002 cũng khai ở hai nơi,
 nơi từ trước khi có ai đổi tên. Cái tên không tạo ra ràng buộc; nó chỉ làm
 ràng buộc dễ thấy hơn.
 
+## `prisma generate` chạy trong `predev`, và vì sao nó phải ở đó
+
+Client Prisma là mã SINH RA, nằm trong node_modules. `git pull` đem về một
+schema mới nhưng KHÔNG sinh lại client, nên `prisma.<modelMới>` là `undefined`
+và dòng ngay sau nó ném:
+
+    Cannot read properties of undefined (reading 'findFirst')
+      at getLastHostLeakCheck (lib/publisher/host-leak.ts:135)
+
+Thông báo đó chỉ thẳng vào mã vừa viết và không nhắc gì tới client cũ — đo
+20/9/2026, mất một vòng chẩn đoán để tới đúng nguyên nhân. Migration thì đã có
+sẵn trong DB (dev nối vào DB production qua tunnel), nên không có dấu hiệu nào
+khác.
+
+1,5 giây mỗi lần `npm run dev`, đổi lấy việc không ai gặp lại thông báo đó.
+
 ## Ba điều phải biết
 
 1. `publisher/` được .gitignore che, và cũng bị loại khỏi `tsconfig.exclude`
