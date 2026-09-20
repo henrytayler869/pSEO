@@ -92,6 +92,33 @@ export interface NicheClusterSpec {
   topicsHeading: string;
 }
 
+/**
+ * Trang MỘT ZIP: hai chuỗi mà `sections` không mô tả nổi.
+ *
+ * `sections` nói mỗi mục dùng chỉ số nào. Nó không nói meta description của
+ * trang, cũng không nói tiêu đề bọc ngoài đoạn diễn giải AI — hai thứ đó là
+ * văn xuôi thuần, và chúng đã nằm trong mã publisher từ đầu.
+ *
+ * Đo 20/9/2026 trên /auto-accident-attorney/nv/las-vegas-89108, sau khi nhánh
+ * CỤM đã sạch:
+ *
+ *   meta  "Federal migration and housing data for ZIP 89108 in Las Vegas, NV"
+ *   H2    "What this means for a move in Las Vegas"
+ *
+ * Meta description là chuỗi Google in dưới tiêu đề trong kết quả tìm kiếm,
+ * nên đây là chỗ rò dễ thấy nhất với người thật. 63 trang.
+ *
+ * Chỗ thay: {zip} {place} {detail}.
+ */
+export interface NicheMarketSpec {
+  /** Meta khi trang không có câu dẫn riêng. */
+  description: string;
+  /** Meta khi có — `{detail}` là câu dẫn đó, đặt lên đầu. */
+  descriptionWithDetail: string;
+  /** Tiêu đề mục chứa đoạn diễn giải AI. */
+  interpretationHeading: string;
+}
+
 export interface NicheSection {
   key: string;
   /** Tiêu đề mục trên trang. Người đọc thấy chuỗi này. */
@@ -127,6 +154,8 @@ export interface NicheContentSpec {
    * về chuyển nhà.
    */
   cluster?: NicheClusterSpec;
+  /** Chữ cho trang một ZIP. Vắng mặt = publisher dùng chữ trung tính. */
+  market?: NicheMarketSpec;
   /** Chỉ số thuộc nguồn liên quan nhưng CỐ Ý không dùng, kèm lý do. */
   excluded: readonly { metric: string; why: string }[];
 }
@@ -192,6 +221,14 @@ const MOVING: NicheContentSpec = {
     distinguishing: "housing and mobility estimates",
     topicsHeading: "By kind of move",
   },
+  market: {
+    // Nguyên văn thứ publisher đang in cho nghề này.
+    description:
+      "Federal migration and housing data for ZIP {zip} in {place}, with the source and collection date for every figure.",
+    descriptionWithDetail:
+      "{detail}. Federal migration and housing data for ZIP {zip}, with the source and collection date for every figure.",
+    interpretationHeading: "What this means for a move in {place}",
+  },
   excluded: [],
 };
 
@@ -246,6 +283,15 @@ const AUTO_ACCIDENT: NicheContentSpec = {
     ],
     distinguishing: "commuting estimates",
     topicsHeading: "By kind of exposure",
+  },
+  market: {
+    description:
+      "Fatal crashes recorded in the county containing ZIP {zip} in {place}, and how residents get to work, with the source and collection date for every figure.",
+    descriptionWithDetail:
+      "{detail}. Fatal crashes recorded in the county containing ZIP {zip}, and how residents get to work, with the source and collection date for every figure.",
+    // KHÔNG "what this means for you": trang không biết người đọc là ai, và
+    // một lời hứa tư vấn trên trang chỉ có số liệu là lời hứa không giữ được.
+    interpretationHeading: "What these figures show for {place}",
   },
   excluded: [],
 };
