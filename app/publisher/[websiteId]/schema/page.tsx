@@ -7,7 +7,6 @@ import { PublisherTabs } from "@/components/publisher-tabs";
 import { prisma } from "@/lib/db/prisma";
 import { buildSchemaGraph } from "@/lib/publisher/schema-graph";
 import { buildPageGraph } from "@/lib/publisher/page-graph";
-import { SchemaMap } from "@/components/schema-map";
 import { PageLinkMap } from "@/components/page-link-map";
 import { InternalLinkMap, UnlinkedPages } from "@/components/internal-link-map";
 
@@ -181,19 +180,6 @@ export default async function SchemaPage({ params }: { params: Promise<{ website
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Cấu trúc schema bên trong một trang</CardTitle>
-          <CardDescription>
-            Hình này giống nhau trên mọi khuôn — nó nói các node trong MỘT trang nối với nhau ra sao, không nói trang
-            nối với trang. Giữ lại vì nó là chỗ duy nhất thấy được node thiếu <code>@id</code> hoặc cạnh không giao
-            được.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SchemaMap nodes={graph.nodes} edges={graph.edges} />
-        </CardContent>
-      </Card>
     </div>
   );
 }
