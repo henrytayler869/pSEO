@@ -28,6 +28,51 @@ export interface PageNode {
   depth: number;
 }
 
+/**
+ * Loại trang, suy từ hình dạng đường dẫn.
+ *
+ * Gộp theo loại là cách DUY NHẤT vẽ được liên kết nội bộ của site này thành
+ * hình đọc được: 194 trang và hơn hai nghìn cạnh vẽ từng cái một ra một búi
+ * tóc, trong đó không ai thấy được gì. Gộp lại thì "trang thị trường trỏ sang
+ * trang cụm bao nhiêu lần" hiện thành một con số, và cạnh có trọng số vẫn là
+ * cạnh THẬT — không cắt bớt, không lấy mẫu.
+ *
+ * Trang nào KHÔNG ai trỏ tới thì vẽ riêng từng cái, có tên. Đó là thứ cần
+ * nhìn từng trang, và cũng là thứ ít ỏi đủ để vẽ.
+ */
+export type PageKind = "home" | "niche" | "state" | "market" | "cluster" | "pillar" | "blog" | "static";
+
+export function kindOf(path: string, vertical: string): PageKind {
+  if (path === "/") return "home";
+  const seg = path.split("/").filter(Boolean);
+  if (seg[0] === "blog") return "blog";
+  if (seg[0] !== vertical) return STATIC_PATHS.has(`/${seg[0]}`) ? "static" : "pillar";
+  if (seg.length === 1) return "niche";
+  if (seg.length === 2) return "state";
+  // /{niche}/{state}/{slug}: slug kết thúc bằng 5 chữ số = một ZIP lẻ.
+  return /-\d{5}$/.test(seg[2] ?? "") ? "market" : "cluster";
+}
+
+/** Trang tĩnh viết tay. Khác trang trụ ở chỗ trang trụ mang số liệu gộp. */
+const STATIC_PATHS = new Set(["/about", "/contact", "/data", "/privacy", "/terms", "/blog"]);
+
+export interface LinkStats {
+  /** Cạnh gộp theo loại: "market→cluster" -> số liên kết. */
+  byKind: Map<string, number>;
+  /** Số trang mỗi loại. */
+  countByKind: Map<PageKind, number>;
+  /** Số liên kết vào từng trang, từ trang KHÁC. */
+  inbound: Map<string, number>;
+  /** Trang không trang nào trỏ tới bằng thẻ <a> thật. Khác `orphans`, vốn
+   *  tính theo breadcrumb: một trang có thể có breadcrumb đúng mà không ai
+   *  đặt liên kết tới, và ngược lại. */
+  unlinked: string[];
+  /** Trang không trỏ đi đâu cả — ngõ cụt cho người đọc lẫn cho bot. */
+  deadEnds: string[];
+  /** Tổng số cạnh (liên kết nội bộ giữa hai trang khác nhau). */
+  edges: number;
+}
+
 export interface PageGraph {
   siteUrl: string;
   total: number;
@@ -39,6 +84,8 @@ export interface PageGraph {
   /** Trang lấy về lỗi. Nêu ra vì một trang không soi được KHÔNG phải trang
    *  lành: gộp nó vào nhóm lành là cách bỏ sót đúng thứ đang hỏng. */
   failed: { path: string; reason: string }[];
+  /** Liên kết nội bộ THẬT — thẻ <a href> trong HTML, không phải breadcrumb. */
+  links: LinkStats;
   elapsedMs: number;
 }
 
@@ -72,7 +119,27 @@ function breadcrumbItems(html: string): string[] | null {
   return null;
 }
 
-export async function buildPageGraph(siteUrl: string): Promise<PageGraph> {
+/**
+ * Đường dẫn nội bộ trong HTML.
+ *
+ * Chỉ lấy href bắt đầu bằng "/" — liên kết tuyệt đối tới chính site vẫn đếm,
+ * nhưng khuôn của site này không sinh loại đó, và nhận diện chúng đòi so
+ * origin mà origin thì khác nhau giữa hai site. Bỏ neo (#), bỏ query: hai thứ
+ * đó trỏ cùng một trang, và đếm chúng thành cạnh riêng sẽ thổi phồng con số
+ * duy nhất mà hình này dùng.
+ */
+function internalHrefs(html: string): string[] {
+  const out = new Set<string>();
+  for (const m of html.matchAll(/<a\b[^>]*\shref="([^"]+)"/g)) {
+    const raw = m[1];
+    if (!raw.startsWith("/")) continue;
+    const clean = raw.split("#")[0].split("?")[0].replace(/\/+$/, "") || "/";
+    out.add(clean);
+  }
+  return [...out];
+}
+
+export async function buildPageGraph(siteUrl: string, vertical: string): Promise<PageGraph> {
   const started = Date.now();
   const base = siteUrl.replace(/\/+$/, "");
 
@@ -81,6 +148,8 @@ export async function buildPageGraph(siteUrl: string): Promise<PageGraph> {
   const urls = [...sm.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
 
   const nodes = new Map<string, PageNode>();
+  /** path → những trang nó trỏ tới. */
+  const outbound = new Map<string, string[]>();
   const noBreadcrumb: string[] = [];
   const failed: { path: string; reason: string }[] = [];
   const ensure = (p: string): PageNode => {
@@ -118,6 +187,10 @@ export async function buildPageGraph(siteUrl: string): Promise<PageGraph> {
           return;
         }
 
+        // Liên kết thật, đọc từ CÙNG một lần tải. Không thêm request nào:
+        // vòng quét này vốn đã tải đủ mọi trang để đọc breadcrumb.
+        outbound.set(path, internalHrefs(html));
+
         const items = breadcrumbItems(html);
         if (!items) {
           // Trang chủ KHÔNG cần breadcrumb — nó không có tổ tiên nào để khai.
@@ -149,9 +222,39 @@ export async function buildPageGraph(siteUrl: string): Promise<PageGraph> {
     .map((n) => n.path)
     .sort();
 
+  /**
+   * Chỉ đếm cạnh tới trang CÓ TRONG SITEMAP.
+   *
+   * Một liên kết trỏ ra ngoài tập đó là chuyện khác hẳn — có thể là trang
+   * chưa publish, có thể là liên kết hỏng — và trộn nó vào hình cấu trúc sẽ
+   * làm con số nói sai. Trang không có trong sitemap cũng không có điểm để
+   * nối tới.
+   */
+  const known = new Set(nodes.keys());
+  const inbound = new Map<string, number>();
+  const byKind = new Map<string, number>();
+  const countByKind = new Map<PageKind, number>();
+  let edges = 0;
+  for (const p of known) countByKind.set(kindOf(p, vertical), (countByKind.get(kindOf(p, vertical)) ?? 0) + 1);
+  for (const [from, tos] of outbound) {
+    const fromKind = kindOf(from, vertical);
+    for (const to of tos) {
+      if (to === from || !known.has(to)) continue;
+      edges++;
+      inbound.set(to, (inbound.get(to) ?? 0) + 1);
+      const key = `${fromKind}→${kindOf(to, vertical)}`;
+      byKind.set(key, (byKind.get(key) ?? 0) + 1);
+    }
+  }
+  const unlinked = [...known].filter((p) => p !== "/" && (inbound.get(p) ?? 0) === 0).sort();
+  const deadEnds = [...known]
+    .filter((p) => (outbound.get(p) ?? []).filter((t) => t !== p && known.has(t)).length === 0)
+    .sort();
+
   return {
     siteUrl: base,
     total: urls.length,
+    links: { byKind, countByKind, inbound, unlinked, deadEnds, edges },
     nodes,
     orphans,
     noBreadcrumb: noBreadcrumb.sort(),
