@@ -130,6 +130,8 @@ void main().finally(() => prisma.$disconnect());
  *    và "household moves".
  */
 const PLACEHOLDERS = new Set(["count", "place", "counties"]);
+/** Trang một ZIP có chỗ thay khác: nó biết ZIP, không biết "bao nhiêu ZIP". */
+const MARKET_PLACEHOLDERS = new Set(["zip", "place", "detail"]);
 
 function checkClusterSpec(spec: NicheContentSpec): string[] {
   const c = spec.cluster;
@@ -179,10 +181,52 @@ function checkClusterSpec(spec: NicheContentSpec): string[] {
   return errors;
 }
 
-const clusterErrors = allSpecs().flatMap(checkClusterSpec);
+function checkMarketSpec(spec: NicheContentSpec): string[] {
+  const m = spec.market;
+  if (!m) return [];
+  const errors: string[] = [];
+  const strings: [string, string][] = [
+    ["market.description", m.description],
+    ["market.descriptionWithDetail", m.descriptionWithDetail],
+    ["market.interpretationHeading", m.interpretationHeading],
+  ];
+  for (const [where, text] of strings) {
+    for (const ph of text.matchAll(/\{([^}]*)\}/g)) {
+      if (!MARKET_PLACEHOLDERS.has(ph[1])) {
+        errors.push(`${spec.vertical}: ${where} dùng chỗ thay "{${ph[1]}}" không có trong tập [${[...MARKET_PLACEHOLDERS].join(", ")}]`);
+      }
+    }
+  }
+  const named = metricsNamedBy(spec);
+  for (const lead of m.leadMetrics) {
+    if (!named.has(lead.metric)) {
+      errors.push(`${spec.vertical}: market.leadMetrics trỏ chỉ số "${lead.metric}" mà đặc tả không nhắc tới`);
+    }
+    // {display} là chỗ thay DUY NHẤT ở đây: câu dẫn nói về một chỉ số, và nó
+    // không biết gì khác ngoài giá trị đã định dạng của chỉ số đó.
+    for (const ph of lead.phrase.matchAll(/\{([^}]*)\}/g)) {
+      if (ph[1] !== "display") {
+        errors.push(`${spec.vertical}: leadMetrics["${lead.metric}"] dùng chỗ thay "{${ph[1]}}" — chỉ {display} hợp lệ`);
+      }
+    }
+    if (!lead.phrase.includes("{display}")) {
+      errors.push(`${spec.vertical}: leadMetrics["${lead.metric}"] không chứa {display} — câu dẫn sẽ không có số nào`);
+    }
+  }
+
+  // Bản có câu dẫn PHẢI dùng {detail}; không thì hai bản giống hệt nhau và
+  // câu dẫn biến mất mà không ai thấy.
+  if (!m.descriptionWithDetail.includes("{detail}")) {
+    errors.push(`${spec.vertical}: market.descriptionWithDetail không chứa {detail} — câu dẫn sẽ bị bỏ lặng lẽ`);
+  }
+  return errors;
+}
+
+const clusterErrors = [...allSpecs().flatMap(checkClusterSpec), ...allSpecs().flatMap(checkMarketSpec)];
 if (clusterErrors.length > 0) {
   for (const e of clusterErrors) console.error(`  ✗ ${e}`);
   console.error(`\n✗ ${clusterErrors.length} vấn đề trong khối đặc tả trang cụm.`);
   process.exit(1);
 }
+console.log(`  ✓ khối trang một ZIP: ${allSpecs().filter((s) => s.market).length}/${allSpecs().length} nghề có.`);
 console.log(`  ✓ khối trang cụm: ${allSpecs().filter((s) => s.cluster).length}/${allSpecs().length} nghề có, chỗ thay hợp lệ, không nghề nào nhắc chữ của nghề khác.`);

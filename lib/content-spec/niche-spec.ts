@@ -92,6 +92,47 @@ export interface NicheClusterSpec {
   topicsHeading: string;
 }
 
+/**
+ * Trang MỘT ZIP: hai chuỗi mà `sections` không mô tả nổi.
+ *
+ * `sections` nói mỗi mục dùng chỉ số nào. Nó không nói meta description của
+ * trang, cũng không nói tiêu đề bọc ngoài đoạn diễn giải AI — hai thứ đó là
+ * văn xuôi thuần, và chúng đã nằm trong mã publisher từ đầu.
+ *
+ * Đo 20/9/2026 trên /auto-accident-attorney/nv/las-vegas-89108, sau khi nhánh
+ * CỤM đã sạch:
+ *
+ *   meta  "Federal migration and housing data for ZIP 89108 in Las Vegas, NV"
+ *   H2    "What this means for a move in Las Vegas"
+ *
+ * Meta description là chuỗi Google in dưới tiêu đề trong kết quả tìm kiếm,
+ * nên đây là chỗ rò dễ thấy nhất với người thật. 63 trang.
+ *
+ * Chỗ thay: {zip} {place} {detail}.
+ */
+export interface NicheMarketSpec {
+  /**
+   * Chỉ số mở đầu mô tả, theo thứ tự.
+   *
+   * Mô tả dẫn bằng con số PHÂN BIỆT trang này với mọi trang khác của site,
+   * thay vì lặp lại tiêu đề. Publisher từng ghim cứng hai chỉ số cho việc đó
+   * — irs_migration_net_households và census_median_home_value_usd — nên với
+   * nghề không có hai chỉ số ấy, câu dẫn lặng lẽ rỗng và mọi trang dùng chung
+   * một mô tả không phân biệt gì.
+   *
+   * `phrase` có đúng một chỗ thay: {display} — chuỗi HQ đã định dạng sẵn, thứ
+   * trang in ra nguyên văn. Không dựng lại số ở đây: hai nơi định dạng một
+   * con số là hai câu trả lời cho một câu hỏi.
+   */
+  leadMetrics: readonly { metric: string; phrase: string }[];
+  /** Meta khi trang không có câu dẫn riêng. */
+  description: string;
+  /** Meta khi có — `{detail}` là câu dẫn đó, đặt lên đầu. */
+  descriptionWithDetail: string;
+  /** Tiêu đề mục chứa đoạn diễn giải AI. */
+  interpretationHeading: string;
+}
+
 export interface NicheSection {
   key: string;
   /** Tiêu đề mục trên trang. Người đọc thấy chuỗi này. */
@@ -127,6 +168,8 @@ export interface NicheContentSpec {
    * về chuyển nhà.
    */
   cluster?: NicheClusterSpec;
+  /** Chữ cho trang một ZIP. Vắng mặt = publisher dùng chữ trung tính. */
+  market?: NicheMarketSpec;
   /** Chỉ số thuộc nguồn liên quan nhưng CỐ Ý không dùng, kèm lý do. */
   excluded: readonly { metric: string; why: string }[];
 }
@@ -192,6 +235,18 @@ const MOVING: NicheContentSpec = {
     distinguishing: "housing and mobility estimates",
     topicsHeading: "By kind of move",
   },
+  market: {
+    // Nguyên văn thứ publisher đang in cho nghề này.
+    leadMetrics: [
+      { metric: "irs_migration_net_households", phrase: "Net household migration {display} a year countywide" },
+      { metric: "census_median_home_value_usd", phrase: "median home value {display}" },
+    ],
+    description:
+      "Federal migration and housing data for ZIP {zip} in {place}, with the source and collection date for every figure.",
+    descriptionWithDetail:
+      "{detail}. Federal migration and housing data for ZIP {zip}, with the source and collection date for every figure.",
+    interpretationHeading: "What this means for a move in {place}",
+  },
   excluded: [],
 };
 
@@ -246,6 +301,19 @@ const AUTO_ACCIDENT: NicheContentSpec = {
     ],
     distinguishing: "commuting estimates",
     topicsHeading: "By kind of exposure",
+  },
+  market: {
+    leadMetrics: [
+      { metric: "fars_fatal_crashes_1yr", phrase: "{display} fatal crashes a year countywide" },
+      { metric: "commute_car_share_pct", phrase: "{display} of workers drive to work" },
+    ],
+    description:
+      "Fatal crashes recorded in the county containing ZIP {zip} in {place}, and how residents get to work, with the source and collection date for every figure.",
+    descriptionWithDetail:
+      "{detail}. Fatal crashes recorded in the county containing ZIP {zip}, and how residents get to work, with the source and collection date for every figure.",
+    // KHÔNG "what this means for you": trang không biết người đọc là ai, và
+    // một lời hứa tư vấn trên trang chỉ có số liệu là lời hứa không giữ được.
+    interpretationHeading: "What these figures show for {place}",
   },
   excluded: [],
 };
