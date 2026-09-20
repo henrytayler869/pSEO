@@ -225,6 +225,16 @@ const GSC_FULL_SCOPE = "https://www.googleapis.com/auth/webmasters";
 export interface SubmittedSitemap {
   path: string;
   lastSubmitted: string | null;
+  /**
+   * Khi Google THỰC SỰ tải sitemap về — khác hẳn `lastSubmitted`, vốn chỉ nói
+   * "ta đã bấm nộp".
+   *
+   * Hai thứ đó trả lời hai câu và chỉ một câu đáng hỏi: nộp xong mà Google
+   * chưa tải thì sitemap chưa có tác dụng gì, và màn hình chỉ hiện ngày nộp sẽ
+   * đọc như đã xong. Trường này Google vẫn trả về từ trước; nó chỉ chưa được
+   * map — phiên phân tích GSC/GA4 phải gọi API thô mới lấy được.
+   */
+  lastDownloaded: string | null;
   isPending: boolean;
   warnings: number;
   errors: number;
@@ -256,9 +266,14 @@ export async function listSitemaps(propertyUrl: string): Promise<SubmittedSitema
   return (body.sitemap as Record<string, unknown>[]).map((s) => ({
     path: typeof s.path === "string" ? s.path : "(không rõ)",
     lastSubmitted: typeof s.lastSubmitted === "string" ? s.lastSubmitted : null,
+    lastDownloaded: typeof s.lastDownloaded === "string" ? s.lastDownloaded : null,
     isPending: s.isPending === true,
     warnings: Number(s.warnings ?? 0),
     errors: Number(s.errors ?? 0),
+    // CỐ Ý không đọc `contents[].indexed`. Đo 20/9/2026: nó báo 0 cho cả hai
+    // property trong khi URL Inspection nói 14 và 37 trang đã index. Một con
+    // số sai mà trông như số thật thì tệ hơn không có số — và ở đây nó sẽ
+    // khiến người xem kết luận site chưa được index.
     submittedUrls: Array.isArray(s.contents)
       ? (s.contents as Record<string, unknown>[]).reduce((sum, c) => sum + Number(c.submitted ?? 0), 0)
       : null,
