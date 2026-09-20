@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { PublisherTabs, PublisherSubTabs, gscSubTabs } from "@/components/publisher-tabs";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Activity, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Activity, AlertTriangle, Timer } from "lucide-react";
 import { prisma } from "@/lib/db/prisma";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 import { getIndexLog } from "@/lib/indexing/log";
+import { getRecheckStatus, RECHECK_INTERVAL_HOURS, HEARTBEAT_HOURS } from "@/lib/indexing/schedule";
 import { RecheckButton, RecordManualForm } from "@/components/index-log-forms";
 
 const ARM_LABEL: Record<string, string> = {
@@ -31,6 +32,7 @@ export default async function IndexLogPage({ params }: { params: Promise<{ websi
   if (!website) notFound();
 
   const { rows, arms, daysElapsed } = await getIndexLog(websiteId, website.url);
+  const schedule = await getRecheckStatus(websiteId);
   const neverChecked = rows.filter((r) => r.checkCount === 0).length;
   const dropped = rows.filter((r) => r.droppedOut);
 
@@ -112,6 +114,65 @@ export default async function IndexLogPage({ params }: { params: Promise<{ websi
           </CardContent>
         </Card>
       )}
+
+      {/*
+        Pipeline thay cho routine bấm tay.
+
+        Ba câu KHÁC NHAU, và gộp chúng lại là cách một lịch chạy chết mà không
+        ai biết: "đo lần cuối lúc nào", "nhịp tim còn đập không", "tới hạn
+        chưa". Một màn hình chỉ hiện câu đầu sẽ trông y hệt nhau dù timer đã
+        dừng ba tuần — đúng kiểu hỏng của routine mà pipeline này thay thế.
+      */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Timer className="h-4 w-4" /> Đo lại tự động
+          </CardTitle>
+          <CardDescription>
+            Mỗi {RECHECK_INTERVAL_HOURS} giờ một lần, do máy chủ tự chạy — không còn mốc nào phải nhớ. Nhịp kiểm tra mỗi{" "}
+            {HEARTBEAT_HOURS} giờ, và chỉ đo khi đã tới hạn.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2 text-sm">
+          {schedule.nothingToTrack ? (
+            <p className="text-muted-foreground">
+              Chưa có URL nào đang theo dõi, nên pipeline đúng khi không làm gì. Ghi mốc bên dưới là nó bắt đầu đo.
+            </p>
+          ) : schedule.lastRun === null ? (
+            <p className="text-muted-foreground">
+              Chưa có lần đo nào qua pipeline. Lần chạy tự động đầu tiên sẽ đo ngay vì chưa có mốc nào để so.
+            </p>
+          ) : (
+            <>
+              <p>
+                <span className="text-muted-foreground">Đo lần cuối: </span>
+                {schedule.lastRun.startedAt.toLocaleString("vi-VN")} — {schedule.lastRun.checked} URL
+                {schedule.lastRun.failed > 0 && `, ${schedule.lastRun.failed} URL hỏi không được`}
+                {schedule.lastRun.trigger === "manual" && " (bấm tay)"}
+              </p>
+              {schedule.lastRun.error && (
+                <p className="text-destructive">Lần chạy gần nhất gãy: {schedule.lastRun.error}</p>
+              )}
+              {schedule.dueAt && (
+                <p className="text-muted-foreground">
+                  Tới hạn tiếp: {schedule.dueAt.toLocaleString("vi-VN")}
+                  {schedule.overdue && " — đã quá hạn, nhịp gần nhất sẽ đo"}
+                </p>
+              )}
+            </>
+          )}
+          {schedule.heartbeatStale && (
+            <p className="flex items-start gap-2 text-destructive">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <span>
+                Không có nhịp nào trong hơn {2 * HEARTBEAT_HOURS} giờ (lần cuối{" "}
+                {schedule.lastHeartbeat?.toLocaleString("vi-VN")}). Timer trên máy chủ có thể đã dừng — kiểm{" "}
+                <code>systemctl status pseo-index-recheck.timer</code>. Chuỗi đo đang có lỗ, và lỗ đó không đo bù được.
+              </span>
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

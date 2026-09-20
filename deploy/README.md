@@ -269,3 +269,31 @@ Chậm hơn đổi symlink vì phải build lại — cái giá của layout t�
   cổng 80 — nếu không có default_server 443 với `ssl_reject_handshake on` thì
   gõ thẳng IP qua https sẽ rơi vào block duy nhất có 443 và **phục vụ Control
   Panel cho cả internet**. Chốt đó do session VPS dựng, nằm ngoài repo này.
+
+## Pipeline đo lại index
+
+Hai unit, cài TAY trên máy (như `pseo.service` — máy là nguồn sự thật, file
+trong kho là bản lưu để đọc):
+
+    deploy/pseo-index-recheck.service   chạy `npx tsx scripts/recheck-index.ts`
+    deploy/pseo-index-recheck.timer     gọi mỗi 6 giờ
+
+Cài:
+
+    scp deploy/pseo-index-recheck.{service,timer} root@HOST:/etc/systemd/system/
+    ssh root@HOST 'systemctl daemon-reload && systemctl enable --now pseo-index-recheck.timer'
+
+Nhịp ĐO là 24 giờ và nó nằm trong `lib/indexing/schedule.ts`
+(`RECHECK_INTERVAL_HOURS`), KHÔNG nằm trong timer. Timer chỉ là nhịp tim: nó
+gọi dày hơn, mã quyết định đã tới hạn chưa. Nhờ vậy đổi nhịp đo là sửa một
+hằng số rồi deploy, không phải ssh sửa unit — và hai bên không thể nói hai con
+số khác nhau. `npm run test:recheck-schedule` đọc cả hai file và đỏ khi lệch.
+
+Xem nó có chạy không:
+
+    ssh root@HOST 'systemctl list-timers pseo-index-recheck.timer'
+    ssh root@HOST 'journalctl -u pseo-index-recheck --since "2 days ago"'
+
+Màn hình Publisher → tab GSC → Theo dõi index cũng nói ba câu riêng: đo lần
+cuối lúc nào, tới hạn tiếp lúc nào, và nhịp tim còn đập không. Câu thứ ba là
+câu mà một lịch chạy đã chết sẽ không tự nói ra.

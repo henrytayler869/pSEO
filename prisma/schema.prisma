@@ -982,6 +982,7 @@ model Website {
   // và `prisma migrate diff` — phép kiểm duy nhất bắt được cột khai nhầm
   // model — sẽ đỏ sẵn, tức là một cổng người ta sẽ tắt.
   @@index([vertical])
+  indexRecheckRuns IndexRecheckRun[]
 }
 
 /// Một lần ĐO trạng thái index của một URL.
@@ -1023,6 +1024,39 @@ model IndexCheck {
 /// Nhiều hàng còn sống cho cùng một website là CỐ Ý: xoay khoá phải là tạo
 /// khoá mới → đổi bên publisher → thu hồi khoá cũ. Ép mỗi site một khoá thì
 /// mọi lần xoay đều có một quãng site chết.
+/// MỘT lần chạy của pipeline đo lại index — kể cả lần BỎ QUA và lần HỎNG.
+///
+/// Vì sao ghi cả lần bỏ qua: không có nó thì "pipeline chạy đều, hôm nay chưa
+/// tới hạn" và "pipeline chết ba tuần rồi" trông giống hệt nhau trên màn hình
+/// — cùng là một ngày tháng cũ. Đó đúng là kiểu hỏng mà routine bấm tay mắc
+/// phải và là lý do pipeline này tồn tại; chép lại nó dưới dạng tự động thì
+/// không được gì.
+///
+/// Nên hàng BỎ QUA là nhịp tim, hàng có `checked` là phép đo, và màn hình đọc
+/// hai thứ đó bằng hai câu khác nhau.
+model IndexRecheckRun {
+  id        String  @id @default(cuid())
+  websiteId String
+  website   Website @relation(fields: [websiteId], references: [id], onDelete: Cascade)
+
+  /// "scheduled" = timer gọi. "manual" = người bấm nút.
+  trigger String
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  checked Int @default(0)
+  failed  Int @default(0)
+
+  /// Lý do KHÔNG đo lần này. Null = có đo thật.
+  skipped String?
+
+  /// Lỗi làm cả lần chạy gãy — khác `failed`, vốn đếm từng URL hỏi không được.
+  error String?
+
+  @@index([websiteId, startedAt])
+}
+
 model PublisherApiKey {
   id String @id @default(cuid())
 

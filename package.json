@@ -9,6 +9,8 @@
     "lint": "eslint",
     "db:tunnel": "./scripts/db-tunnel.sh",
     "verify:niche-spec": "tsx scripts/verify-niche-spec.ts",
+    "test:recheck-schedule": "tsx scripts/test-recheck-schedule.ts",
+    "index:recheck": "tsx scripts/recheck-index.ts",
     "test:csv": "tsx scripts/test-csv-parser.ts",
     "db:which": "tsx scripts/db-which.ts",
     "predev": "./scripts/db-tunnel.sh --ensure; ./scripts/wp-tunnel.sh --ensure; true",
