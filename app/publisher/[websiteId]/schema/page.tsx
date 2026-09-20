@@ -9,6 +9,7 @@ import { buildSchemaGraph } from "@/lib/publisher/schema-graph";
 import { buildPageGraph } from "@/lib/publisher/page-graph";
 import { SchemaMap } from "@/components/schema-map";
 import { PageLinkMap } from "@/components/page-link-map";
+import { InternalLinkMap, UnlinkedPages } from "@/components/internal-link-map";
 
 function shortId(id: string | null): string {
   if (!id) return "—";
@@ -31,7 +32,7 @@ export default async function SchemaPage({ params }: { params: Promise<{ website
 
   const [graph, pages] = await Promise.all([
     buildSchemaGraph(website.url, website.vertical),
-    buildPageGraph(website.url),
+    buildPageGraph(website.url, website.vertical),
   ]);
 
   const linked = pages.total - pages.orphans.length - pages.noBreadcrumb.length;
@@ -67,6 +68,32 @@ export default async function SchemaPage({ params }: { params: Promise<{ website
         </CardHeader>
         <CardContent>
           <PageLinkMap graph={pages} />
+        </CardContent>
+      </Card>
+
+      {/*
+        Hình THỨ HAI, không thay hình thứ nhất.
+
+        Hai câu khác nhau: cây breadcrumb nói trang NẰM Ở ĐÂU trong cấu trúc
+        site tự khai; bản đồ này nói trang ĐƯỢC TRỎ TỚI từ đâu, bằng thẻ <a>
+        thật. Google đi theo thẻ <a>. Một trang có breadcrumb hoàn hảo mà
+        không ai đặt liên kết tới vẫn là trang phải chờ được chiếu cố.
+      */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Cấu trúc liên kết nội bộ</CardTitle>
+          <CardDescription>
+            Liên kết THẬT giữa các trang và bài viết — thẻ <code>&lt;a href&gt;</code> trong HTML, không phải
+            breadcrumb. Đọc từ cùng lần quét ở trên, nên không tốn thêm request nào.{" "}
+            <strong>{pages.links.edges}</strong> liên kết nội bộ giữa {pages.total} trang.
+            <br />
+            Vẽ từng cạnh một thì 4.442 đường cho ra một búi tóc đen. Gộp theo LOẠI trang cho 8 điểm và khoảng 30
+            đường — mỗi đường vẫn mang trọng số thật, chỉ là cộng lại chứ không cắt bớt.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5">
+          <InternalLinkMap graph={pages} />
+          <UnlinkedPages graph={pages} />
         </CardContent>
       </Card>
 
