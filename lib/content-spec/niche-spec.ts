@@ -322,6 +322,18 @@ const AUTO_ACCIDENT: NicheContentSpec = {
         "nên không được viết thành 'số vụ tai nạn'. Cấp HẠT, mục phải nói rõ.",
     },
     {
+      key: "crash-rate",
+      heading: "How common that is for a county this size",
+      scope: "COUNTY",
+      requires: ["fars_fatal_crashes_1yr", "census_county_population"],
+      says:
+        "Số vụ tai nạn chết người đặt CẠNH dân số của chính hạt đó. Số vụ tuyệt đối nói về ĐỘ LỚN " +
+        "của hạt nhiều hơn nói về đường sá: Los Angeles County 817 vụ và một hạt nông thôn 12 vụ " +
+        "không so được với nhau. Mục này đưa cả hai con số để so sánh có mẫu số. KHÔNG nói hạt nào " +
+        "'nguy hiểm hơn' — FARS không chuẩn hoá theo số dặm xe chạy, và NHTSA chỉ công bố dặm xe " +
+        "theo BANG nên mẫu số đó không dựng được ở cấp hạt.",
+    },
+    {
       key: "commute-exposure",
       heading: "How people get to work here",
       scope: "ZIP",
