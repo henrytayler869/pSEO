@@ -46,6 +46,7 @@ export const TEMPORAL_COVERAGE: Record<string, string | null> = {
   census_acs_housing: yearRange(ACS_YEAR - 4, ACS_YEAR),
   census_commute: yearRange(ACS_YEAR - 4, ACS_YEAR),
   census_mobility: yearRange(ACS_YEAR - 4, ACS_YEAR),
+  census_county_population: yearRange(ACS_YEAR - 4, ACS_YEAR),
   fars_fatal_crashes: yearRange(FARS_DATA_YEAR, FARS_DATA_YEAR),
   irs_migration: yearRange(SOI_FROM_YEAR, SOI_TO_YEAR),
   noaa_climate_normals: NOAA_NORMALS_PERIOD,
