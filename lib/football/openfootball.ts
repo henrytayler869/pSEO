@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { fetchSeasonTxt, hasTxtOverlay } from "./openfootball-txt";
 
 /**
  * Lịch thi đấu và kết quả, đọc từ openfootball/football.json.
@@ -239,4 +240,81 @@ export function buildStandings(season: LeagueSeason): StandingRow[] {
       y.goalsFor - x.goalsFor ||
       x.team.localeCompare(y.team)
   );
+}
+
+
+/**
+ * Nền JSON + lớp phủ .txt, và chỗ chồng lấn là CỔNG CANH.
+ *
+ * Khoá ghép là CẶP ĐỘI, không phải ngày. Trong giải vòng tròn hai lượt, mỗi
+ * cặp (chủ, khách) xuất hiện đúng một lần — đó là bất biến của thể thức, và
+ * cổng canh đã kiểm nó. Ghép theo ngày thì một trận bị hoãn mà chỉ một nguồn
+ * cập nhật sẽ thành hai trận khác nhau, rồi tỷ số bị phủ lên nhầm chỗ.
+ *
+ * XUNG ĐỘT KHÔNG ĐƯỢC PHỦ IM LẶNG. Hai nguồn cùng khai tỷ số mà khác nhau
+ * nghĩa là ít nhất một bên sai, và không có cách nào biết bên nào từ trong
+ * chỗ này. Nên giữ NỀN, ghi xung đột ra, và để cổng canh làm nó đỏ — chọn
+ * bừa một bên là biến một mâu thuẫn đo được thành một con số trông chắc
+ * chắn.
+ */
+export interface MergedSeason extends LeagueSeason {
+  /** Số trận lấy được tỷ số từ .txt mà JSON chưa có. */
+  overlaid: number;
+  /** Trận mà hai nguồn khai hai tỷ số khác nhau. Rỗng là điều kiện bình thường. */
+  conflicts: { home: string; away: string; base: [number, number]; overlay: [number, number] }[];
+  /** Cặp đội có trong .txt mà KHÔNG có trong nền — tên đội lệch giữa hai bản. */
+  unmatched: string[];
+  overlaySource: "txt" | "none";
+}
+
+export async function fetchLeagueSeasonMerged(
+  code: LeagueCode,
+  season: string,
+  now: Date,
+): Promise<MergedSeason> {
+  const base = await fetchLeagueSeason(code, season, now);
+  if (!hasTxtOverlay(code)) {
+    return { ...base, overlaid: 0, conflicts: [], unmatched: [], overlaySource: "none" };
+  }
+
+  const txt = await fetchSeasonTxt(code, season);
+  const key = (h: string, a: string) => `${h}\u0000${a}`;
+  const byPair = new Map(base.matches.map((m) => [key(m.home, m.away), m]));
+
+  const conflicts: MergedSeason["conflicts"] = [];
+  const unmatched: string[] = [];
+  let overlaid = 0;
+
+  for (const t of txt.matches) {
+    if (!t.fullTime) continue;
+    const b = byPair.get(key(t.home, t.away));
+    if (!b) { unmatched.push(`${t.home} v ${t.away}`); continue; }
+    if (b.fullTime) {
+      if (b.fullTime[0] !== t.fullTime[0] || b.fullTime[1] !== t.fullTime[1]) {
+        conflicts.push({ home: t.home, away: t.away, base: b.fullTime, overlay: t.fullTime });
+      }
+      continue;
+    }
+    b.fullTime = t.fullTime;
+    // Tỷ số hiệp một chỉ nhận khi .txt thật sự có. Trận 0-0 trong .txt cũng
+    // không ghi hiệp một, đúng như bản JSON — xem ScoreSchema.
+    b.halfTime = t.halfTime;
+    overlaid++;
+  }
+
+  const withScore = base.matches.filter((m) => m.fullTime !== null);
+  const lastResultDate = withScore.length > 0 ? withScore.map((m) => m.date).sort().at(-1)! : null;
+
+  return {
+    ...base,
+    played: withScore.length,
+    lastResultDate,
+    stalenessDays: lastResultDate
+      ? Math.floor((now.getTime() - new Date(`${lastResultDate}T00:00:00Z`).getTime()) / 86_400_000)
+      : null,
+    overlaid,
+    conflicts,
+    unmatched,
+    overlaySource: "txt",
+  };
 }
