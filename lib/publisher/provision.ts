@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { checkNicheReadiness } from "@/lib/publisher/niche-readiness";
 import { getCredential } from "@/lib/settings/credentials";
 import { ensureDnsRecord, findDnsRecord } from "@/lib/cloudflare/dns";
 import { createPropertyWithWebStream, listAccounts, AnalyticsAdminError } from "@/lib/google/analytics-admin";
@@ -96,6 +97,33 @@ export async function provisionSite(input: ProvisionInput): Promise<ProvisionRep
     steps.push(r);
     return r.status !== "failed";
   };
+
+  /**
+   * BƯỚC ĐẦU TIÊN, trước cả zone: nghề này có đủ thứ để xuất bản chưa.
+   *
+   * Các bước còn lại lo hạ tầng — zone, DNS, GA4, secret — và chúng thành
+   * công kể cả khi nghề chưa có một chữ nào của riêng nó. Đó đúng là cách
+   * theaccidentrecord.com ra đời: hạ tầng xanh hết, rồi 112 trang in văn xuôi
+   * nghề khác trong ba tuần.
+   *
+   * KHÔNG chặn việc dựng. Hạ tầng dựng trước rồi viết nội dung sau là một
+   * trình tự hợp lệ, và chặn nó sẽ biến một lời nhắc thành một chướng ngại
+   * người ta học cách đi vòng. Nhưng nó phải NÓI RA, ở bước đầu tiên, kèm tên
+   * thứ thiếu và chuyện đã xảy ra khi thiếu.
+   */
+  const readiness = await checkNicheReadiness(input.vertical);
+  const missing = readiness.checks.filter((c) => !c.ok);
+  push({
+    key: "niche",
+    title: `Nghề "${input.vertical}" sẵn sàng xuất bản`,
+    status: readiness.ready ? (readiness.warnings > 0 ? "waiting" : "done") : "waiting",
+    detail: readiness.ready && missing.length === 0
+      ? `Đủ cả ${readiness.checks.length} mục.`
+      : missing.map((c) => `${c.severity === "blocker" ? "THIẾU" : "mỏng"}: ${c.title} — ${c.detail}`).join("; ") +
+        (readiness.ready
+          ? ". Dựng được, nhưng trang sẽ mỏng hơn nghề đã đủ."
+          : ". Dựng được HẠ TẦNG, nhưng ĐỪNG xuất bản nội dung trước khi bù đủ — trang sẽ nói sai nghề hoặc nói rỗng."),
+  });
 
   const domain = await prisma.domain.findFirst({ where: { name: host } });
   if (!domain?.cloudflareZoneId) {
