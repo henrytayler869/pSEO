@@ -96,6 +96,28 @@ export const REQUIRED_METRICS_BY_ADAPTER: Record<string, string[]> = {
   // 161/161 khác 0 — khác ca census_mobility_rate_pct, nơi mẫu số có thể là
   // một ZCTA dân số 0.
   census_commute: ["commute_car_share_pct", "commute_60min_plus_pct", "commute_workers_total"],
+  /**
+   * Mẫu số của FARS, nên nó phải có ở đúng những chỗ FARS có.
+   *
+   * ĐO TRƯỚC KHI PHÂN LOẠI, như hai mục trên. Thu lần đầu 21/9/2026 trên toàn
+   * bộ 300 địa điểm:
+   *
+   *   có dân số hạt                     299/300
+   *   có fars_fatal_crashes_1yr         296
+   *   có FARS mà THIẾU dân số               1
+   *
+   * Đúng một ca, và nó có tên: 06902 Stamford, CT — FIPS 09001. FARS còn dùng
+   * mã hạt CŨ của Connecticut, còn ACS 2023 đã chuyển sang Planning Region
+   * (09110-09190). Hai nguồn khoá theo hai hệ mã khác nhau cho cùng một chỗ,
+   * và kho này đã ghi đúng cái bẫy đó cho irs_migration.
+   *
+   * Vào nhóm BẮT BUỘC chứ không phải "nên có": một trang in số vụ tai nạn mà
+   * thiếu dân số thì không chuẩn hoá được, và con số tuyệt đối đứng một mình
+   * mời người đọc so hai hạt khác cỡ với nhau. Luật completeness nêu tên
+   * Stamford mỗi lần chạy là ĐÚNG — đó là một trang không dựng được tỷ lệ,
+   * chứ không phải nhiễu.
+   */
+  census_county_population: ["census_county_population"],
 };
 
 /**
