@@ -6,6 +6,7 @@ import { CensusAcsHousingAdapter } from "./adapters/census-acs-housing";
 import { CensusMobilityAdapter } from "./adapters/census-mobility";
 import { IrsMigrationAdapter } from "./adapters/irs-migration";
 import { FarsFatalCrashesAdapter } from "./adapters/fars-fatal-crashes";
+import { CensusCountyPopulationAdapter } from "./adapters/census-county-population";
 import { CensusCommuteAdapter } from "./adapters/census-commute";
 import { NoaaClimateNormalsAdapter } from "./adapters/noaa-climate-normals";
 import { EiaElectricityAdapter } from "./adapters/eia-electricity";
@@ -37,6 +38,7 @@ export const ALL_ADAPTER_KEYS = [
   "nrel_pvwatts",
   "census_acs_housing",
   "census_mobility",
+  "census_county_population",
   "irs_migration",
   "noaa_climate_normals",
   "eia_electricity",
@@ -83,6 +85,17 @@ export async function resolveAdapter(adapterKey: string): Promise<CollectorAdapt
         );
       }
       return new CensusMobilityAdapter(apiKey);
+    }
+    case "census_county_population": {
+      const apiKey = await getCredential("CENSUS_API_KEY");
+      if (!apiKey) {
+        throw new MissingCredentialError(
+          "Chưa cấu hình CENSUS_API_KEY (ở trang Cài đặt hoặc biến môi trường) — không thể thu thập Census B01003. " +
+            "Lấy key miễn phí, cấp tức thì tại api.census.gov/data/key_signup.html. Không có đường tắt giả lập cho nguồn này.",
+          "CENSUS_API_KEY"
+        );
+      }
+      return new CensusCountyPopulationAdapter(apiKey);
     }
     case "irs_migration":
       return new IrsMigrationAdapter(); // public IRS SOI file, no credential needed

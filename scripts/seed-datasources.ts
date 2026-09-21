@@ -55,6 +55,26 @@ const SOURCES = [
     relevantVerticals: ["auto-accident-attorney"],
   },
   {
+    name: "Census ACS5 (county population)",
+    adapterKey: "census_county_population",
+    endpoint: "https://api.census.gov/data/2023/acs/acs5 (bảng B01003, for=county)",
+    unit: "people",
+    geoResolution: "COUNTY" as const,
+    refreshInterval: "P365D",
+    isActive: true,
+    // MẪU SỐ, không phải một sự thật về nghề. fars_fatal_crashes_1yr là số vụ
+    // TUYỆT ĐỐI: Los Angeles County 817 vụ và một hạt nông thôn 12 vụ không so
+    // được với nhau, và đặt cạnh nhau là mời người đọc so sai. "Trên 100.000
+    // dân" là phép chuẩn hoá tiêu chuẩn cho dữ liệu tai nạn, và là thứ duy
+    // nhất trong tầm với — NHTSA chỉ công bố số dặm xe chạy theo BANG, nên
+    // mẫu số theo quãng đường không dựng được ở cấp hạt.
+    //
+    // Cấp HẠT chứ không cấp ZIP, dù ACS có cả hai: chia một tử số cấp hạt cho
+    // mẫu số cấp ZIP cho ra con số lớn gấp hàng chục lần và trông vẫn như một
+    // tỷ lệ hợp lý.
+    relevantVerticals: ["auto-accident-attorney"],
+  },
+  {
     name: "NHTSA FARS (fatal traffic crashes)",
     adapterKey: "fars_fatal_crashes",
     endpoint: "https://static.nhtsa.gov/nhtsa/downloads/FARS/2022/National/FARS2022NationalCSV.zip",
