@@ -129,6 +129,12 @@ void main().finally(() => prisma.$disconnect());
  *    bắt đúng ca đã xảy ra: 27 trang của site tai nạn in "Household migration"
  *    và "household moves".
  */
+/** Chữ của nghề khác, dùng cho MỌI chuỗi hiện trên trang mà đặc tả cấp. */
+const FOREIGN_WORDS_FOR: Record<string, readonly string[]> = {
+  "auto-accident-attorney": ["household moves", "Household migration", "moving compan", "moving", "housing stock"],
+  "moving-services": ["fatal crash", "crash fatalit"],
+};
+
 const PLACEHOLDERS = new Set(["count", "place", "counties"]);
 /** Trang một ZIP có chỗ thay khác: nó biết ZIP, không biết "bao nhiêu ZIP". */
 const MARKET_PLACEHOLDERS = new Set(["zip", "place", "detail"]);
@@ -166,10 +172,7 @@ function checkClusterSpec(spec: NicheContentSpec): string[] {
 
   // Từ của nghề KHÁC. Danh sách nhỏ và cụ thể, không phải bộ lọc chung: nó
   // canh đúng ca đã xảy ra, và một danh sách rộng sẽ chặn cả câu hợp lệ.
-  const FOREIGN: Record<string, readonly string[]> = {
-    "auto-accident-attorney": ["household moves", "Household migration", "moving company", "housing stock"],
-    "moving-services": ["fatal crash", "crash fatalit"],
-  };
+  const FOREIGN = FOREIGN_WORDS_FOR;
   for (const word of FOREIGN[spec.vertical] ?? []) {
     for (const [where, text] of strings) {
       if (text.toLowerCase().includes(word.toLowerCase())) {
@@ -241,10 +244,22 @@ function checkFaq(spec: NicheContentSpec): string[] {
   const faq = spec.faq;
   if (!faq) return [];
   const errors: string[] = [];
+
+  // Tiêu đề mục CŨNG là chữ hiện trên trang, nên nó chịu đúng luật như mọi
+  // chuỗi khác: không được nhắc nghề khác. Ca đã xảy ra là chuỗi viết cứng
+  // "Questions about moving in this area" in trên 63 trang site tai nạn.
+  if (faq.heading.trim().length === 0) {
+    errors.push(`${spec.vertical}: faq.heading rỗng — mục FAQ sẽ render không tiêu đề`);
+  }
+  for (const word of FOREIGN_WORDS_FOR[spec.vertical] ?? []) {
+    if (faq.heading.toLowerCase().includes(word.toLowerCase())) {
+      errors.push(`${spec.vertical}: faq.heading nhắc "${word}" — chữ của nghề khác`);
+    }
+  }
   const named = metricsNamedBy(spec);
   const keys = new Set<string>();
 
-  for (const entry of faq) {
+  for (const entry of faq.entries) {
     if (keys.has(entry.key)) errors.push(`${spec.vertical}: faq có hai câu cùng key "${entry.key}"`);
     keys.add(entry.key);
 
@@ -283,6 +298,6 @@ if (clusterErrors.length > 0) {
   console.error(`\n✗ ${clusterErrors.length} vấn đề trong khối đặc tả trang cụm.`);
   process.exit(1);
 }
-console.log(`  ✓ khối FAQ: ${allSpecs().filter((s) => s.faq).length}/${allSpecs().length} nghề có, tổng ${allSpecs().reduce((n, s) => n + (s.faq?.length ?? 0), 0)} câu, mọi {metric:…} đều khai trong requires.`);
+console.log(`  ✓ khối FAQ: ${allSpecs().filter((s) => s.faq).length}/${allSpecs().length} nghề có, tổng ${allSpecs().reduce((n, s) => n + (s.faq?.entries.length ?? 0), 0)} câu, mọi {metric:…} đều khai trong requires.`);
 console.log(`  ✓ khối trang một ZIP: ${allSpecs().filter((s) => s.market).length}/${allSpecs().length} nghề có.`);
 console.log(`  ✓ khối trang cụm: ${allSpecs().filter((s) => s.cluster).length}/${allSpecs().length} nghề có, chỗ thay hợp lệ, không nghề nào nhắc chữ của nghề khác.`);
