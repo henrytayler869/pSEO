@@ -1,0 +1,25 @@
+/var/log/nginx/*.log {
+	daily
+	missingok
+	rotate 14
+	compress
+	delaycompress
+	notifempty
+	create 0640 www-data adm
+	sharedscripts
+	prerotate
+		if [ -d /etc/logrotate.d/httpd-prerotate ]; then \
+			run-parts /etc/logrotate.d/httpd-prerotate; \
+		fi \
+	endscript
+	postrotate
+		invoke-rc.d nginx rotate >/dev/null 2>&1
+		# Mỗi file log MỚI tự mang chú thích về cột IP.
+		#
+		# Dấu mốc ghi một lần lúc bật real_ip (2026-09-20T14:54:25Z) chỉ sống
+		# được 14 ngày: logrotate daily + rotate 14 nên nó trôi ra khỏi bộ log
+		# khoảng 4/10/2026, và sau đó không file nào còn nói cột IP nghĩa là gì.
+		# Ghi lại ở mỗi lần xoay thì mọi file đều tự giải thích, mãi mãi.
+		echo "### cột IP = IP KHÁCH THẬT (real_ip qua CF-Connecting-IP, bật 2026-09-20T14:54:25Z). Log TRƯỚC mốc đó ghi IP Cloudflare cho mọi khách." >> /var/log/nginx/access.log
+	endscript
+}

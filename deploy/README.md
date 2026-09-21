@@ -333,6 +333,15 @@ Cloudflare cho mọi khách; SAU mốc là IP khách thật. Cùng một cột, 
 Ai quét log bắc qua mốc đó mà không biết sẽ thấy phần trước cho ra "0 dòng
 Googlebot xác minh được", giống hệt kết quả thật nếu Google ngừng crawl.
 
+DẤU MỐC GHI MỘT LẦN THÌ KHÔNG SỐNG NỔI. logrotate là `daily` + `rotate 14`,
+nên dòng đánh dấu viết lúc bật trôi ra khỏi bộ log sau 14 ngày — đo 21/9: nó
+đã nằm ở `access.log.1` chỉ sau một đêm, và sẽ biến mất hẳn khoảng 4/10/2026.
+Sau đó không file nào còn nói cột IP nghĩa là gì.
+
+Nên `deploy/logrotate-nginx` (bản sao của /etc/logrotate.d/nginx) có thêm một
+dòng `postrotate` ghi chú thích vào MỌI file log mới. Mỗi file tự giải thích,
+không phụ thuộc file nào khác còn sống.
+
 Đặt lại khi dựng máy mới:
 
     scp deploy/nginx-cloudflare-real-ip.conf root@HOST:/etc/nginx/conf.d/
