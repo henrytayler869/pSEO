@@ -272,11 +272,29 @@ export interface KeywordCandidateMetrics {
  * "crash data by state"; DataForSEO trả no-data cho đúng chữ đó, còn
  * "car accident statistics by state" có 170/mo và KD 25. Giữ chủ đề, đổi cách
  * gọi — một trang trụ dựng trên cụm không ai tìm là một trang dựng trên ý kiến.
+ *
+ * 2026-09-21: trụ THỨ HAI của theaccidentrecord.com. Kiểm trước khi thêm,
+ * trên 5.554 từ khoá đã đo:
+ *
+ *   nhắm ĐÚNG "worst cities to drive in usa"   0
+ *   chứa "cities to drive"                     0
+ *   chứa "worst cities"                        0
+ *
+ * Lại chọn bằng đo, và lần này số liệu bác bỏ toàn bộ ứng viên tự nghĩ:
+ * "longest commutes in america", "deadliest counties for drivers", "rush hour
+ * accident statistics" đều no-data. Cụm được chọn có 1.000/tháng với KD 3 —
+ * gấp sáu lần trụ thứ nhất ở một phần tám độ khó.
+ *
+ * Nhóm đúng ý định nghề thì ngoài tầm với DR 0 hiện tại: "car accident
+ * statistics" 1.300/tháng nhưng KD 66, "how many car accidents per year" 720
+ * với KD 59. Ghi ra để lần sau ai đó định nhắm chúng thì biết đã có người đo
+ * và biết vì sao không chọn — chứ không phải vì không ai nghĩ tới.
  */
 const RESERVED_TERMS = new Map<string, string>([
   ["moving services cross country", "trang pillar /long-distance-moving"],
   ["local moving services", "trang pillar /local-moving"],
   ["car accident statistics by state", "trang pillar /car-accident-statistics-by-state"],
+  ["worst cities to drive in usa", "trang pillar /worst-cities-to-drive-in"],
 ]);
 
 function normaliseTerm(keyword: string): string {
