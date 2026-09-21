@@ -9,6 +9,7 @@ import { getSpendUsdForVertical } from "@/lib/ai/anthropic";
 import { ContentFillQueue } from "@/components/content-fill-queue";
 import { ClusterFillQueue } from "@/components/cluster-fill-queue";
 import { buildClusterFillQueue } from "@/lib/queries/cluster-fill-queue";
+import { checkNicheReadiness } from "@/lib/publisher/niche-readiness";
 
 /**
  * Hàng đợi điền nội dung của một publisher.
@@ -32,11 +33,13 @@ export default async function ContentPage({ params }: { params: Promise<{ websit
   // Hai hàng đợi dựng SONG SONG. Mỗi cái đều tự hỏi /api/inventory và tự dựng
   // fact set, nên chạy nối tiếp là cộng thẳng hai lần chờ vào một màn hình vốn
   // đã chậm có chủ ý.
-  const [queue, clusterQueue, spent] = await Promise.all([
+  const [queue, clusterQueue, spent, readiness] = await Promise.all([
     buildFillQueue(site),
     buildClusterFillQueue(site),
     getSpendUsdForVertical(site.vertical),
+    checkNicheReadiness(site.vertical),
   ]);
+  const notReady = readiness.checks.filter((c) => !c.ok);
 
   return (
     <div className="flex flex-col gap-6">
@@ -48,6 +51,42 @@ export default async function ContentPage({ params }: { params: Promise<{ websit
       <Link href={`/publisher/${websiteId}`} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
         <ArrowLeft className="size-3.5" /> Về trang publisher
       </Link>
+
+      {/*
+        Trạng thái NGHỀ, đặt TRƯỚC hàng đợi.
+        
+        Mỗi lần bấm ở đây là tiền thật gọi Anthropic. Sinh chữ cho một nghề
+        thiếu đặc tả thì tiền vẫn tiêu, văn bản vẫn qua validator, và trang vẫn
+        nói sai nghề — đúng chuỗi đã xảy ra với 90 trang ngày 18/9/2026. Nên
+        thứ này đứng trước nút, không nằm trong một tab khác.
+      */}
+      {notReady.length > 0 && (
+        <Card className={readiness.ready ? undefined : "border-destructive"}>
+          <CardHeader>
+            <CardTitle className={readiness.ready ? undefined : "text-destructive"}>
+              {readiness.ready
+                ? `Nghề "${site.vertical}" đủ để xuất bản, nhưng mỏng`
+                : `Nghề "${site.vertical}" CHƯA đủ để xuất bản`}
+            </CardTitle>
+            <CardDescription>
+              {readiness.ready
+                ? "Trang sẽ đúng nghề nhưng ít nội dung hơn nghề đã đủ. Điền được, chỉ là chưa đáng xếp hạng."
+                : "Điền nội dung bây giờ vẫn tốn tiền và vẫn cho ra trang nói sai nghề hoặc nói rỗng. Bù đủ phần dưới trước."}
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 text-sm">
+            {notReady.map((c) => (
+              <div key={c.key}>
+                <span className={c.severity === "blocker" ? "font-medium text-destructive" : "font-medium"}>
+                  {c.severity === "blocker" ? "THIẾU" : "Mỏng"}: {c.title}
+                </span>
+                <span className="text-muted-foreground"> — {c.detail}</span>
+                {c.incident ? <p className="mt-0.5 text-xs text-muted-foreground">{c.incident}</p> : null}
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
