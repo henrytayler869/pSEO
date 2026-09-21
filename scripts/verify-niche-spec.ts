@@ -222,11 +222,67 @@ function checkMarketSpec(spec: NicheContentSpec): string[] {
   return errors;
 }
 
-const clusterErrors = [...allSpecs().flatMap(checkClusterSpec), ...allSpecs().flatMap(checkMarketSpec)];
+/**
+ * Khối FAQ.
+ *
+ * Bốn phép kiểm, mỗi phép cho một cách hỏng:
+ *
+ * 1. `{metric:X}` phải nằm trong `requires` của chính câu đó. Không thì câu
+ *    render ra chuỗi "{metric:X}" nguyên văn trên trang — hoặc tệ hơn, chỉ số
+ *    vắng mặt mà câu vẫn render vì `requires` không nhắc nó.
+ * 2. Chỉ số trong `requires` phải là chỉ số nghề này thật sự có. Một câu đòi
+ *    chỉ số không tồn tại thì KHÔNG BAO GIỜ render, và im lặng.
+ * 3. Chỗ thay giới hạn ở {place} {zip} {county} — gõ sai thì in nguyên văn.
+ * 4. `key` không trùng: hai câu cùng key thì React dựng danh sách sai.
+ */
+const FAQ_PLACEHOLDERS = new Set(["place", "zip", "county"]);
+
+function checkFaq(spec: NicheContentSpec): string[] {
+  const faq = spec.faq;
+  if (!faq) return [];
+  const errors: string[] = [];
+  const named = metricsNamedBy(spec);
+  const keys = new Set<string>();
+
+  for (const entry of faq) {
+    if (keys.has(entry.key)) errors.push(`${spec.vertical}: faq có hai câu cùng key "${entry.key}"`);
+    keys.add(entry.key);
+
+    for (const m of entry.requires) {
+      if (!named.has(m)) {
+        errors.push(`${spec.vertical}: faq["${entry.key}"].requires trỏ chỉ số "${m}" mà đặc tả không nhắc tới — câu này sẽ không bao giờ render`);
+      }
+    }
+
+    for (const text of [entry.question, entry.answer]) {
+      for (const ph of text.matchAll(/\{([^}]*)\}/g)) {
+        const raw = ph[1];
+        if (raw.startsWith("metric:")) {
+          const metric = raw.slice("metric:".length);
+          if (!entry.requires.includes(metric)) {
+            errors.push(`${spec.vertical}: faq["${entry.key}"] dùng {metric:${metric}} mà KHÔNG khai trong requires — câu có thể render khi chỉ số vắng mặt`);
+          }
+          continue;
+        }
+        if (!FAQ_PLACEHOLDERS.has(raw)) {
+          errors.push(`${spec.vertical}: faq["${entry.key}"] dùng chỗ thay "{${raw}}" không hợp lệ`);
+        }
+      }
+    }
+  }
+  return errors;
+}
+
+const clusterErrors = [
+  ...allSpecs().flatMap(checkClusterSpec),
+  ...allSpecs().flatMap(checkMarketSpec),
+  ...allSpecs().flatMap(checkFaq),
+];
 if (clusterErrors.length > 0) {
   for (const e of clusterErrors) console.error(`  ✗ ${e}`);
   console.error(`\n✗ ${clusterErrors.length} vấn đề trong khối đặc tả trang cụm.`);
   process.exit(1);
 }
+console.log(`  ✓ khối FAQ: ${allSpecs().filter((s) => s.faq).length}/${allSpecs().length} nghề có, tổng ${allSpecs().reduce((n, s) => n + (s.faq?.length ?? 0), 0)} câu, mọi {metric:…} đều khai trong requires.`);
 console.log(`  ✓ khối trang một ZIP: ${allSpecs().filter((s) => s.market).length}/${allSpecs().length} nghề có.`);
 console.log(`  ✓ khối trang cụm: ${allSpecs().filter((s) => s.cluster).length}/${allSpecs().length} nghề có, chỗ thay hợp lệ, không nghề nào nhắc chữ của nghề khác.`);

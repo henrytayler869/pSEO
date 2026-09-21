@@ -133,6 +133,38 @@ export interface NicheMarketSpec {
   interpretationHeading: string;
 }
 
+/**
+ * FAQ của nghề — câu hỏi, và cách dựng câu trả lời TỪ CHÍNH FACT.
+ *
+ * Publisher CỐ Ý không render FAQ cho nghề đi đường spec: `const faq =
+ * handWritten ? deterministicFaq : []`. Quyết định đó đúng — bộ FAQ viết cứng
+ * là của nghề chuyển nhà, và một câu hỏi sai nghề lọt vào `FAQPage` còn tệ hơn
+ * không có câu nào, vì nó là thứ Google trích thẳng lên trang kết quả.
+ *
+ * Hệ quả: 63 trang ZIP của site tai nạn không có khối FAQ nào và không có
+ * `FAQPage` nào, trong khi site chuyển nhà có 5 câu. Chỗ thiếu không phải ở
+ * publisher — publisher không được phép đoán về nghề. Chỗ thiếu là đặc tả
+ * chưa nói.
+ *
+ * ═══ CÂU TRẢ LỜI DỰNG TỪ FACT, KHÔNG PHẢI VĂN VIẾT SẴN ═══
+ *
+ * `{metric:tên_chỉ_số}` được thay bằng chuỗi HQ đã định dạng cho chỉ số đó
+ * trên chính ZIP đang render. Nên câu trả lời mang số THẬT của nơi đó, và
+ * không có đường nào để một con số bịa lọt vào: chỉ số không có trong fact set
+ * thì câu đó KHÔNG render.
+ *
+ * `requires` là danh sách đầy đủ chỉ số câu này cần. Thiếu một cái là bỏ cả
+ * câu — không render nửa câu, không viết "dữ liệu chưa có".
+ */
+export interface NicheFaqEntry {
+  key: string;
+  /** Chỗ thay: {place} {zip} {county}. */
+  question: string;
+  /** Chỗ thay như trên, cộng {metric:tên} -> giá trị đã định dạng. */
+  answer: string;
+  requires: readonly string[];
+}
+
 export interface NicheSection {
   key: string;
   /** Tiêu đề mục trên trang. Người đọc thấy chuỗi này. */
@@ -170,6 +202,15 @@ export interface NicheContentSpec {
   cluster?: NicheClusterSpec;
   /** Chữ cho trang một ZIP. Vắng mặt = publisher dùng chữ trung tính. */
   market?: NicheMarketSpec;
+  /**
+   * FAQ của nghề. Vắng mặt = trang KHÔNG có khối FAQ và KHÔNG có FAQPage —
+   * chứ không rơi về FAQ của nghề khác.
+   *
+   * Nghề đã có FAQ viết tay trong publisher (moving-services) thì KHÔNG khai ở
+   * đây: hai nguồn cho cùng một khối là hai bộ câu hỏi sẽ lệch nhau, và bản
+   * viết tay đang chạy tốt với 5 câu.
+   */
+  faq?: readonly NicheFaqEntry[];
   /** Chỉ số thuộc nguồn liên quan nhưng CỐ Ý không dùng, kèm lý do. */
   excluded: readonly { metric: string; why: string }[];
 }
@@ -315,6 +356,55 @@ const AUTO_ACCIDENT: NicheContentSpec = {
     // một lời hứa tư vấn trên trang chỉ có số liệu là lời hứa không giữ được.
     interpretationHeading: "What these figures show for {place}",
   },
+  faq: [
+    {
+      key: "fatal-crashes",
+      question: "How many fatal crashes happen around {place}?",
+      answer:
+        "NHTSA's Fatality Analysis Reporting System records {metric:fars_fatal_crashes_1yr} in {county} " +
+        "in a year, in which {metric:fars_fatalities_1yr} died. Those two figures are different and one " +
+        "crash can kill more than one person. FARS counts only crashes in which someone died — it is not " +
+        "a count of all crashes — and it is published per county, so it describes {county} rather than " +
+        "ZIP {zip} on its own.",
+      requires: ["fars_fatal_crashes_1yr", "fars_fatalities_1yr"],
+    },
+    {
+      key: "road-exposure",
+      question: "How much driving do people in ZIP {zip} actually do?",
+      answer:
+        "Census Bureau five-year estimates put {metric:commute_workers_total} travelling to work from " +
+        "ZIP {zip}, and {metric:commute_car_share_pct} of them drive. That is the exposure the county " +
+        "crash figures sit on top of — more drivers on the road for more hours is more opportunity for " +
+        "a collision. It does NOT mean commuting causes crashes: nothing in this data measures that.",
+      requires: ["commute_workers_total", "commute_car_share_pct"],
+    },
+    {
+      key: "long-commutes",
+      question: "Do people here spend long stretches on the road?",
+      answer:
+        "{metric:commute_60min_plus_pct} of workers in ZIP {zip} spend an hour or more getting to work " +
+        "each way. Long commutes mean highway miles and driving at the start and end of the day, which " +
+        "is when the roads are busiest — but this figure describes time spent travelling, not risk, and " +
+        "no source here links the two.",
+      requires: ["commute_60min_plus_pct"],
+    },
+    {
+      key: "what-is-a-claim-worth",
+      // Câu tương đương "chuyển nhà hết bao nhiêu tiền" của nghề kia: đúng ý
+      // định người tìm, và KHÔNG có dữ liệu để trả lời. Bịa một khoảng tiền ở
+      // đây là cách dễ nhất để phá §7.1, và là thứ gần như mọi trang trong
+      // nghề này đang làm.
+      question: "What is a car accident claim worth in {place}?",
+      answer:
+        "This page does not publish a settlement figure, because no federal dataset reports what claims " +
+        "settle for, and a made-up range would not help you. What it does give you is the public record " +
+        "for the place itself: {metric:fars_fatal_crashes_1yr} in {county} in a year, and " +
+        "{metric:commute_car_share_pct} of local workers driving to work. What a specific claim is worth " +
+        "depends on the crash, the injuries and the policy limits — take those to a lawyer licensed in " +
+        "the state, not to a page of statistics.",
+      requires: ["fars_fatal_crashes_1yr", "commute_car_share_pct"],
+    },
+  ],
   excluded: [],
 };
 
