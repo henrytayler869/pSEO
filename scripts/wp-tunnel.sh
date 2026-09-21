@@ -120,10 +120,26 @@ LOG_FILE="${TMPDIR:-/tmp}/pseo-wp-tunnel.log"
 # lại chết lặng lẽ — đúng lỗi đã đo được ở db-tunnel.sh.
 # Một cờ -L cho mỗi cổng. Soi gương cổng: cổng local = cổng trên VPS, nên
 # wpApiBaseUrl trong database chạy nguyên ở cả hai nơi.
+# Lá chắn cho mảng RỖNG, không phải phòng thủ thừa.
+#
+# bash 3.2 — bản macOS vẫn ship — coi `"${A[@]}"` trên mảng rỗng là biến chưa
+# đặt, nên với `set -u` nó ném "unbound variable" và `set -e` giết script ngay
+# tại đó. bash 4.4 trở lên thì không. Tức lỗi CHỈ xảy ra trên máy lập trình
+# viên, và chỉ ở nhánh "không có gì để làm".
+#
+# Đo 21/9/2026 trong log predev:
+#
+#   ./scripts/wp-tunnel.sh: line 126: NEEDED[@]: unbound variable
+#
+# Cả hai WordPress đã có đường nên NEEDED rỗng — và script chết ngay TRƯỚC
+# dòng báo "không cần mở thêm". Người chạy `npm run dev` thấy một lỗi đỏ ở
+# đúng lúc mọi thứ đều ổn, tức là học cách bỏ qua lỗi của script này.
 FORWARDS=()
-for _p in "${NEEDED[@]}"; do
-  FORWARDS+=(-L "$_p:127.0.0.1:$_p")
-done
+if [[ ${#NEEDED[@]} -gt 0 ]]; then
+  for _p in "${NEEDED[@]}"; do
+    FORWARDS+=(-L "$_p:127.0.0.1:$_p")
+  done
+fi
 
 if [[ ${#FORWARDS[@]} -eq 0 ]]; then
   echo "Mọi WordPress (${PORT_LIST[*]}) đã có đường — không cần mở thêm."
