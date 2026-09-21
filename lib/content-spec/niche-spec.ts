@@ -210,7 +210,24 @@ export interface NicheContentSpec {
    * đây: hai nguồn cho cùng một khối là hai bộ câu hỏi sẽ lệch nhau, và bản
    * viết tay đang chạy tốt với 5 câu.
    */
-  faq?: readonly NicheFaqEntry[];
+  faq?: {
+    /**
+     * Tiêu đề mục FAQ trên trang.
+     *
+     * Gói CHUNG với `entries` chứ không để rời, và đó là khác biệt có giá:
+     * publisher viết cứng "Questions about moving in this area" cho mục này.
+     * Chuỗi đó vô hại suốt thời gian nghề tai nạn KHÔNG có FAQ — mục không
+     * render nên không ai thấy. Vừa cấp FAQ cho nó là 63 trang in ngay tiêu
+     * đề nghề chuyển nhà, và cổng verify:rendered bắt được trước khi lên
+     * production.
+     *
+     * Để `heading` rời thành trường optional thì một nghề khai `entries` mà
+     * quên `heading` sẽ rơi lại đúng chuỗi viết cứng đó. Gói chung thì kiểu dữ
+     * liệu không cho phép quên.
+     */
+    heading: string;
+    entries: readonly NicheFaqEntry[];
+  };
   /** Chỉ số thuộc nguồn liên quan nhưng CỐ Ý không dùng, kèm lý do. */
   excluded: readonly { metric: string; why: string }[];
 }
@@ -356,55 +373,58 @@ const AUTO_ACCIDENT: NicheContentSpec = {
     // một lời hứa tư vấn trên trang chỉ có số liệu là lời hứa không giữ được.
     interpretationHeading: "What these figures show for {place}",
   },
-  faq: [
-    {
-      key: "fatal-crashes",
-      question: "How many fatal crashes happen around {place}?",
-      answer:
-        "NHTSA's Fatality Analysis Reporting System records {metric:fars_fatal_crashes_1yr} in {county} " +
-        "in a year, in which {metric:fars_fatalities_1yr} died. Those two figures are different and one " +
-        "crash can kill more than one person. FARS counts only crashes in which someone died — it is not " +
-        "a count of all crashes — and it is published per county, so it describes {county} rather than " +
-        "ZIP {zip} on its own.",
-      requires: ["fars_fatal_crashes_1yr", "fars_fatalities_1yr"],
-    },
-    {
-      key: "road-exposure",
-      question: "How much driving do people in ZIP {zip} actually do?",
-      answer:
-        "Census Bureau five-year estimates put {metric:commute_workers_total} travelling to work from " +
-        "ZIP {zip}, and {metric:commute_car_share_pct} of them drive. That is the exposure the county " +
-        "crash figures sit on top of — more drivers on the road for more hours is more opportunity for " +
-        "a collision. It does NOT mean commuting causes crashes: nothing in this data measures that.",
-      requires: ["commute_workers_total", "commute_car_share_pct"],
-    },
-    {
-      key: "long-commutes",
-      question: "Do people here spend long stretches on the road?",
-      answer:
-        "{metric:commute_60min_plus_pct} of workers in ZIP {zip} spend an hour or more getting to work " +
-        "each way. Long commutes mean highway miles and driving at the start and end of the day, which " +
-        "is when the roads are busiest — but this figure describes time spent travelling, not risk, and " +
-        "no source here links the two.",
-      requires: ["commute_60min_plus_pct"],
-    },
-    {
-      key: "what-is-a-claim-worth",
-      // Câu tương đương "chuyển nhà hết bao nhiêu tiền" của nghề kia: đúng ý
-      // định người tìm, và KHÔNG có dữ liệu để trả lời. Bịa một khoảng tiền ở
-      // đây là cách dễ nhất để phá §7.1, và là thứ gần như mọi trang trong
-      // nghề này đang làm.
-      question: "What is a car accident claim worth in {place}?",
-      answer:
-        "This page does not publish a settlement figure, because no federal dataset reports what claims " +
-        "settle for, and a made-up range would not help you. What it does give you is the public record " +
-        "for the place itself: {metric:fars_fatal_crashes_1yr} in {county} in a year, and " +
-        "{metric:commute_car_share_pct} of local workers driving to work. What a specific claim is worth " +
-        "depends on the crash, the injuries and the policy limits — take those to a lawyer licensed in " +
-        "the state, not to a page of statistics.",
-      requires: ["fars_fatal_crashes_1yr", "commute_car_share_pct"],
-    },
-  ],
+  faq: {
+    heading: "Questions about crash data in this area",
+    entries: [
+      {
+        key: "fatal-crashes",
+        question: "How many fatal crashes happen around {place}?",
+        answer:
+          "NHTSA's Fatality Analysis Reporting System records {metric:fars_fatal_crashes_1yr} in {county} " +
+          "in a year, in which {metric:fars_fatalities_1yr} died. Those two figures are different and one " +
+          "crash can kill more than one person. FARS counts only crashes in which someone died — it is not " +
+          "a count of all crashes — and it is published per county, so it describes {county} rather than " +
+          "ZIP {zip} on its own.",
+        requires: ["fars_fatal_crashes_1yr", "fars_fatalities_1yr"],
+      },
+      {
+        key: "road-exposure",
+        question: "How much driving do people in ZIP {zip} actually do?",
+        answer:
+          "Census Bureau five-year estimates put {metric:commute_workers_total} travelling to work from " +
+          "ZIP {zip}, and {metric:commute_car_share_pct} of them drive. That is the exposure the county " +
+          "crash figures sit on top of — more drivers on the road for more hours is more opportunity for " +
+          "a collision. It does NOT mean commuting causes crashes: nothing in this data measures that.",
+        requires: ["commute_workers_total", "commute_car_share_pct"],
+      },
+      {
+        key: "long-commutes",
+        question: "Do people here spend long stretches on the road?",
+        answer:
+          "{metric:commute_60min_plus_pct} of workers in ZIP {zip} spend an hour or more getting to work " +
+          "each way. Long commutes mean highway miles and driving at the start and end of the day, which " +
+          "is when the roads are busiest — but this figure describes time spent travelling, not risk, and " +
+          "no source here links the two.",
+        requires: ["commute_60min_plus_pct"],
+      },
+      {
+        key: "what-is-a-claim-worth",
+        // Câu tương đương "chuyển nhà hết bao nhiêu tiền" của nghề kia: đúng ý
+        // định người tìm, và KHÔNG có dữ liệu để trả lời. Bịa một khoảng tiền ở
+        // đây là cách dễ nhất để phá §7.1, và là thứ gần như mọi trang trong
+        // nghề này đang làm.
+        question: "What is a car accident claim worth in {place}?",
+        answer:
+          "This page does not publish a settlement figure, because no federal dataset reports what claims " +
+          "settle for, and a made-up range would not help you. What it does give you is the public record " +
+          "for the place itself: {metric:fars_fatal_crashes_1yr} in {county} in a year, and " +
+          "{metric:commute_car_share_pct} of local workers driving to work. What a specific claim is worth " +
+          "depends on the crash, the injuries and the policy limits — take those to a lawyer licensed in " +
+          "the state, not to a page of statistics.",
+        requires: ["fars_fatal_crashes_1yr", "commute_car_share_pct"],
+        },
+    ],
+  },
   excluded: [],
 };
 
