@@ -60,9 +60,52 @@ const MONTHS: Record<string, number> = {
 
 /** "Fri Aug 21 2026" hoặc "Sat Aug 22" (năm bỏ trống). */
 const DATE_RE = /^\s*\w{3}\s+(\w{3})\s+(\d{1,2})(?:\s+(\d{4}))?\s*$/;
-/** "  20:00  Arsenal FC  v Coventry City FC   3-0 (2-0)" — giờ và tỷ số đều có thể vắng. */
-const MATCH_RE =
-  /^\s*(?:(\d{1,2}:\d{2})\s+)?(.+?)\s+v\s+(.+?)(?:\s{2,}(\d+)-(\d+)(?:\s+\((\d+)-(\d+)\))?)?\s*$/;
+/**
+ * Dòng trận. Giờ và tỷ số đều có thể vắng, và phần tỷ số có BỐN hình dạng.
+ *
+ * Bốn hình dạng này KHÔNG phải suy đoán — đã liệt kê toàn bộ phần đuôi của
+ * mọi dòng trận trong 6 mùa Champions League (21/9/2026), thay mọi chữ số
+ * bằng N rồi đếm:
+ *
+ *     N-N (N-N)                        799   thường
+ *     N-N                               45   nguồn không ghi hiệp một
+ *     N-N a.e.t. (N-N, N-N)              5   phải đá hiệp phụ
+ *     N-N pen. N-N a.e.t. (N-N, N-N)     6   và đá luân lưu
+ *
+ * BIỂU THỨC CŨ CHỈ ĐỌC ĐƯỢC HAI HÌNH ĐẦU, và nó hỏng đúng theo kiểu nguy
+ * hiểm nhất: phần đuôi không khớp bị nuốt vào TÊN ĐỘI KHÁCH. Kết quả là một
+ * đội tên "Paris Saint-Germain FC (FRA)  1-4 pen. 0-1 a.e.t. (0-1, 0-1)" và
+ * một trận không có tỷ số — không ném lỗi, không đỏ ở đâu cả.
+ *
+ * Quy mô đúng bằng số dòng hiệp phụ, mùa nào cũng khớp tuyệt đối:
+ *
+ *     2020-21  124/125 trận có tỷ số   1 dòng a.e.t.
+ *     2021-22  123/125                 2
+ *     2022-23  125/125                 0
+ *     2023-24  122/125                 3
+ *     2024-25  187/189                 2
+ *     2025-26  186/189                 3
+ *
+ * Giải quốc nội KHÔNG dính: đã đếm, 0 dòng a.e.t./pen. trong cả bốn file
+ * 2026-27 đang dùng làm lớp phủ. Lỗi này ngủ yên vì trận vòng tròn không bao
+ * giờ đá hiệp phụ — nó chỉ tỉnh dậy ở cúp.
+ *
+ * THỨ TỰ CÁC SỐ BỊ ĐẢO so với trực giác đọc: số dẫn đầu dòng là tỷ số SAU
+ * HIỆP PHỤ, còn phút 90 nằm trong ngoặc đầu. Chứng minh bằng tính đơn điệu
+ * chứ không bằng phỏng đoán: "3-2 a.e.t. (3-0, 1-0)" — nếu ngoặc đầu là hiệp
+ * một thì tỷ số sẽ GIẢM từ 3-0 xuống 1-0, điều không xảy ra được. Và đối
+ * chiếu với bản JSON của cùng trận cho thấy `ft` bên đó khớp ngoặc đầu.
+ */
+const MATCH_RE = new RegExp(
+  "^\\s*(?:(\\d{1,2}:\\d{2})\\s+)?" + // 1  giờ
+    "(.+?)\\s+v\\s+(.+?)" + //               2  chủ, 3 khách
+    "(?:\\s{2,}" +
+    "(?:(\\d+)-(\\d+)\\s+pen\\.\\s+)?" + // 4,5  luân lưu
+    "(\\d+)-(\\d+)" + //                        6,7  tỷ số dẫn đầu dòng
+    "(\\s+a\\.e\\.t\\.)?" + //              8    dấu hiệu hiệp phụ
+    "(?:\\s+\\((?:(\\d+)-(\\d+),\\s*)?(\\d+)-(\\d+)\\))?" + // 9,10 phút 90; 11,12 hiệp một
+    ")?\\s*$"
+);
 const ROUND_RE = /^\s*▪\s*(.+?)\s*$/;
 /** "# Date       Fri Aug 21 2026 - Sun May 30 2027 (282d)" */
 const RANGE_RE = /^#\s*Dates?\s+\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})\s*-\s*\w{3}\s+(\w{3})\s+(\d{1,2})\s+(\d{4})/;
@@ -116,15 +159,22 @@ export function parseSeasonTxt(text: string): TxtSeason {
 
     const m = MATCH_RE.exec(line);
     if (!m || !currentDate) continue;
-    const [, time, home, away, fh, fa, hh, ha] = m;
+    const [, time, home, away, ph, pa, lh, la, aet, nh, na, hh, ha] = m;
+    const lead: [number, number] | null = lh !== undefined ? [Number(lh), Number(la)] : null;
+    const ninety: [number, number] | null = nh !== undefined ? [Number(nh), Number(na)] : null;
     out.push({
       round,
       date: currentDate,
       time: time ?? undefined,
       home: home.trim(),
       away: away.trim(),
-      fullTime: fh !== undefined ? [Number(fh), Number(fa)] : null,
+      // Có hiệp phụ thì số dẫn đầu dòng là tỷ số sau 120 phút, còn phút 90
+      // nằm trong ngoặc đầu. Không có hiệp phụ thì số dẫn đầu CHÍNH LÀ phút
+      // 90. Giữ `fullTime` luôn nghĩa "phút 90" để đối chiếu được với JSON.
+      fullTime: aet ? ninety : lead,
       halfTime: hh !== undefined ? [Number(hh), Number(ha)] : null,
+      extraTime: aet ? lead : null,
+      penalties: ph !== undefined ? [Number(ph), Number(pa)] : null,
     });
   }
 

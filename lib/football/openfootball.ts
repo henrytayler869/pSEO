@@ -41,9 +41,14 @@ import { fetchSeasonTxt, hasTxtOverlay } from "./openfootball-txt";
  *
  * ═══ CHƯA CÓ ═══
  *
- * Champions League KHÔNG có bản JSON (cl.json trả 404 cho cả 2025-26 lẫn
- * 2026-27) — chỉ có .txt. Nên giải đó chưa vào đây, và sẽ cần đúng cái parser
- * .txt mà chú thích trên vừa giải thích là dễ vỡ.
+ * Champions League: chú thích cũ ở đây viết "KHÔNG có bản JSON, cl.json trả
+ * 404". Phép đo đúng, kết luận SAI — tôi chỉ thử MỘT tên file. Tên thật là
+ * `uefa.cl.json`, và nó có cho 2011-12…2019-20 cùng 2024-25. Một 404 chứng
+ * minh cái tên đó không có, không chứng minh thứ đó không tồn tại.
+ *
+ * Giải này nằm ở `ucl-archive.ts`, và CHỈ dưới dạng lưu trữ: kho
+ * openfootball/champions-league không có thư mục 2026-27 và đã ngừng cập nhật
+ * từ 2/7/2026, trong khi các kho quốc nội được đẩy hằng ngày (đo 21/9/2026).
  *
  * V.League KHÔNG có ở openfootball. Nguồn miễn phí duy nhất tìm được cho giải
  * VN là TheSportsDB, và nó trả Wigan Athletic/Blackpool/Leicester làm đội
@@ -75,8 +80,18 @@ const Pair = z.tuple([z.number(), z.number()]);
  * tự xử lý ca không có, chứ không nhận một con số không có nguồn.
  */
 const ScoreSchema = z.union([
-  z.object({ ht: Pair.optional(), ft: Pair }),
-  Pair.transform((ft) => ({ ht: undefined, ft })),
+  z.object({
+    ht: Pair.optional(),
+    // `ft` KHÔNG bắt buộc, và đó không phải sự cẩn thận thừa: trận CHUNG KẾT
+    // 2024-25 trong uefa.cl.json mang `"score": {}` — trận lớn nhất mùa,
+    // không có tỷ số. Bắt buộc `ft` thì cả mùa ném lỗi vì một trận.
+    ft: Pair.optional(),
+    /** Tỷ số sau 120 phút. Nguồn ghi riêng, KHÁC `ft` (vốn là phút 90). */
+    et: Pair.optional(),
+    /** Loạt luân lưu. Xem `usablePenalties` — nguồn có ghi sai chỗ này. */
+    p: Pair.optional(),
+  }),
+  Pair.transform((ft) => ({ ht: undefined, ft, et: undefined, p: undefined })),
 ]);
 
 const MatchSchema = z.object({
@@ -106,6 +121,33 @@ export interface FootballMatch {
   fullTime: [number, number] | null;
   /** null = ĐÃ đá nhưng nguồn không ghi tỷ số hiệp một — xem ScoreSchema. */
   halfTime: [number, number] | null;
+  /**
+   * Tỷ số sau 120 phút, null khi trận kết thúc trong 90.
+   *
+   * `fullTime` giữ nguyên nghĩa "phút 90" ở CẢ HAI nguồn, và đó là điều kiện
+   * để đối chiếu chéo có ý nghĩa. Bản .txt ghi ngược lại — số dẫn đầu dòng là
+   * tỷ số sau hiệp phụ, còn phút 90 nằm trong ngoặc — nên parser phải đảo,
+   * chứ không phải đọc theo thứ tự xuất hiện.
+   */
+  extraTime: [number, number] | null;
+  /** Loạt luân lưu, theo nguồn. Có thể vô lý — xem `usablePenalties`. */
+  penalties: [number, number] | null;
+}
+
+/**
+ * MỘT LOẠT LUÂN LƯU KHÔNG THỂ HOÀ. Đó là luật, không phải xu hướng, nên nó
+ * dùng làm phép kiểm được: p[0] === p[1] nghĩa là dữ liệu hỏng, chứ không
+ * nghĩa là trận đó hoà.
+ *
+ * Không phải phép kiểm giả định. Đo 21/9/2026 trên uefa.cl.json 2024-25: CẢ
+ * HAI trận có luân lưu đều mang `p: [4,4]`. Bản .txt của cùng tổ chức ghi
+ * 1-4 và 2-4. Bất biến này chỉ ra bên nào sai mà không cần nguồn thứ ba.
+ *
+ * Trả null thay vì sửa: biết nó sai không có nghĩa là biết nó đúng bao nhiêu.
+ */
+export function usablePenalties(p: [number, number] | null | undefined): [number, number] | null {
+  if (!p) return null;
+  return p[0] === p[1] ? null : p;
 }
 
 function normalise(m: RawMatch): FootballMatch {
@@ -115,8 +157,10 @@ function normalise(m: RawMatch): FootballMatch {
     time: m.time,
     home: m.team1,
     away: m.team2,
-    fullTime: m.score ? m.score.ft : null,
+    fullTime: m.score?.ft ?? null,
     halfTime: m.score?.ht ?? null,
+    extraTime: m.score?.et ?? null,
+    penalties: m.score?.p ?? null,
   };
 }
 
