@@ -15,7 +15,8 @@
  *   tổng bàn thắng cân       bảng tính từ trận: tổng ghi = tổng thủng
  *   tổng điểm khớp kết quả   3 điểm mỗi trận có thắng thua, 2 mỗi trận hoà
  */
-import { fetchLeagueSeason, buildStandings, LEAGUES, type LeagueCode } from "../lib/football/openfootball";
+import { fetchLeagueSeasonMerged, buildStandings, LEAGUES, type LeagueCode } from "../lib/football/openfootball";
+import { parseSeasonTxt } from "../lib/football/openfootball-txt";
 
 const SEASON = process.argv[2] ?? "2026-27";
 let failed = 0;
@@ -24,14 +25,45 @@ function check(ok: boolean, label: string) {
   if (!ok) failed++;
 }
 
+/**
+ * ĐỐI CHỨNG DƯƠNG cho phép dò xung đột.
+ *
+ * "0 xung đột" có hai nghĩa: hai nguồn thật sự khớp, hoặc phép dò hỏng. Phân
+ * biệt được bằng cách đưa vào một mâu thuẫn dựng sẵn và bắt nó phải kêu —
+ * cùng bài học đã gặp bốn lần trong ngày: một phép đo hỏng trông y hệt một
+ * kết quả sạch.
+ */
+function selfTestConflictDetector(): void {
+  const txt = parseSeasonTxt(
+    [
+      "= Test League 2026/27",
+      "# Date       Fri Aug 21 2026 - Sun May 30 2027 (282d)",
+      "▪ Matchday 1",
+      "  Fri Aug 21 2026",
+      "    20:00  Alpha FC                v Beta FC              3-0 (2-0)",
+      "  Sat Jan 2",
+      "    15:00  Beta FC                 v Alpha FC             1-1 (0-0)",
+    ].join("\n")
+  );
+  const ok =
+    txt.matches.length === 2 &&
+    txt.matches[0].fullTime?.join("-") === "3-0" &&
+    // Ngày tháng 1 phải suy sang NĂM SAU, không phải 2026.
+    txt.matches[1].date === "2027-01-02";
+  console.log(`  ${ok ? "✓" : "✗"} tự kiểm parser: đọc được tỷ số và suy đúng năm (${txt.matches[1]?.date})`);
+  if (!ok) failed++;
+}
+
 async function main() {
   const now = new Date();
+  selfTestConflictDetector();
   for (const code of Object.keys(LEAGUES) as LeagueCode[]) {
-    const s = await fetchLeagueSeason(code, SEASON, now);
+    const s = await fetchLeagueSeasonMerged(code, SEASON, now);
     const n = s.teams.length;
     console.log(
       `\n  ${LEAGUES[code]} (${code}) — ${n} đội, ${s.matches.length} trận, ${s.played} đã đá` +
-        (s.stalenessDays === null ? ", chưa có kết quả nào" : `, kết quả mới nhất ${s.lastResultDate} (${s.stalenessDays} ngày trước)`)
+        (s.stalenessDays === null ? ", chưa có kết quả nào" : `, kết quả mới nhất ${s.lastResultDate} (${s.stalenessDays} ngày trước)`) +
+        (s.overlaySource === "txt" ? `, +${s.overlaid} trận lấy từ .txt` : ", KHÔNG có lớp phủ .txt")
     );
 
     check(n >= 18 && n <= 20, `số đội hợp lý (${n})`);
@@ -69,6 +101,32 @@ async function main() {
       badNoHt.length === 0,
       `trận thiếu tỷ số hiệp 1 đều là 0-0 (${noHt.length} trận thiếu${badNoHt.length ? `, SAI: ${badNoHt.map((m) => `${m.home} ${m.fullTime!.join("-")} ${m.away}`).slice(0, 2).join("; ")}` : ""})`
     );
+
+    /**
+     * HAI NGUỒN PHẢI ĐỒNG Ý Ở CHỖ CHỒNG LẤN.
+     *
+     * Đây là lý do lớp phủ đáng có thêm: .txt không chỉ bù kết quả mới, nó
+     * còn kiểm chéo phần JSON đã có. Hai nguồn độc lập đồng ý là bằng chứng;
+     * một nguồn nói một mình chỉ là lời khai.
+     *
+     * Xung đột KHÔNG được phủ im lặng — code giữ nền và báo ra, vì không có
+     * cách nào biết bên nào đúng từ trong đó.
+     */
+    if (s.overlaySource === "none") {
+      // KHÔNG in dấu xanh cho một phép kiểm không chạy. "0 xung đột" ở một
+      // giải chỉ có một nguồn là đúng theo nghĩa rỗng, và một dấu ✓ ở đó dạy
+      // người đọc rằng ✓ không có nghĩa gì.
+      console.log("    · không đối chiếu chéo được: giải này chỉ có một nguồn (openfootball không có kho .txt)");
+    } else {
+      check(
+        s.conflicts.length === 0,
+        `hai nguồn khớp ở ${s.played - s.overlaid} trận chồng lấn${s.conflicts.length ? ` — ${s.conflicts.slice(0, 2).map((c) => `${c.home} v ${c.away}: ${c.base.join("-")} vs ${c.overlay.join("-")}`).join("; ")}` : ""}`
+      );
+      check(
+        s.unmatched.length === 0,
+        `mọi cặp đội trong .txt ghép được vào nền${s.unmatched.length ? ` — lệch tên: ${s.unmatched.slice(0, 2).join(", ")}` : ""}`
+      );
+    }
 
     // Độ trễ KHÔNG làm cổng đỏ — nó là sự thật về nguồn, không phải lỗi. Nhưng
     // nó phải hiện ra, vì một site kết quả bóng đá trễ một tuần là hỏng dù mọi
