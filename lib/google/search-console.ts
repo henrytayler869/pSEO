@@ -1,4 +1,5 @@
 import { getGoogleAccessToken, explainGoogleApiError } from "./service-account";
+import { requireProperty } from "./property";
 
 const SEARCH_ANALYTICS_BASE = "https://www.googleapis.com/webmasters/v3";
 const GSC_READONLY_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -35,7 +36,8 @@ export interface PageSearchRow {
  * presented as the real GSC verdict. Use fetchUrlIndexStatus() below for a
  * real per-URL check when the estimate isn't enough.
  */
-export async function fetchSiteSearchTotals(propertyUrl: string, days: number): Promise<SiteSearchTotals> {
+export async function fetchSiteSearchTotals(property: string | null, days: number): Promise<SiteSearchTotals> {
+  const propertyUrl = requireProperty(property, "gsc");
   const accessToken = await getGoogleAccessToken([GSC_READONLY_SCOPE]);
   const { startDate, endDate } = dateRange(days);
 
@@ -57,7 +59,8 @@ export async function fetchSiteSearchTotals(propertyUrl: string, days: number): 
 }
 
 /** Per-page breakdown for the website detail view. */
-export async function fetchTopPages(propertyUrl: string, days: number, limit = 50): Promise<PageSearchRow[]> {
+export async function fetchTopPages(property: string | null, days: number, limit = 50): Promise<PageSearchRow[]> {
+  const propertyUrl = requireProperty(property, "gsc");
   const accessToken = await getGoogleAccessToken([GSC_READONLY_SCOPE]);
   const { startDate, endDate } = dateRange(days);
   const rows = await querySearchAnalytics(propertyUrl, accessToken, { startDate, endDate, dimensions: ["page"], rowLimit: limit });
@@ -85,7 +88,8 @@ export interface QuerySearchRow {
  * LUÔN nhỏ hơn tổng của site. Đó không phải lỗi và cũng không sửa được; nó là
  * lý do màn hình phải hiện cả hai con số thay vì để người đọc tự cộng.
  */
-export async function fetchTopQueries(propertyUrl: string, days: number, limit = 50): Promise<QuerySearchRow[]> {
+export async function fetchTopQueries(property: string | null, days: number, limit = 50): Promise<QuerySearchRow[]> {
+  const propertyUrl = requireProperty(property, "gsc");
   const accessToken = await getGoogleAccessToken([GSC_READONLY_SCOPE]);
   const { startDate, endDate } = dateRange(days);
   const rows = await querySearchAnalytics(propertyUrl, accessToken, {
@@ -103,7 +107,8 @@ export async function fetchTopQueries(propertyUrl: string, days: number, limit =
  * fetchSiteSearchTotals()'s pagesWithImpressions can only approximate.
  * Quota-limited by Google (2,000/day, 600/min per property) so this is
  * exposed as a single-URL, on-demand check, not a bulk sweep. */
-export async function fetchUrlIndexStatus(propertyUrl: string, inspectionUrl: string): Promise<boolean> {
+export async function fetchUrlIndexStatus(property: string | null, inspectionUrl: string): Promise<boolean> {
+  const propertyUrl = requireProperty(property, "gsc");
   const accessToken = await getGoogleAccessToken(["https://www.googleapis.com/auth/webmasters.readonly"]);
   const response = await fetch("https://searchconsole.googleapis.com/v1/urlInspection/index:inspect", {
     method: "POST",
@@ -248,7 +253,8 @@ export interface SubmittedSitemap {
  * sitemap list as part of the write surface. Worth knowing before wondering
  * why a readonly token returns 403 on a plain GET.
  */
-export async function listSitemaps(propertyUrl: string): Promise<SubmittedSitemap[]> {
+export async function listSitemaps(property: string | null): Promise<SubmittedSitemap[]> {
+  const propertyUrl = requireProperty(property, "gsc");
   assertValidGscProperty(propertyUrl);
   const token = await getGoogleAccessToken([GSC_FULL_SCOPE]);
   const response = await fetch(
@@ -292,7 +298,8 @@ export async function listSitemaps(propertyUrl: string): Promise<SubmittedSitema
  * errors and warnings counts only appear later, which is why the UI shows the
  * list rather than a success message.
  */
-export async function submitSitemap(propertyUrl: string, sitemapUrl: string): Promise<void> {
+export async function submitSitemap(property: string | null, sitemapUrl: string): Promise<void> {
+  const propertyUrl = requireProperty(property, "gsc");
   assertValidGscProperty(propertyUrl);
   const token = await getGoogleAccessToken([GSC_FULL_SCOPE]);
   const response = await fetch(

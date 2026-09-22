@@ -50,6 +50,7 @@ export function assertValidGa4PropertyId(value: string): void {
 }
 
 import { getGoogleAccessToken, explainGoogleApiError } from "./service-account";
+import { requireProperty } from "./property";
 
 const GA4_DATA_API_BASE = "https://analyticsdata.googleapis.com/v1beta";
 const GA4_READONLY_SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
@@ -140,7 +141,8 @@ export interface TrafficBreakdownRow {
  * column — GA4 Data API v1beta runReport, request/response shape verified
  * against Google's current docs (2026-09-06), no live property to test
  * against yet (see saveServiceAccountKey — no real site is connected). */
-export async function fetchSiteTrafficTotals(ga4PropertyId: string, days: number): Promise<SiteTrafficTotals> {
+export async function fetchSiteTrafficTotals(ga4Property: string | null, days: number): Promise<SiteTrafficTotals> {
+  const ga4PropertyId = requireProperty(ga4Property, "ga4");
   const dateRanges = [{ startDate: `${days}daysAgo`, endDate: "today" }];
   const metrics = [
     { name: "activeUsers" },
@@ -200,7 +202,8 @@ export interface LandingPageRow {
  * landing page ở dạng kèm query string. Cắt query ở phía này để hai trang chỉ
  * khác tham số UTM không thành hai dòng.
  */
-export async function fetchLandingPages(ga4PropertyId: string, days: number, limit = 50): Promise<LandingPageRow[]> {
+export async function fetchLandingPages(ga4Property: string | null, days: number, limit = 50): Promise<LandingPageRow[]> {
+  const ga4PropertyId = requireProperty(ga4Property, "ga4");
   const rows = await runReport(ga4PropertyId, {
     dateRanges: [{ startDate: `${days}daysAgo`, endDate: "today" }],
     dimensions: [{ name: "landingPagePlusQueryString" }],
@@ -241,7 +244,8 @@ export async function fetchLandingPages(ga4PropertyId: string, days: number, lim
 
 /** Per-source breakdown (e.g. "organic search", "direct") for the website
  * detail view. */
-export async function fetchTrafficBySource(ga4PropertyId: string, days: number): Promise<TrafficBreakdownRow[]> {
+export async function fetchTrafficBySource(ga4Property: string | null, days: number): Promise<TrafficBreakdownRow[]> {
+  const ga4PropertyId = requireProperty(ga4Property, "ga4");
   const rows = await runReport(ga4PropertyId, {
     dateRanges: [{ startDate: `${days}daysAgo`, endDate: "today" }],
     dimensions: [{ name: "sessionDefaultChannelGroup" }],
@@ -273,7 +277,8 @@ export interface HostSessionRow {
  * từ localhost vẫn là bằng chứng rằng thẻ đo đang bắn ở chỗ không được phép.
  * Lọc nó đi là bỏ mất đúng thứ cần tìm.
  */
-export async function fetchSessionsByHost(ga4PropertyId: string, days: number): Promise<HostSessionRow[]> {
+export async function fetchSessionsByHost(ga4Property: string | null, days: number): Promise<HostSessionRow[]> {
+  const ga4PropertyId = requireProperty(ga4Property, "ga4");
   assertValidGa4PropertyId(ga4PropertyId);
   const rows = await runReport(ga4PropertyId, {
     dateRanges: [{ startDate: `${days}daysAgo`, endDate: "today" }],
