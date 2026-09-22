@@ -96,7 +96,25 @@ khác.
    `publisher/_archive/theaccidentrecord-scaffold-20260915.tar.gz`, 94 KB.
    Xoá được nếu không ai cần.
 
-<!-- BEGIN:nextjs-agent-rules -->
+## ĐỪNG ĐẶT BẤT BIẾN VÀO GIỮA HAI MARKER `nextjs-agent-rules`
+
+Khối cuối file nằm giữa `<!-- BEGIN:nextjs-agent-rules -->` và
+`<!-- END:nextjs-agent-rules -->` do `next dev` QUẢN LÝ, và quản lý theo kiểu
+thay trọn: `upsertAgentRulesBlock` trong
+`node_modules/next/dist/server/lib/generate-agent-files.js` ghép lại file bằng
+
+    phần trước BEGIN  +  khối chuẩn mới  +  phần sau END
+
+Mọi thứ NẰM GIỮA bị vứt. Không cảnh báo, không diff, không có gì đỏ.
+
+Đã suýt mất thật. Đo 22/9/2026: mục `lib/football/` (viết trong #166) nằm
+NGAY SAU marker BEGIN, và hai mục thêm vào sau đó rơi vào cùng vùng. Tổng
+cộng 126 dòng — ba mục bất biến KHÔNG CÓ CỔNG CANH NÀO — sẽ biến mất ở lần
+`npm run dev` kế tiếp, và chúng đúng là loại nội dung không thể dựng lại từ
+mã vì chúng mô tả những thứ mã không nói ra.
+
+Nên: mọi mục của con người đặt TRƯỚC marker BEGIN. Vùng giữa hai marker chỉ
+được chứa đúng văn bản do Next sinh ra.
 
 ## `lib/football/` phải KHÔNG BIẾT GÌ về Next — và không có cổng nào canh
 
@@ -214,6 +232,8 @@ Bản tiếng Việt nằm riêng:
 
 Bất cứ phép kiểm văn bản nào thêm sau này cho site tiếng Việt phải đi qua hai
 file đó, hoặc tự hỏi bộ chuẩn hoá của nó làm gì với dấu.
+
+<!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
 
