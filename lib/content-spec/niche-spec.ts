@@ -71,6 +71,28 @@ export type Scope = "ZIP" | "COUNTY" | "STATE";
  *   {counties}  hạt, đã nối bằng "and"   "Kings County"
  */
 export interface NicheClusterSpec {
+  /**
+   * Thẻ <title> của trang cụm. TUỲ CHỌN, và chỗ này là chỗ duy nhất trong
+   * khối `cluster` được phép vắng.
+   *
+   * Vắng thì publisher giữ nguyên chuỗi viết cứng hiện tại
+   * (`"{Nghề} in {place} — N ZIP codes compared"`). Cái rơi về đó AN TOÀN vì
+   * chuỗi kia tham số hoá theo `site.vertical` của CHÍNH SITE ĐÓ, nên nó
+   * không bao giờ nói chữ của nghề khác. Đây là khác biệt so với vụ 90 trang
+   * 18/9/2026: ở đó fallback rơi sang văn của nghề khác, còn ở đây rơi về
+   * một chuỗi chung nhưng đúng nghề.
+   *
+   * Ràng buộc ngầm đi kèm: nếu sau này ai viết cứng một chữ của nghề cụ thể
+   * vào chuỗi mặc định bên publisher, fallback này lập tức nguy hiểm trở
+   * lại. HQ không kiểm được điều đó — nó nằm trong kho kia.
+   *
+   * Tuỳ chọn vì một lý do cụ thể chứ không phải vì tiện: đổi title là đổi
+   * thứ Google đã xếp hạng. Site đã có vị trí thì phải đổi có chủ đích, từng
+   * site một. Nghề chưa khai title thì không đổi một ký tự nào.
+   *
+   * Chỗ thay: {place} {count} {counties}.
+   */
+  title?: string;
   /** Meta description. Chỉ được nhắc thứ trang thật sự in ra. */
   description: string;
   /** Mục bảng so sánh từng ZIP. */
@@ -111,6 +133,13 @@ export interface NicheClusterSpec {
  * Chỗ thay: {zip} {place} {detail}.
  */
 export interface NicheMarketSpec {
+  /**
+   * Thẻ <title> của trang một ZIP. Tuỳ chọn, cùng lý lẽ với `cluster.title`.
+   *
+   * Chỗ thay: {zip} {place}. KHÔNG có {detail} — `detail` là một câu dẫn dài
+   * dựng cho meta description; nhét nó vào title thì title luôn bị cắt.
+   */
+  title?: string;
   /**
    * Chỉ số mở đầu mô tả, theo thứ tự.
    *
@@ -190,6 +219,27 @@ export interface NicheSection {
   says: string;
 }
 
+/**
+ * Trang TRỤ CẤP BANG: gom các ZIP của một bang, không có khối nội dung riêng
+ * ngoài tiêu đề.
+ *
+ * Khối một trường trông thừa, nhưng đặt title vào `cluster` thì sai chỗ —
+ * trang bang không phải một cụm, nó là danh sách các cụm. Và khi nào trang
+ * bang cần mô tả hay tiêu đề mục riêng thì chúng vào đây chứ không phải vào
+ * một khối đã có nghĩa khác.
+ *
+ * Chỗ thay: {state} {stateName} {count}.
+ *
+ * HAI CHỖ THAY CHO MỘT THỨ, có chủ ý. Mã publisher hiện dùng cả hai dạng ở
+ * hai nhánh của cùng một route — `group.state` ("NV") ở nhánh nhiều cụm và
+ * `stateName` ("Nevada") ở nhánh một cụm. Gộp thành một `{state}` mơ hồ sẽ
+ * cho hai title khác nhau trên hai nhánh mà không ai thấy, nên tách rõ: mã
+ * hai chữ là `{state}`, tên đầy đủ là `{stateName}`.
+ */
+export interface NicheStateHubSpec {
+  title: string;
+}
+
 export interface NicheContentSpec {
   vertical: string;
   sections: readonly NicheSection[];
@@ -210,6 +260,7 @@ export interface NicheContentSpec {
    * đây: hai nguồn cho cùng một khối là hai bộ câu hỏi sẽ lệch nhau, và bản
    * viết tay đang chạy tốt với 5 câu.
    */
+  stateHub?: NicheStateHubSpec;
   faq?: {
     /**
      * Tiêu đề mục FAQ trên trang.
@@ -346,6 +397,14 @@ const AUTO_ACCIDENT: NicheContentSpec = {
     },
   ],
   cluster: {
+    // Title mở đầu bằng NƠI CHỐN và THỰC THỂ DỮ LIỆU, không bằng tên nghề.
+    // Bằng chứng từ GSC site 1, chốt 20/9/2026: hai truy vấn duy nhất lọt
+    // top 10 đều hỏi về nơi chốn và thực thể — "chicago il zip code" hạng 9,
+    // "11385 county" hạng 10 — trong khi mọi truy vấn hỏi về DỊCH VỤ đều
+    // nằm ngoài hạng 49. Trang xếp hạng 9 DÙ title mở đầu bằng tên nghề,
+    // không phải nhờ nó. Phép so trong-site nên tuổi domain và uy tín bị
+    // khử; biến khác duy nhất là độ khớp với ý định.
+    title: "{place} ZIP Codes — Fatal Crash & Commute Data",
     // Chỉ nhắc thứ nghề này THẬT SỰ có: FARS cấp hạt, và cách đi làm cấp ZIP.
     // Không có "migration", không có "housing" — hai chữ đó không mô tả gì
     // trên một site về tai nạn giao thông.
@@ -373,6 +432,7 @@ const AUTO_ACCIDENT: NicheContentSpec = {
     topicsHeading: "By kind of exposure",
   },
   market: {
+    title: "ZIP {zip} ({place}) — Fatal Crash & Commute Data",
     leadMetrics: [
       { metric: "fars_fatal_crashes_1yr", phrase: "{display} fatal crashes a year countywide" },
       { metric: "commute_car_share_pct", phrase: "{display} of workers drive to work" },
@@ -384,6 +444,11 @@ const AUTO_ACCIDENT: NicheContentSpec = {
     // KHÔNG "what this means for you": trang không biết người đọc là ai, và
     // một lời hứa tư vấn trên trang chỉ có số liệu là lời hứa không giữ được.
     interpretationHeading: "What these figures show for {place}",
+  },
+  stateHub: {
+    // {state} = mã hai chữ. Trang bang liệt kê ZIP theo hạt, nên "by County"
+    // mô tả đúng thứ trang in ra — không hứa thêm gì.
+    title: "{state} ZIP Codes — Fatal Crash Data by County",
   },
   faq: {
     heading: "Questions about crash data in this area",

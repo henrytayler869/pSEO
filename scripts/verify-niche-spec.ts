@@ -138,6 +138,73 @@ const FOREIGN_WORDS_FOR: Record<string, readonly string[]> = {
 const PLACEHOLDERS = new Set(["count", "place", "counties"]);
 /** Trang một ZIP có chỗ thay khác: nó biết ZIP, không biết "bao nhiêu ZIP". */
 const MARKET_PLACEHOLDERS = new Set(["zip", "place", "detail"]);
+/** Title trang một ZIP: KHÔNG có {detail} — xem ghi chú ở NicheMarketSpec. */
+const MARKET_TITLE_PLACEHOLDERS = new Set(["zip", "place"]);
+const STATE_HUB_PLACEHOLDERS = new Set(["state", "stateName", "count"]);
+
+/**
+ * NGƯỠNG CẮT TITLE, và vì sao nó là CẢNH BÁO chứ không phải lỗi.
+ *
+ * Google cắt title theo BỀ RỘNG PIXEL (~600px), không theo số ký tự, nên
+ * không có con số nào đúng tuyệt đối. 60 ký tự là ước lượng thô quen dùng.
+ * Vượt ngưỡng nghĩa là phần đuôi nhiều khả năng bị cắt trên SERP — khó chịu,
+ * nhưng không sai sự thật và không hỏng trang. Làm đỏ cổng vì nó là biến một
+ * chuyện thẩm mỹ thành chuyện chặn merge.
+ *
+ * Nhưng IM LẶNG thì cũng sai: title dài chỉ lộ ra khi chỗ thay gặp giá trị
+ * DÀI NHẤT, mà giá trị dài nhất thì hiếm. Đo 22/9/2026 trên
+ * data/sites/theaccidentrecord.com/markets.json (184 thị trường, chính dữ
+ * liệu các trang này render):
+ *
+ *   {place} trang cụm      "Nashville-Davidson"       18
+ *   {place} trang một ZIP  "Nashville-Davidson, TN"   22
+ *   {zip}                  luôn 5
+ *   {state}                luôn 2
+ *   {stateName}            "Massachusetts"            13  (chưa có bang dài hơn)
+ *   {count}                tới 3 chữ số
+ *   {counties}             DANH SÁCH — không chặn trên được
+ *
+ * Số này sẽ trôi khi tập thị trường đổi. Đo lại bằng cách đọc lại chính file
+ * markets.json ở kho publisher.
+ */
+const TITLE_LIMIT = 60;
+
+/**
+ * BỀ RỘNG TÁCH THEO LOẠI TRANG, không dùng chung một bảng.
+ *
+ * `{place}` là cùng một cái tên nhưng KHÔNG cùng một tập giá trị: trang cụm
+ * điền tên cụm ("Nashville-Davidson", 18), trang một ZIP điền thành phố kèm
+ * bang ("Nashville-Davidson, TN", 22). Dùng chung số 22 cho cả hai thì title
+ * cụm bị báo 61 trong khi thật ra dài nhất là 57 — một cảnh báo sai, và cảnh
+ * báo sai làm hỏng cổng nhanh hơn là không có cảnh báo.
+ */
+const WORST_CASE_WIDTH: Record<string, Record<string, number>> = {
+  cluster: { place: 18, count: 3, counties: 40 },
+  market: { place: 22, zip: 5 },
+  stateHub: { state: 2, stateName: 13, count: 3 },
+};
+
+const warnings: string[] = [];
+
+/** Độ dài title khi mọi chỗ thay nhận giá trị dài nhất đã đo cho LOẠI TRANG đó. */
+function titleWorstCase(kind: string, template: string): number {
+  const widths = WORST_CASE_WIDTH[kind] ?? {};
+  return template.replace(/\{([^}]*)\}/g, (_, name: string) =>
+    "X".repeat(widths[name] ?? 10)
+  ).length;
+}
+
+function checkTitleLength(vertical: string, kind: string, template: string | undefined): void {
+  if (!template) return;
+  const where = `${kind}.title`;
+  const n = titleWorstCase(kind, template);
+  if (n > TITLE_LIMIT) {
+    warnings.push(
+      `${vertical}: ${where} dài tới ${n} ký tự khi chỗ thay nhận giá trị dài nhất đã đo ` +
+        `(ngưỡng ${TITLE_LIMIT}) — phần đuôi nhiều khả năng bị cắt trên SERP ở những thị trường đó`
+    );
+  }
+}
 
 function checkClusterSpec(spec: NicheContentSpec): string[] {
   const c = spec.cluster;
@@ -145,6 +212,11 @@ function checkClusterSpec(spec: NicheContentSpec): string[] {
   const errors: string[] = [];
 
   const strings: [string, string][] = [
+    // title nằm TRONG danh sách này, không phải kiểm riêng: nó là chuỗi hiện
+    // trên trang mà đặc tả cấp, nên nó phải chịu cả phép kiểm chỗ thay lẫn
+    // phép kiểm chữ của nghề khác — và title là chuỗi DỄ LỘ NHẤT trong cả
+    // khối, vì nó hiện trên SERP kể cả khi không ai mở trang.
+    ...(c.title ? ([["cluster.title", c.title]] as [string, string][]) : []),
     ["description", c.description],
     ["comparison.heading", c.comparison.heading],
     ["comparison.lead", c.comparison.lead],
@@ -162,6 +234,8 @@ function checkClusterSpec(spec: NicheContentSpec): string[] {
       }
     }
   }
+
+  checkTitleLength(spec.vertical, "cluster", c.title);
 
   const named = metricsNamedBy(spec);
   for (const tile of c.tiles) {
@@ -200,6 +274,24 @@ function checkMarketSpec(spec: NicheContentSpec): string[] {
       }
     }
   }
+  // Title kiểm RIÊNG vì tập chỗ thay hẹp hơn phần còn lại của khối.
+  if (m.title) {
+    for (const ph of m.title.matchAll(/\{([^}]*)\}/g)) {
+      if (!MARKET_TITLE_PLACEHOLDERS.has(ph[1])) {
+        errors.push(
+          `${spec.vertical}: market.title dùng chỗ thay "{${ph[1]}}" không có trong tập ` +
+            `[${[...MARKET_TITLE_PLACEHOLDERS].join(", ")}]`
+        );
+      }
+    }
+    for (const word of FOREIGN_WORDS_FOR[spec.vertical] ?? []) {
+      if (m.title.toLowerCase().includes(word.toLowerCase())) {
+        errors.push(`${spec.vertical}: market.title nhắc "${word}" — chữ của nghề khác`);
+      }
+    }
+    checkTitleLength(spec.vertical, "market", m.title);
+  }
+
   const named = metricsNamedBy(spec);
   for (const lead of m.leadMetrics) {
     if (!named.has(lead.metric)) {
@@ -288,10 +380,32 @@ function checkFaq(spec: NicheContentSpec): string[] {
   return errors;
 }
 
+function checkStateHub(spec: NicheContentSpec): string[] {
+  const h = spec.stateHub;
+  if (!h) return [];
+  const errors: string[] = [];
+  for (const ph of h.title.matchAll(/\{([^}]*)\}/g)) {
+    if (!STATE_HUB_PLACEHOLDERS.has(ph[1])) {
+      errors.push(
+        `${spec.vertical}: stateHub.title dùng chỗ thay "{${ph[1]}}" không có trong tập ` +
+          `[${[...STATE_HUB_PLACEHOLDERS].join(", ")}]`
+      );
+    }
+  }
+  for (const word of FOREIGN_WORDS_FOR[spec.vertical] ?? []) {
+    if (h.title.toLowerCase().includes(word.toLowerCase())) {
+      errors.push(`${spec.vertical}: stateHub.title nhắc "${word}" — chữ của nghề khác`);
+    }
+  }
+  checkTitleLength(spec.vertical, "stateHub", h.title);
+  return errors;
+}
+
 const clusterErrors = [
   ...allSpecs().flatMap(checkClusterSpec),
   ...allSpecs().flatMap(checkMarketSpec),
   ...allSpecs().flatMap(checkFaq),
+  ...allSpecs().flatMap(checkStateHub),
 ];
 if (clusterErrors.length > 0) {
   for (const e of clusterErrors) console.error(`  ✗ ${e}`);
@@ -301,3 +415,7 @@ if (clusterErrors.length > 0) {
 console.log(`  ✓ khối FAQ: ${allSpecs().filter((s) => s.faq).length}/${allSpecs().length} nghề có, tổng ${allSpecs().reduce((n, s) => n + (s.faq?.entries.length ?? 0), 0)} câu, mọi {metric:…} đều khai trong requires.`);
 console.log(`  ✓ khối trang một ZIP: ${allSpecs().filter((s) => s.market).length}/${allSpecs().length} nghề có.`);
 console.log(`  ✓ khối trang cụm: ${allSpecs().filter((s) => s.cluster).length}/${allSpecs().length} nghề có, chỗ thay hợp lệ, không nghề nào nhắc chữ của nghề khác.`);
+const withTitle = allSpecs().filter((s) => s.cluster?.title || s.market?.title || s.stateHub?.title).length;
+console.log(`  ✓ title do đặc tả cấp: ${withTitle}/${allSpecs().length} nghề có; nghề chưa khai thì publisher giữ nguyên chuỗi cũ.`);
+// Cảnh báo in SAU dấu ✓ và KHÔNG làm đỏ cổng — xem ghi chú ở TITLE_LIMIT.
+for (const w of warnings) console.log(`  ! ${w}`);
