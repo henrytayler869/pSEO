@@ -194,7 +194,9 @@ function fixedWidth(template: string): number {
 
 function checkTitleLength(vertical: string, kind: string, template: string | undefined): string[] {
   if (!template) return [];
-  const where = `${kind}.title`;
+  // Kèm tên nghề: từ khi có hai nghề cùng khai `home.title`, một dòng chỉ ghi
+  // "home.title: 57 ký tự" không nói được nó nói về nghề nào.
+  const where = `${vertical} ${kind}.title`;
   const fixed = fixedWidth(template);
   const slots = [...template.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]);
   const room = TITLE_LIMIT - fixed;
@@ -206,8 +208,10 @@ function checkTitleLength(vertical: string, kind: string, template: string | und
     ];
   }
   warnings.push(
-    `${where}: phần cố định ${fixed} ký tự, còn ${room} cho ${slots.map((x) => `{${x}}`).join(" + ")} ` +
-      `trước ngưỡng ~${TITLE_LIMIT}. Đếm trang thật vượt ngưỡng là việc của cổng bên publisher.`
+    slots.length === 0
+      ? `${where}: ${fixed} ký tự, không có chỗ thay — độ dài này là độ dài THẬT trên mọi trang, dư ${room} trước ngưỡng ~${TITLE_LIMIT}.`
+      : `${where}: phần cố định ${fixed} ký tự, còn ${room} cho ${slots.map((x) => `{${x}}`).join(" + ")} ` +
+        `trước ngưỡng ~${TITLE_LIMIT}. Đếm trang thật vượt ngưỡng là việc của cổng bên publisher.`
   );
   return [];
 }
@@ -387,6 +391,33 @@ function checkFaq(spec: NicheContentSpec): string[] {
   return errors;
 }
 
+/**
+ * Trang chủ: KHÔNG chỗ thay nào được phép.
+ *
+ * Mọi trang khác có bối cảnh — một cụm, một ZIP, một bang. Trang chủ thì
+ * không, nên `{place}` ở đây không có gì để điền và sẽ in nguyên văn dấu
+ * ngoặc lên thẻ title. Đây là khác biệt thật giữa các khối chứ không phải
+ * cùng một luật viết lại, nên nó có phép kiểm riêng.
+ */
+function checkHome(spec: NicheContentSpec): string[] {
+  const h = spec.home;
+  if (!h) return [];
+  const errors: string[] = [];
+  for (const ph of h.title.matchAll(/\{([^}]*)\}/g)) {
+    errors.push(
+      `${spec.vertical}: home.title dùng chỗ thay "{${ph[1]}}" — trang chủ không có bối cảnh để điền, ` +
+        `chuỗi sẽ in nguyên văn lên thẻ title`
+    );
+  }
+  for (const word of FOREIGN_WORDS_FOR[spec.vertical] ?? []) {
+    if (h.title.toLowerCase().includes(word.toLowerCase())) {
+      errors.push(`${spec.vertical}: home.title nhắc "${word}" — chữ của nghề khác`);
+    }
+  }
+  errors.push(...checkTitleLength(spec.vertical, "home", h.title));
+  return errors;
+}
+
 function checkStateHub(spec: NicheContentSpec): string[] {
   const h = spec.stateHub;
   if (!h) return [];
@@ -413,6 +444,7 @@ const clusterErrors = [
   ...allSpecs().flatMap(checkMarketSpec),
   ...allSpecs().flatMap(checkFaq),
   ...allSpecs().flatMap(checkStateHub),
+  ...allSpecs().flatMap(checkHome),
 ];
 if (clusterErrors.length > 0) {
   for (const e of clusterErrors) console.error(`  ✗ ${e}`);
@@ -422,7 +454,7 @@ if (clusterErrors.length > 0) {
 console.log(`  ✓ khối FAQ: ${allSpecs().filter((s) => s.faq).length}/${allSpecs().length} nghề có, tổng ${allSpecs().reduce((n, s) => n + (s.faq?.entries.length ?? 0), 0)} câu, mọi {metric:…} đều khai trong requires.`);
 console.log(`  ✓ khối trang một ZIP: ${allSpecs().filter((s) => s.market).length}/${allSpecs().length} nghề có.`);
 console.log(`  ✓ khối trang cụm: ${allSpecs().filter((s) => s.cluster).length}/${allSpecs().length} nghề có, chỗ thay hợp lệ, không nghề nào nhắc chữ của nghề khác.`);
-const withTitle = allSpecs().filter((s) => s.cluster?.title || s.market?.title || s.stateHub?.title).length;
+const withTitle = allSpecs().filter((s) => s.cluster?.title || s.market?.title || s.stateHub?.title || s.home?.title).length;
 console.log(`  ✓ title do đặc tả cấp: ${withTitle}/${allSpecs().length} nghề có; nghề chưa khai thì publisher giữ nguyên chuỗi cũ.`);
 // Ngân sách title: in luôn, không chỉ khi có vấn đề — con số này là thứ
 // người viết title cần TRƯỚC khi viết, không phải sau khi bị cắt.

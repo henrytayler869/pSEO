@@ -240,6 +240,27 @@ export interface NicheStateHubSpec {
   title: string;
 }
 
+/**
+ * TRANG CHỦ của site.
+ *
+ * Tách khỏi `tagline` có lý do, không phải để có thêm một trường. Tagline là
+ * chữ HIỆN TRÊN TRANG dưới tên site, nên nó cần đủ mô tả cho người đọc. Title
+ * là chữ Google in ra, nên nó cần ngắn và đặt từ quan trọng lên đầu. Hiện cả
+ * hai đang là một: `layout.tsx` dựng `title.default` = `{name} — {tagline}`,
+ * và kết quả là 63 và 64 ký tự cho hai site — quá ngưỡng cắt ~60.
+ *
+ * Sửa tagline KHÔNG giải được: tagline càng đủ mô tả thì chuỗi ghép càng dài.
+ * Hai mục đích khác nhau thì phải là hai chuỗi.
+ *
+ * KHÔNG CÓ CHỖ THAY NÀO. Trang chủ không biết một nơi chốn hay một mã ZIP
+ * nào cả — nó là trang duy nhất trong site không có bối cảnh địa lý. Cổng
+ * canh làm đỏ nếu có `{...}` xuất hiện ở đây, vì một chỗ thay không ai điền
+ * sẽ in nguyên văn dấu ngoặc lên thẻ title.
+ */
+export interface NicheHomeSpec {
+  title: string;
+}
+
 export interface NicheContentSpec {
   vertical: string;
   sections: readonly NicheSection[];
@@ -260,6 +281,7 @@ export interface NicheContentSpec {
    * đây: hai nguồn cho cùng một khối là hai bộ câu hỏi sẽ lệch nhau, và bản
    * viết tay đang chạy tốt với 5 câu.
    */
+  home?: NicheHomeSpec;
   stateHub?: NicheStateHubSpec;
   faq?: {
     /**
@@ -343,6 +365,12 @@ const MOVING: NicheContentSpec = {
     ],
     distinguishing: "housing and mobility estimates",
     topicsHeading: "By kind of move",
+  },
+  home: {
+    // "Household Migration" ở cấp HẠT (IRS), "Housing Data" ở cấp ZIP
+    // (Census). Câu này không khai phạm vi nào nên không hứa sai — khác
+    // tagline cũ "ZIP by ZIP", vốn khai cấp ZIP cho cả ba mục.
+    title: "Household Migration and Housing Data — AT Moving Services",
   },
   market: {
     // Nguyên văn thứ publisher đang in cho nghề này.
@@ -444,6 +472,17 @@ const AUTO_ACCIDENT: NicheContentSpec = {
     // KHÔNG "what this means for you": trang không biết người đọc là ai, và
     // một lời hứa tư vấn trên trang chỉ có số liệu là lời hứa không giữ được.
     interpretationHeading: "What these figures show for {place}",
+  },
+  home: {
+    // Đặt "Fatal Crash Statistics" lên ĐẦU và tên site xuống cuối. Hai site
+    // này có DR 0,2 và 0,0 — không ai tìm chúng bằng tên, nên 19-20 ký tự
+    // đầu của thẻ title, chỗ đắt nhất, không nên dành cho một thương hiệu
+    // chưa ai biết.
+    //
+    // KHÔNG nhắc commute ở đây dù trang có: title không nói hết được, và
+    // chọn phần nào là việc của SEO. Cái title này KHÔNG được nói là có dữ
+    // liệu ZIP cho tai nạn — FARS ở cấp hạt, và "by County" nói đúng điều đó.
+    title: "Fatal Crash Statistics by County — The Accident Record",
   },
   stateHub: {
     // {state} = mã hai chữ. Trang bang liệt kê ZIP theo hạt, nên "by County"
