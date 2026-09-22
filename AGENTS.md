@@ -184,6 +184,37 @@ Mười trận và sáu ngày. Không có gì đỏ lên khi dùng nhầm hàm �
 đủ, bảng xếp hạng vẫn cộng đúng, chỉ là của tuần trước. Ligue 1 không có lớp
 phủ nên hai hàm cho cùng kết quả, và đó chính là lý do nó trễ 9 ngày.
 
+## HÀM QC VIẾT CHO TIẾNG ANH KHÔNG DÙNG ĐƯỢC CHO TIẾNG VIỆT
+
+Site bóng đá viết tiếng Việt. Hai nguyên hàm dùng chung trong kho này chuẩn
+hoá văn bản bằng biểu thức chỉ biết ASCII, và với tiếng Việt chúng KHÔNG hỏng
+— chúng vẫn trả về một con số, chỉ là con số sai. Không có gì đỏ lên.
+
+`longestSharedPhrase` (lib/article-qc/checklist.ts) lọc `[^a-z0-9\s]`, nên đo
+22/9/2026:
+
+    "Arsenal FC đang đứng thứ 2 trên bảng xếp hạng"
+    -> arsenal|fc|ang|ng|th|2|tr|n|b|ng|x|p|h|ng
+
+"bảng xếp hạng" thành sáu mẩu. Hai hệ quả ngược chiều nhau, nên không thể sửa
+bằng cách chỉnh ngưỡng: ĐẾM PHỒNG gần gấp đôi (một cụm 5 từ đếm thành 8), và
+ĐỤNG GIẢ vì mẩu `ng` gộp đứng/hạng/bảng/những thành một token. Cổng khác biệt
+hoá vừa báo trùng lặp không có thật, vừa bỏ sót trùng lặp có thật.
+
+`extractNumbers` (lib/ai/validate.ts) đọc "," là dấu phân nhóm nghìn, đúng với
+tiếng Anh. Tiếng Việt dùng "," làm dấu THẬP PHÂN: "52,0%" ra 520, lệch mười
+lần.
+
+KHÔNG SỬA HAI HÀM ĐÓ. Chúng đang phục vụ hai site tiếng Anh với ngưỡng đã
+hiệu chỉnh trên chính bộ chuẩn hoá ấy; đổi nó là đổi mọi ngưỡng cùng lúc.
+Bản tiếng Việt nằm riêng:
+
+    lib/ai/entity-distinctness.ts   normaliseVi, longestSharedPhraseVi
+    lib/ai/entity-validate.ts       extractNumbersVi
+
+Bất cứ phép kiểm văn bản nào thêm sau này cho site tiếng Việt phải đi qua hai
+file đó, hoặc tự hỏi bộ chuẩn hoá của nó làm gì với dấu.
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
