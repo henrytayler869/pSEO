@@ -138,28 +138,63 @@ hiện chỉ số theo hiệp phải xử lý ca không biết, đừng điền 
 | trang giải + vòng đấu | ~5 + ~190 |
 | **C1 lưu trữ** | 15 mùa + 1.997 trận + trang CLB |
 
-### 4.2 "Nhận định kết quả trận đấu" — đọc theo nghĩa SAU TRẬN
+### 4.2 "Nhận định kết quả trận đấu" = bài SAU TRẬN — đã chốt
 
-Chủ dự án viết "chấp nhận trễ 1 ngày **sau khi trận đấu kết thúc**", và đã
-hoãn lịch thi đấu. Hai điều đó cùng chỉ về **bài phân tích sau trận**, không
-phải soi kèo trước trận.
+Chủ dự án xác nhận ngày 22/9/2026: **nhận định sau trận, không phải dự đoán
+trước trận.** Khớp với việc hoãn tích hợp lịch thi đấu. Không cần hỏi lại.
 
-Điều này cần nói thẳng với chủ dự án một lần nữa trước khi viết template, vì
-trong tiếng Việt "nhận định trận đấu" thường được hiểu là **dự đoán trước
-trận** — và loại đó bắt buộc phải có lịch thi đấu, thứ vừa bị hoãn. Nếu ý thật
-là dự đoán trước trận thì phải mở lại quyết định về lịch, chứ không phải viết
-một template mơ hồ phục vụ cả hai.
+**Một trang sau trận dựng được những gì — ví dụ chạy thật trên trận mới nhất
+của Ngoại hạng Anh (đo 22/9/2026):**
 
-Bài sau trận dựng được từ dữ liệu đang có: tỷ số, diễn biến theo hiệp, vị trí
-hai đội trên bảng trước và sau trận, chuỗi phong độ bị cắt hay kéo dài, đối
-đầu lịch sử trong mùa.
+```
+Matchday 5 · 20/9/2026
+Fulham FC 1-1 Manchester United FC   (hiệp một 0-0)
 
-Bài sau trận **không** dựng được: ai ghi bàn, ai kiến tạo, thẻ phạt, kiểm soát
-bóng, số cú sút. Đó lại chính là những thứ người đọc mong thấy trong một bài
-"nhận định" — nên cần cân nhắc thật kỹ chất lượng trang trước khi dựng 1.752
-bài mỗi mùa chỉ từ tỷ số.
+Fulham FC             hạng 20 -> 19   phong độ trước trận  B B B H
+Manchester United FC  hạng 13 -> 12   phong độ trước trận  B T H B
+đối đầu trong mùa: 1 trận
+```
 
----
+Thứ tự hạng **trước và sau trận** không có sẵn trong nguồn — nó tính ra bằng
+cách dựng bảng xếp hạng trên tập trận có ngày nhỏ hơn ngày trận đó, rồi dựng
+lại lần nữa có tính trận đó. `buildStandings()` nhận vào một tập trận bất kỳ
+nên việc này không cần thêm dữ liệu, chỉ cần lọc.
+
+Danh sách đầy đủ những gì suy ra được cho mỗi trận:
+
+- tỷ số chung cuộc và hiệp một, ngày, vòng đấu
+- hạng hai đội trước và sau trận, điểm trước và sau
+- chuỗi phong độ N trận gần nhất của mỗi đội **tính tới trước trận đó**
+- chuỗi bị cắt hay được kéo dài (thắng/bất bại/không thắng)
+- đối đầu giữa hai đội trong mùa, và trong 15 mùa C1 nếu là trận C1
+- trận có lội ngược dòng sau hiệp một hay không
+- tổng bàn, tài xỉu 2.5, hai đội cùng ghi bàn
+- bất ngờ hay không, so với khoảng cách hạng trước trận
+
+**Không suy ra được, và đây đúng là thứ người đọc mong thấy nhất trong một bài
+nhận định:** ai ghi bàn, phút ghi bàn, kiến tạo, thẻ phạt, đội hình ra sân,
+thay người, kiểm soát bóng, số cú sút. Xem mục 3.1 — không có nguồn nào trong
+tay cho những thứ này.
+
+**Hai điều về vận hành, nêu một lần để lượng hoá chứ không để bàn lại:**
+
+1. Độ trễ đo hôm nay là **2 ngày**, không phải 1 — và **Ligue 1 là 9 ngày**.
+   Chủ dự án chấp nhận trễ 1 ngày; con số thật đang lớn hơn thế và thay đổi
+   theo ngày. Trang phải đọc `stalenessDays` mà hiển thị, đừng viết "cập nhật
+   hôm nay" theo thời điểm dựng trang.
+2. Truy vấn sau trận là truy vấn TIN TỨC: nó dâng lên trong vài giờ sau tiếng
+   còi rồi tắt. Đăng sau 2 ngày nghĩa là vào cuộc khi đỉnh đã qua. Trang số
+   liệu cấp đội (mục 4.1) thì không chịu ràng buộc đó — cùng một bộ dữ liệu
+   nhưng một loại có hạn dùng vài giờ, loại kia đọc được quanh năm.
+
+   Hệ quả thực dụng: **đừng đặt cược lưu lượng vào 1.752 bài sau trận mỗi
+   mùa**. Chúng là lớp nội dung nền, còn trang đội và trang đối đầu mới là
+   phần có thể xếp hạng lâu dài.
+
+**Cảnh báo về độ mỏng.** 1.752 bài mỗi mùa dựng từ một tỷ số sẽ rất giống
+nhau nếu chỉ đổi tên đội và con số. Kho này đã có sẵn hai cổng cho đúng bệnh
+đó — cổng khác biệt hoá (differentiation gate) và `verify:content-rules` —
+phải bật chúng cho niche này TRƯỚC khi sinh hàng loạt, không phải sau.
 
 ## 5. Thứ publisher hiện tại KHÔNG dùng lại được
 
@@ -218,10 +253,13 @@ trong `verify-ucl-archive.ts` làm được điều đó.
 
 ## 7. Thứ tự nên làm
 
-1. Hỏi lại chủ dự án **một câu**: "nhận định" là bài sau trận hay dự đoán
-   trước trận? Trả lời khác nhau dẫn tới hai dự án khác nhau.
-2. Quyết trục trang cho site không có địa lý (mục 5).
-3. Dựng giai đoạn 1 **chỉ cấp đội** từ dữ liệu đang có — không chờ nguồn mới.
+1. **Quyết trục trang** cho site không có địa lý (mục 5). Đây là việc đầu
+   tiên, trước khi viết bất kỳ template nào.
+2. Dựng giai đoạn 1 **chỉ cấp đội** từ dữ liệu đang có — không chờ nguồn mới.
+   Ưu tiên trang đội và trang đối đầu (đọc được quanh năm) trước bài sau trận
+   (có hạn dùng vài giờ).
+3. Bật cổng khác biệt hoá và `verify:content-rules` cho niche này **trước**
+   khi sinh hàng loạt.
 4. Song song: chủ dự án đăng ký token `football-data.org`, rồi **đo phủ sóng
    thật** trước khi hứa bất kỳ nội dung cấp cầu thủ nào.
 5. V.League để mở. Không lấp bằng TheSportsDB.
