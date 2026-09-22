@@ -100,12 +100,22 @@ khác.
 
 ## `lib/football/` phải KHÔNG BIẾT GÌ về Next — và không có cổng nào canh
 
-`scripts/verify-openfootball.ts` và `scripts/verify-ucl-archive.ts` chạy bằng
-`tsx` thuần, ngoài Next, và import thẳng `lib/football/openfootball.ts`,
-`openfootball-txt.ts`, `ucl-archive.ts`, `season.ts`. Thêm bất cứ thứ gì của
-Next vào bốn file đó là đánh sập CẢ HAI cổng cùng lúc — và thông báo lỗi khi
-ấy (`ERR_REQUIRE_ASYNC_MODULE`) không nhắc một chữ nào về caching, nên nó đọc
-như "script hỏng" chứ không như "vừa thêm nhầm import".
+BỐN script chạy bằng `tsx` thuần, ngoài Next, và import thẳng vào tầng lib:
+
+    verify-openfootball.ts     openfootball.ts, openfootball-txt.ts, season.ts
+    verify-ucl-archive.ts      ucl-archive.ts, openfootball.ts
+    verify-football-facts.ts   facts.ts, openfootball.ts, season.ts
+    verify-page-axis.ts        lib/page-axis/axes.ts, openfootball.ts, season.ts
+
+Thêm bất cứ thứ gì của Next vào SÁU file lib đó — `openfootball.ts`,
+`openfootball-txt.ts`, `ucl-archive.ts`, `season.ts`, `facts.ts`,
+`lib/page-axis/axes.ts` — là đánh sập những cổng tương ứng, và thông báo lỗi
+khi ấy (`ERR_REQUIRE_ASYNC_MODULE`) không nhắc một chữ nào về caching, nên nó
+đọc như "script hỏng" chứ không như "vừa thêm nhầm import".
+
+`lib/page-axis/axes.ts` nằm ngoài `lib/football/` mà vẫn chịu cùng ràng buộc:
+nó mô tả trục trang, không mô tả bóng đá, nên nó phải dùng được từ cả trang
+lẫn script.
 
 Chỗ duy nhất được phép biết Next là `lib/football/cached.ts`. Script không bao
 giờ import file đó. Trang import nó, và chỉ nó.
@@ -121,6 +131,19 @@ với khối "NOT run here" trong `.github/workflows/deploy.yml`. Chạy tay:
 
     npm run verify:openfootball     # 5 giải quốc nội, mùa đang đá
     npm run verify:ucl-archive      # 15 mùa Champions League đã kết thúc
+    npm run verify:football-facts   # chỉ số cấp đội đối chiếu chéo buildStandings
+    npm run verify:page-axis        # khoá trang + hàng EntityIdentity trong DB
+
+ĐỌC NGUỒN QUA `fetchLeagueSeasonMerged`, KHÔNG PHẢI `fetchLeagueSeason`.
+Bản JSON là NỀN; lớp phủ .txt mới là thứ mang kết quả mới nhất. Đo 22/9/2026,
+cùng một ngày, cùng một giải:
+
+    fetchLeagueSeason        Ngoại hạng Anh  40/380 trận, trễ 8 ngày
+    fetchLeagueSeasonMerged  Ngoại hạng Anh  50/380 trận, trễ 2 ngày
+
+Mười trận và sáu ngày. Không có gì đỏ lên khi dùng nhầm hàm — trang vẫn dựng
+đủ, bảng xếp hạng vẫn cộng đúng, chỉ là của tuần trước. Ligue 1 không có lớp
+phủ nên hai hàm cho cùng kết quả, và đó chính là lý do nó trễ 9 ngày.
 
 # This is NOT the Next.js you know
 

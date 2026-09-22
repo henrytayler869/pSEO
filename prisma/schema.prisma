@@ -962,8 +962,8 @@ model Website {
   onPageTaskAt   DateTime?
   onPageMaxPages Int?
 
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
   /// Ngân sách AI của publisher này, USD. Null = chưa đặt.
   ///
   /// MỀM, không chặn. Nội dung của publisher phụ thuộc hoàn toàn vào AI,
@@ -974,7 +974,9 @@ model Website {
   /// Null phải hiện ra là "chưa đặt", không được hiện ra là "đang trong
   /// ngân sách": một ô xanh cho một ngân sách không tồn tại là câu trả lời
   /// sai cho câu hỏi người ta thực sự hỏi.
-  aiBudgetUsd Float?
+  aiBudgetUsd      Float?
+  indexRecheckRuns IndexRecheckRun[]
+  scheduledChecks  ScheduledCheck[]
 
   @@unique([gscPropertyUrl])
   // Khai ở đây vì migration 20260912000000 đã TẠO index này trên
@@ -982,8 +984,6 @@ model Website {
   // và `prisma migrate diff` — phép kiểm duy nhất bắt được cột khai nhầm
   // model — sẽ đỏ sẵn, tức là một cổng người ta sẽ tắt.
   @@index([vertical])
-  indexRecheckRuns IndexRecheckRun[]
-  scheduledChecks  ScheduledCheck[]
 }
 
 /// Một lần ĐO trạng thái index của một URL.
@@ -1124,4 +1124,133 @@ model PublisherApiKey {
   createdAt DateTime @default(now())
 
   @@index([websiteId])
+}
+
+// ---------------------------------------------------------------------------
+// TRỤC TRANG THỨ HAI — cho site KHÔNG có địa lý
+//
+// Vì sao là bảng riêng chứ không nới `Location`/`MarketIdentity`.
+//
+// Trục hiện tại xoay quanh mã ZIP của Mỹ và xoay thật, không phải trên danh
+// nghĩa: `Location` unique theo `zip`, `MarketIdentity` unique theo
+// `(zip, vertical)`, `state` không nullable, không có cột quốc gia. Đo
+// 22/9/2026: 623 dòng mã KHÔNG phải chú thích ở HQ và 310 dòng bên publisher
+// nhắc tới `zip`. Tổng quát hoá tại chỗ nghĩa là đọc lại từng đó dòng trên
+// một database đang phục vụ HAI site sống — và nghĩa là phải chọn ĐÚNG hình
+// dạng khoá chung ngay lần đầu, vì lần thứ hai là một migration nữa trên
+// cùng database đó.
+//
+// Bảng này đảo thứ tự: hình dạng khoá chung được chứng minh trên bóng đá
+// trước, nơi chưa site nào sống nên làm hỏng không tốn gì. Nếu nó đứng vững,
+// trục địa lý chuyển về đây sau với `axis = "zip"` và `Location` thành thứ
+// treo bên cạnh chứ không phải danh tính. Nếu nó không đứng vững, thứ phải
+// vứt đi là hai bảng chưa ai dùng.
+//
+// GIÁ PHẢI TRẢ, nêu ra vì nó có thật: từ đây có HAI định nghĩa "một trang là
+// gì" cùng sống trong một schema. Kho này đã trả giá cho bản sao trôi lệch
+// nhiều lần (launch.json, NICHES_WITH_COPY, PILLARS_BY_VERTICAL). Chỗ khác
+// biệt là hai định nghĩa này KHÔNG mô tả cùng một tập trang — không hàng nào
+// ở đây được phép mang `axis = "zip"` chừng nào `MarketIdentity` còn sống, và
+// đó là bất biến `scripts/verify-page-axis.ts` canh.
+// ---------------------------------------------------------------------------
+
+/// Danh tính một trang của site KHÔNG có địa lý.
+///
+/// ═══ `axis` LÀ CHUỖI, KHÔNG PHẢI ENUM ═══
+///
+/// Cùng lý lẽ với `MarketIdentity.vertical` và `Website.vertical`: một enum ở
+/// đây buộc mọi niche không-địa-lý về sau phải đi kèm một migration chỉ để
+/// khai một từ. Khác với `vertical` ở chỗ tập giá trị của `axis` sống trong
+/// mã chứ không trong dữ liệu — nên nó được canh ở `lib/page-axis/axes.ts`
+/// thay vì ở database, và `scripts/verify-page-axis.ts` đỏ khi database có
+/// một `axis` không ai khai.
+///
+/// ═══ `key` KHÔNG CHỨA MÙA, VÀ ĐÓ LÀ QUYẾT ĐỊNH VỀ SEO ═══
+///
+/// `"en-1/arsenal-fc"` chứ không phải `"2026-27/en-1/arsenal-fc"`. Trang đội
+/// là trang ĐỌC ĐƯỢC QUANH NĂM (brief mục 4.2): nó luôn hiện mùa đang đá, và
+/// URL của nó không đổi khi sang mùa mới. Nhét mùa vào khoá sẽ sinh một bộ
+/// URL mới mỗi tháng Bảy và vứt bỏ toàn bộ thẩm quyền đã tích được — đúng thứ
+/// duy nhất mà một site mới không mua được.
+///
+/// Mùa là NỘI DUNG, không phải danh tính. Trang lưu trữ theo mùa (15 mùa C1)
+/// là chuyện khác và sẽ có `axis` riêng khi tới lượt nó.
+model EntityIdentity {
+  id       String @id @default(cuid())
+  vertical String
+
+  /// "league" | "team" | "fixture". Xem `lib/page-axis/axes.ts`.
+  axis String
+
+  /// Khoá ổn định, do nguồn quyết chứ không do tên hiển thị quyết.
+  ///
+  /// Tên đội đổi được ("Manchester United FC" -> "Manchester United"), và
+  /// openfootball đã đổi định dạng .txt giữa hai mùa liền nhau. Khoá dựng từ
+  /// mã giải của nguồn cộng slug đã chuẩn hoá, nên một lần đổi tên hiển thị
+  /// KHÔNG tạo ra một trang mới — nó sửa `displayName` tại chỗ.
+  key String
+
+  /// Khoá của trang cha, để dựng breadcrumb và liên kết nội bộ mà không phải
+  /// phân tích chuỗi `key`. Null cho trang gốc của trục (giải).
+  ///
+  /// Không đặt FK tự trỏ: hàng cha và hàng con được ghi trong cùng một đợt
+  /// đồng bộ, và một FK sẽ bắt đợt đó phải có thứ tự. Ràng buộc thật là
+  /// "parentKey trỏ tới một key có tồn tại trong cùng vertical", và đó là
+  /// thứ `verify-page-axis.ts` kiểm sau khi đợt ghi xong.
+  parentKey String?
+
+  /// Chuỗi người đọc thấy. Mô tả, KHÔNG phải danh tính — xem `key`.
+  displayName String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  generations AiEntityGeneration[]
+
+  @@unique([vertical, axis, key])
+  @@index([vertical, axis])
+  @@index([vertical, parentKey])
+}
+
+/// Đoạn diễn giải AI cho một trang trên trục không-địa-lý.
+///
+/// Bảng riêng chứ không nới `AiGeneration.zip` thành nullable, và lý lẽ là
+/// lý lẽ đã viết sẵn ở `AiClusterGeneration`: mỗi hàng bên đó nói về đúng một
+/// ZIP, và cho `zip` null buộc MỌI truy vấn đã viết phải cân nhắc một trạng
+/// thái chúng chưa từng gặp. Nhét `"en-1/arsenal-fc"` vào cột tên `zip` thì
+/// còn tệ hơn — số đúng nhãn sai là loại lỗi đi qua được mọi validator, vì
+/// validator so văn bản với fact chứ không so tên cột với thực tế.
+///
+/// Có FK thật, khác `AiGeneration` (giữ `vertical` + `zip` rời). Không phải
+/// vì bên kia sai — bên kia có trước `MarketIdentity` — mà vì ở đây danh tính
+/// ĐÃ là một hàng, nên không có cớ gì để tham chiếu nó bằng hai chuỗi.
+model AiEntityGeneration {
+  id String @id @default(cuid())
+
+  entityIdentityId String
+  entityIdentity   EntityIdentity @relation(fields: [entityIdentityId], references: [id], onDelete: Cascade)
+
+  /// Vân tay của ĐÚNG tập fact đã sinh ra văn bản này.
+  ///
+  /// Cùng vai trò với `AiGeneration.factsFingerprint` và quan trọng hơn ở
+  /// đây: fact bóng đá đổi sau MỖI VÒNG ĐẤU, không phải sau mỗi đợt thu thập
+  /// dữ liệu vài tháng một lần. Một đoạn văn viết cho Arsenal sau 5 trận vẫn
+  /// đọc trôi chảy sau 6 trận, và vẫn sai. Cache chỉ trúng khi vân tay khớp.
+  factsFingerprint String
+
+  prompt String
+  text   String
+
+  model        String
+  inputTokens  Int
+  outputTokens Int
+  costUsd      Float
+
+  validationPassed Boolean
+  validationNotes  String?
+
+  createdAt DateTime @default(now())
+
+  @@index([entityIdentityId])
+  @@index([factsFingerprint])
 }

@@ -41,7 +41,9 @@
     "solo-state:generate": "tsx scripts/generate-solo-state-text.ts",
     "test:outcome-parity": "tsx scripts/test-outcome-claims-parity.ts",
     "verify:openfootball": "tsx scripts/verify-openfootball.ts",
-    "verify:ucl-archive": "tsx scripts/verify-ucl-archive.ts"
+    "verify:ucl-archive": "tsx scripts/verify-ucl-archive.ts",
+    "verify:page-axis": "tsx scripts/verify-page-axis.ts",
+    "verify:football-facts": "tsx scripts/verify-football-facts.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
