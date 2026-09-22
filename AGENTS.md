@@ -98,6 +98,30 @@ khác.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
+## `lib/football/` phải KHÔNG BIẾT GÌ về Next — và không có cổng nào canh
+
+`scripts/verify-openfootball.ts` và `scripts/verify-ucl-archive.ts` chạy bằng
+`tsx` thuần, ngoài Next, và import thẳng `lib/football/openfootball.ts`,
+`openfootball-txt.ts`, `ucl-archive.ts`, `season.ts`. Thêm bất cứ thứ gì của
+Next vào bốn file đó là đánh sập CẢ HAI cổng cùng lúc — và thông báo lỗi khi
+ấy (`ERR_REQUIRE_ASYNC_MODULE`) không nhắc một chữ nào về caching, nên nó đọc
+như "script hỏng" chứ không như "vừa thêm nhầm import".
+
+Chỗ duy nhất được phép biết Next là `lib/football/cached.ts`. Script không bao
+giờ import file đó. Trang import nó, và chỉ nó.
+
+KHÔNG CÓ CỔNG NÀO KIỂM RÀNG BUỘC NÀY. `tsc` không thấy gì sai, `eslint` không
+thấy gì sai, `next build` càng không — cả ba đều chạy trong thế giới có Next.
+Chỉ khi ai đó gõ `npm run verify:openfootball` mới vỡ, và đó là lệnh chạy tay
+(xem đoạn dưới). Bất biến này sống bằng đúng đoạn văn bạn đang đọc.
+
+Và hai cổng đó CỐ TÌNH không nằm trong CI: chúng đọc mạng, nên một lần GitHub
+trục trặc sẽ làm đỏ PR của mọi session mà không nói gì về code — cùng lý lẽ
+với khối "NOT run here" trong `.github/workflows/deploy.yml`. Chạy tay:
+
+    npm run verify:openfootball     # 5 giải quốc nội, mùa đang đá
+    npm run verify:ucl-archive      # 15 mùa Champions League đã kết thúc
+
 # This is NOT the Next.js you know
 
 This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
