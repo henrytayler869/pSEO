@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { entitySpecFor, metricsNamedByEntity } from "@/lib/content-spec/entity-spec";
-import { VERTICALS_WITH_BRIEFS } from "@/lib/ai/generate";
+import { ENTITY_VERTICALS_WITH_BRIEFS } from "@/lib/ai/entity-generate";
 import { axesFor } from "@/lib/page-axis/axes";
 import type { ReadinessCheck, NicheReadiness } from "@/lib/publisher/niche-readiness";
 
@@ -115,11 +115,12 @@ export async function checkEntityNicheReadiness(vertical: string): Promise<Niche
   checks.push({
     key: "brief",
     title: "Brief cho tầng AI",
-    ok: VERTICALS_WITH_BRIEFS.includes(vertical),
+    ok: ENTITY_VERTICALS_WITH_BRIEFS.includes(vertical),
     severity: "blocker",
-    detail: VERTICALS_WITH_BRIEFS.includes(vertical)
-      ? "đã có"
-      : "CHƯA có — và SYSTEM_PROMPT hiện tại viết cho trang dịch vụ địa phương, không dùng lại được",
+    detail: ENTITY_VERTICALS_WITH_BRIEFS.includes(vertical)
+      ? "đã có, kèm system prompt riêng của trục thực thể"
+      : "CHƯA có — khai ở lib/ai/entity-generate.ts. KHÔNG dùng VERTICALS_WITH_BRIEFS của trục địa lý: " +
+        "prompt bên đó viết cho trang dịch vụ địa phương, nên một nghề có tên ở đó vẫn không có prompt dùng được",
     incident:
       "Prompt hiện có ràng buộc theo phạm vi ZIP/hạt và theo phía cung của một nghề dịch vụ. Dùng nó " +
       "cho bóng đá là thả một model vào một bộ luật không nói gì về việc nó đang viết cái gì.",

@@ -24,7 +24,7 @@
  */
 import { LEAGUES, fetchLeagueSeasonMerged, buildStandings, type LeagueCode } from "@/lib/football/openfootball";
 import { currentEuropeanSeason } from "@/lib/football/season";
-import { fixtureFacts, fixtureStats, leagueStats, teamFacts, teamStats } from "@/lib/football/facts";
+import { fixtureFacts, fixtureStats, leagueFacts, leagueStats, teamFacts, teamStats } from "@/lib/football/facts";
 import { allEntitySpecs, metricsNamedByEntity, type EntityContentSpec } from "@/lib/content-spec/entity-spec";
 import { isKnownAxis } from "@/lib/page-axis/axes";
 
@@ -46,6 +46,10 @@ async function emittedKeys(): Promise<Set<string>> {
   for (const code of Object.keys(LEAGUES) as LeagueCode[]) {
     const s = await fetchLeagueSeasonMerged(code, season, now);
     const lg = leagueStats(s);
+    // Trang giải phát fact riêng — không gom nó thì cổng sẽ không thấy khoá
+    // nào chỉ trang giải dùng, và chiều "phát mà đặc tả không nhắc" hở đúng
+    // chỗ đó.
+    for (const f of leagueFacts(lg)) keys.add(f.key);
     for (const row of buildStandings(s)) {
       for (const f of teamFacts(teamStats(s, row.team), lg)) keys.add(f.key);
     }

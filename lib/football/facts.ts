@@ -30,7 +30,7 @@
  * đọc ra là "đã đo, bằng không".
  */
 import type { FootballMatch, LeagueSeason, StandingRow } from "./openfootball";
-import { buildStandings } from "./openfootball";
+import { LEAGUES, buildStandings } from "./openfootball";
 
 /**
  * Phạm vi của một con số. Cùng vai trò với `Fact["scope"]` của trục địa lý,
@@ -56,6 +56,22 @@ export interface FootballFact {
 }
 
 export type Outcome = "T" | "H" | "B";
+
+/**
+ * Tên giải NGƯỜI VIỆT ĐỌC, không phải tên trong file nguồn.
+ *
+ * `LeagueStats.name` là chuỗi openfootball in ra — "English Premier League
+ * 2026/27". Site này viết tiếng Việt, và tên giải đi thẳng vào NHÃN chỉ số,
+ * vào `scopeName`, rồi vào prompt. Luật 2 của validator buộc model nêu tên
+ * giải mỗi khi dùng một con số cấp giải, nên dùng tên nguồn nghĩa là mỗi đoạn
+ * văn tiếng Việt sẽ có một cụm tiếng Anh kẹp giữa — trên MỌI trang đội.
+ *
+ * Rơi về tên nguồn khi mã giải lạ: thà một tên tiếng Anh còn hơn một ô trống,
+ * và mã lạ thì `verify:page-axis` đã bắt ở chỗ khác.
+ */
+function leagueLabel(lg: LeagueStats): string {
+  return (LEAGUES as Record<string, string>)[lg.code] ?? lg.name;
+}
 
 const pct = (n: number, d: number): number => (d === 0 ? 0 : (n / d) * 100);
 const showPct = (v: number): string => `${v.toFixed(1).replace(".", ",")}%`;
@@ -369,19 +385,43 @@ export function teamFacts(stats: TeamStats, league: LeagueStats): FootballFact[]
   // Cấp GIẢI, phát kèm để câu văn so sánh được — và mang scope LEAGUE nên bất
   // kỳ câu nào dùng nó buộc phải nói đó là số của giải.
   if (league.played > 0) {
+    const lname = leagueLabel(league);
     const overRate = pct(league.over25, league.played);
-    push(out, { key: "league_over25_pct", label: `tỷ lệ trận trên 2,5 bàn ở ${league.name}`, value: overRate, display: showPct(overRate), unit: "%", scope: "LEAGUE", scopeName: league.name });
+    push(out, { key: "league_over25_pct", label: `tỷ lệ trận trên 2,5 bàn ở ${lname}`, value: overRate, display: showPct(overRate), unit: "%", scope: "LEAGUE", scopeName: lname });
     const homeRate = pct(league.homeWins, league.played);
-    push(out, { key: "league_home_win_pct", label: `tỷ lệ chủ nhà thắng ở ${league.name}`, value: homeRate, display: showPct(homeRate), unit: "%", scope: "LEAGUE", scopeName: league.name });
-    push(out, { key: "league_played", label: `số trận đã đá ở ${league.name}`, value: league.played, display: showInt(league.played), unit: "trận", scope: "LEAGUE", scopeName: league.name });
+    push(out, { key: "league_home_win_pct", label: `tỷ lệ chủ nhà thắng ở ${lname}`, value: homeRate, display: showPct(homeRate), unit: "%", scope: "LEAGUE", scopeName: lname });
+    push(out, { key: "league_played", label: `số trận đã đá ở ${lname}`, value: league.played, display: showInt(league.played), unit: "trận", scope: "LEAGUE", scopeName: lname });
   }
 
+  return out;
+}
+
+/**
+ * Fact cho trang GIẢI.
+ *
+ * Phát ra ĐÚNG ba khoá mà `teamFacts` cũng phát ở phần bối cảnh, không thêm
+ * khoá mới. Không phải vì trang giải không nói được gì hơn, mà vì mỗi khoá
+ * mới phải có chỗ trong đặc tả hoặc trong `excluded` — `verify:entity-spec`
+ * đối chiếu hai chiều và sẽ đỏ nếu tôi phát ra một chỉ số chưa ai quyết định
+ * dùng hay bỏ. Thêm chỉ số cho trang giải là một thay đổi có chủ đích, đi kèm
+ * một mục trong đặc tả, không phải một hệ quả phụ của việc viết hàm này.
+ */
+export function leagueFacts(lg: LeagueStats): FootballFact[] {
+  const out: FootballFact[] = [];
+  if (lg.played === 0) return out;
+  const lname = leagueLabel(lg);
+  const overRate = pct(lg.over25, lg.played);
+  const homeRate = pct(lg.homeWins, lg.played);
+  push(out, { key: "league_played", label: `số trận đã đá ở ${lname}`, value: lg.played, display: showInt(lg.played), unit: "trận", scope: "LEAGUE", scopeName: lname });
+  push(out, { key: "league_over25_pct", label: `tỷ lệ trận trên 2,5 bàn ở ${lname}`, value: overRate, display: showPct(overRate), unit: "%", scope: "LEAGUE", scopeName: lname });
+  push(out, { key: "league_home_win_pct", label: `tỷ lệ chủ nhà thắng ở ${lname}`, value: homeRate, display: showPct(homeRate), unit: "%", scope: "LEAGUE", scopeName: lname });
   return out;
 }
 
 export function fixtureFacts(fx: FixtureStats, league: LeagueStats): FootballFact[] {
   const out: FootballFact[] = [];
   const name = `${fx.teamA} gặp ${fx.teamB}`;
+  const lname = leagueLabel(league);
   if (fx.meetings.length === 0) return out;
 
   push(out, { key: "h2h_meetings", label: `số lần ${name} đã gặp nhau trong tập dữ liệu`, value: fx.meetings.length, display: showInt(fx.meetings.length), unit: "trận", scope: "FIXTURE", scopeName: name });
@@ -390,6 +430,6 @@ export function fixtureFacts(fx: FixtureStats, league: LeagueStats): FootballFac
   push(out, { key: "h2h_draws", label: `số trận hoà giữa ${fx.teamA} và ${fx.teamB}`, value: fx.draws, display: showInt(fx.draws), unit: "trận", scope: "FIXTURE", scopeName: name });
   push(out, { key: "h2h_goals_a", label: `bàn ${fx.teamA} ghi trong các lần gặp ${fx.teamB}`, value: fx.goalsA, display: showInt(fx.goalsA), unit: "bàn", scope: "FIXTURE", scopeName: name });
   push(out, { key: "h2h_goals_b", label: `bàn ${fx.teamB} ghi trong các lần gặp ${fx.teamA}`, value: fx.goalsB, display: showInt(fx.goalsB), unit: "bàn", scope: "FIXTURE", scopeName: name });
-  push(out, { key: "league_played", label: `số trận đã đá ở ${league.name}`, value: league.played, display: showInt(league.played), unit: "trận", scope: "LEAGUE", scopeName: league.name });
+  push(out, { key: "league_played", label: `số trận đã đá ở ${lname}`, value: league.played, display: showInt(league.played), unit: "trận", scope: "LEAGUE", scopeName: lname });
   return out;
 }

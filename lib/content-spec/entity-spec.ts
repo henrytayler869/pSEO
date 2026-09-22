@@ -264,9 +264,11 @@ const FOOTBALL: EntityContentSpec = {
     {
       metric: "team_streak_length",
       why:
-        "Tầng chỉ số có phát, nhưng KHÔNG đưa vào mục nào ở giai đoạn 1. Một chuỗi chỉ có nghĩa khi " +
-        "kèm loại của nó (thắng / bất bại / không thắng), và bốn loại đó cần văn xuôi chứ không cần " +
-        "một ô số. Đưa vào sau, khi mục phong độ có chỗ diễn giải.",
+        "Không đưa vào MỤC nào ở giai đoạn 1. Một chuỗi chỉ có nghĩa khi kèm loại của nó (thắng / " +
+        "bất bại / không thắng), và bốn loại đó cần văn xuôi chứ không cần một ô số. " +
+        "`excluded` ở đây nghĩa là KHÔNG CÓ MỤC RIÊNG, không phải giấu khỏi tầng AI: chỉ số vẫn đi " +
+        "vào fact set của đoạn diễn giải, và đó đúng là chỗ văn xuôi mà nó cần. Đo 22/9/2026 trên " +
+        "trang Chelsea FC, model dùng nó thành chuỗi 3 trận không thắng.",
     },
   ],
   unavailable: [
