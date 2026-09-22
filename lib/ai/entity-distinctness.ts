@@ -101,27 +101,38 @@ export interface CrossPageVerdict {
  * chuẩn hoá khác, cho một câu hỏi khác (sinh lại cùng một trang). Mượn nó về
  * đây sẽ là một ngưỡng trông như đã hiệu chỉnh mà thật ra chưa đo gì.
  *
- * ĐO ĐƯỢC, không chọn cho đẹp. `npm run entity:distinctness -- 8` ngày
- * 22/9/2026, 8 trang đội trải 5 giải, 28 cặp:
+ * ĐO ĐƯỢC TRÊN TOÀN BỘ DÂN SỐ, không ngoại suy. `entity:distinctness -- 96`
+ * ngày 22/9/2026, cả 96 trang đội, 4.560 cặp:
  *
- *     nhỏ nhất 6  |  giữa 11  |  trung bình 11,0  |  lớn nhất 24
+ *     nhỏ nhất 4  |  TRUNG VỊ 8  |  trung bình 9,0  |  lớn nhất 41
  *
- * Con số đó là SAU khi bỏ chỉ số cấp giải khỏi tập fact của model. Trước đó
- * lớn nhất là 29, và mạch 29 từ ấy chính là câu bối cảnh giải mà cả 20 đội
- * Ngoại hạng Anh đều nhận y hệt — xem `forModel` trong `entity-generate.ts`.
- * Số cặp có mạch từ 17 từ trở lên giảm từ 6 xuống 3.
+ * Ba cỡ mẫu cho thấy vì sao không được ngoại suy: mẫu 8 ra cực đại 24, mẫu 24
+ * ra 27, toàn bộ ra 41 — cực đại bò lên theo số cặp, trong khi trung vị lại
+ * GIẢM (11 -> 9 -> 8). Đặt trần theo một mẫu nhỏ sẽ chặt dần một cách tình cờ.
  *
- * Chọn 28: trên mức lớn nhất đo được (24) một biên bốn từ, cùng cách
- * `MAX_SHARED_RUN_WORDS` chọn 16 trên mức 13. Nghiêng về phía LỎNG chứ không
- * phía chặt, vì phần trùng còn lại gần như toàn là chuỗi SỐ bắt buộc — "6
- * điểm sau 3 trận", "trong 5 trận biết tỷ số hiệp một" — và một trần quá chặt
- * sẽ làm một trang mà fact buộc phải có mạch dài trượt mọi lượt rồi KHÔNG CÓ
- * VĂN NÀO, tệ hơn hẳn một mạch dài toàn số.
+ * ═══ CÁI ĐUÔI LÀ TRÙNG SỐ, KHÔNG PHẢI TRÙNG KHUÔN ═══
  *
- * Mẫu 8 trang là nhỏ, đúng như mẫu 5 ZIP của trục địa lý. Thấy nhiều ca trượt
- * thì ĐO LẠI rồi chỉnh, đừng nâng trần cho khuất mắt.
- */
-export const MAX_CROSS_PAGE_RUN_WORDS = 28;
+ * Cặp tệ nhất là VfB Stuttgart và Hamburger SV, cùng Bundesliga, chia nhau 41
+ * từ: "chưa có trận nào giữ sạch lưới, trong 4 trận đã đá, toàn bộ 3 điểm đến
+ * từ 2 trận trên sân nhà còn 2 trận sân khách mang về 0 điểm…". Hai đội có Y
+ * HỆT một bộ số — cùng số trận, cùng điểm, cùng tách sân nhà/khách, cùng số
+ * trận giữ sạch lưới. Đầu mùa thì chuyện đó thường.
+ *
+ * Không prompt nào sửa được điều đó mà không bịa: hai trang đang nói cùng một
+ * sự thật. Chặn chúng sẽ để hai trang KHÔNG CÓ VĂN NÀO — tệ hơn hẳn một đoạn
+ * trùng dài.
+ *
+ * ═══ NÊN CỔNG NÀY CANH TRUNG VỊ, KHÔNG CANH CÁI ĐUÔI ═══
+ *
+ * Trần 45 (trên cực đại đo được 41 một biên bốn từ) cố ý LỎNG: nó không phải
+ * để bắt trùng do số trùng. Thứ nó bắt là một hồi quy khác hẳn — ai đó sửa
+ * prompt và cả kho văn trở nên rập khuôn. Dạng hỏng ấy đẩy TRUNG VỊ lên, và
+ * trung vị 8 trên 4.560 cặp là bằng chứng kho văn hôm nay KHÔNG rập khuôn.
+ *
+ * Nên khi chạy lại: nhìn trung vị trước, cực đại sau. Trung vị nhảy từ 8 lên
+ * 20 là báo động thật; một cặp 41 từ thì không.
+  */
+export const MAX_CROSS_PAGE_RUN_WORDS = 45;
 
 export function judgeCrossPageDistinctness(
   text: string,
