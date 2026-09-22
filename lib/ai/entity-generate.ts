@@ -315,7 +315,7 @@ export async function getCachedEntityInterpretation(
   });
   if (!cached) return null;
 
-  const recheck = validateEntityText(cached.text, fs.modelFacts);
+  const recheck = validateEntityText(cached.text, fs.modelFacts, { pageAxis: axis, leagueName: fs.leagueName });
   if (!recheck.passed) return null;
 
   return {
@@ -375,7 +375,7 @@ export async function getOrGenerateEntityInterpretation(
     }
     totalCost += result.costUsd;
     lastText = result.text;
-    last = validateEntityText(result.text, fs.modelFacts);
+    last = validateEntityText(result.text, fs.modelFacts, { pageAxis: axis, leagueName: fs.leagueName });
 
     // Ghi CẢ bản trượt, kèm lý do. Một bản bị từ chối là bằng chứng về prompt,
     // và vứt nó đi lặng lẽ sẽ giấu mất một vấn đề có hệ thống.

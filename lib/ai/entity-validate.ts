@@ -230,12 +230,66 @@ function isCalendarYear(value: number): boolean {
   return Number.isInteger(value) && value >= 1900 && value <= 2100;
 }
 
-export function validateEntityText(text: string, facts: readonly FootballFact[]): EntityValidationResult {
+export interface EntityValidateOptions {
+  /**
+   * Axis của TRANG đang chấm.
+   *
+   * Luật scope_overclaim chỉ có nghĩa khi chủ thể của trang KHÁC phạm vi của
+   * con số. Trên trang GIẢI, mọi chỉ số đều cấp giải và chủ thể chính là giải
+   * đó — đòi nêu tên giải trong từng câu là đòi một điều thừa, và văn đúng sẽ
+   * bị từ chối.
+   *
+   * Đo 22/9/2026 khi sinh lô: CẢ 5 trang giải trượt, mỗi trang 2-3 lần, trong
+   * khi văn hoàn toàn đúng — "Mùa 2026-27 của Ngoại hạng Anh hiện đã có 50
+   * trận. Trong số 50 trận này, tỷ lệ trận có trên 2,5 bàn là 52,0%." Câu hai
+   * không lặp tên giải vì câu một đã nêu.
+   *
+   * Chính lý lẽ của luật đã nói ra giới hạn ấy — "Trên trang một ĐỘI, con số
+   * đó sẽ đọc ra là số của đội" — và mã không đọc theo.
+   */
+  pageAxis?: string;
+  /**
+   * Tên giải, để che khi đọc số.
+   *
+   * Phải truyền RIÊNG, không suy được từ fact: trên trang đội, `modelFacts` đã
+   * lọc hết chỉ số cấp giải, nên không `scopeName` nào còn mang tên giải — dù
+   * câu văn vẫn buộc phải nêu nó. Đo 22/9/2026: hai trang Ligue 1 vẫn trượt
+   * sau khi đã che tên riêng, vì "Ligue 1" không còn ở đâu để che.
+   *
+   * Đây là cái giá của việc tách facts/modelFacts, và nó chỉ lộ ra ở giải có
+   * chữ số trong tên.
+   */
+  leagueName?: string;
+}
+
+export function validateEntityText(
+  text: string,
+  facts: readonly FootballFact[],
+  opts: EntityValidateOptions = {}
+): EntityValidationResult {
   const issues: EntityValidationIssue[] = [];
   const lower = text.toLowerCase();
 
+  /**
+   * Che TÊN RIÊNG trước khi đọc số.
+   *
+   * "Ligue 1" chứa một chữ số, và nó là TÊN — không phải một phép đo. Đo
+   * 22/9/2026: trang Paris FC bị từ chối vì số "1", lấy từ chính tên giải mà
+   * câu văn buộc phải nêu. Ba đội Pháp khác trượt cùng lý do.
+   *
+   * Lấy tên từ `scopeName` của chính fact set, không từ một danh sách viết
+   * tay: tên ở đó do HQ cấp, nên không có nguồn thứ hai để trôi lệch.
+   */
+  const names = [...new Set([...facts.map((f) => f.scopeName), opts.leagueName ?? ""])]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  const masked = names.reduce(
+    (acc, n) => (n ? acc.split(n).join(" ".repeat(n.length)) : acc),
+    text
+  );
+
   // ── Luật 1: mọi số phải truy được về một fact đã đo ─────────────────────
-  for (const sentence of sentencesOf(text)) {
+  for (const sentence of sentencesOf(masked)) {
     for (const { raw, value } of extractNumbersVi(sentence)) {
       if (matchesAnyFact(value, facts).length > 0) continue;
       if (isCalendarYear(value)) continue;
@@ -251,8 +305,17 @@ export function validateEntityText(text: string, facts: readonly FootballFact[])
   //
   // Bản dịch của `aggregate-must-declare-scope`. Một con số của cả giải in
   // trên trang một đội, không kèm tên giải, đọc ra là số của đội đó.
-  for (const sentence of sentencesOf(text)) {
-    for (const { value } of extractNumbersVi(sentence)) {
+  // Trang GIẢI: chủ thể ĐÃ là giải, không có chỗ nào để gán nhầm. Xem
+  // EntityValidateOptions.pageAxis.
+  const checkScope = opts.pageAxis !== "league";
+  // Đọc SỐ trên bản đã che tên riêng, nhưng kiểm TÊN trên bản gốc: che giữ
+  // nguyên độ dài nên hai bản cắt câu ra cùng số mảnh và khớp theo chỉ số.
+  // Dùng bản che cho cả hai việc sẽ xoá mất chính cái tên mà luật đi tìm.
+  const originalSentences = sentencesOf(text);
+  const maskedSentences = sentencesOf(masked);
+  for (let si = 0; checkScope && si < maskedSentences.length; si++) {
+    const sentence = originalSentences[si] ?? maskedSentences[si];
+    for (const { value } of extractNumbersVi(maskedSentences[si])) {
       const hits = matchesAnyFact(value, facts);
       if (hits.length === 0) continue;
       // Chỉ xét khi MỌI fact khớp con số này đều ở cấp giải — còn nếu có một

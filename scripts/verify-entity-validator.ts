@@ -41,8 +41,8 @@ function expectNumbers(text: string, want: number[]): void {
   }
 }
 
-function expectVerdict(label: string, text: string, shouldPass: boolean, rule?: string): void {
-  const r = validateEntityText(text, FACTS);
+function expectVerdict(label: string, text: string, shouldPass: boolean, rule?: string, pageAxis?: string): void {
+  const r = validateEntityText(text, FACTS, { pageAxis });
   if (r.passed !== shouldPass) {
     fail(
       `${label}: ${r.passed ? "cho qua" : "từ chối"} trong khi cần ${shouldPass ? "cho qua" : "từ chối"}` +
@@ -118,6 +118,38 @@ expectVerdict(
   false,
   "worded_proportion"
 );
+
+// Hai ca dưới đây là hai lỗi ĐÃ XẢY RA khi sinh lô 22/9/2026, cả hai đều là
+// validator báo sai trên văn đúng.
+expectVerdict(
+  "trang GIẢI không phải nêu tên giải ở từng câu",
+  "Ngoại hạng Anh đã đá 50 trận. Trong số đó, tỷ lệ trận trên 2,5 bàn là 52,0%.",
+  true,
+  undefined,
+  "league"
+);
+expectVerdict(
+  "trang ĐỘI thì vẫn phải nêu",
+  "Arsenal FC có 12 điểm sau 4 trận. Có 52,0% số trận có trên 2,5 bàn.",
+  false,
+  "scope_overclaim",
+  "team"
+);
+expectVerdict(
+  "chữ số nằm trong TÊN RIÊNG không phải phép đo",
+  "Arsenal FC có 12 điểm sau 4 trận tại Ngoại hạng Anh.",
+  true
+);
+// "Ligue 1" có chữ số trong TÊN. Trên trang đội, fact cấp giải đã bị lọc nên
+// tên giải không còn ở scopeName nào — phải truyền riêng. Hai trang Pháp trượt
+// đúng vì chỗ này.
+{
+  const r = validateEntityText("Paris FC có 12 điểm sau 4 trận tại Ligue 1.", FACTS, {
+    pageAxis: "team",
+    leagueName: "Ligue 1",
+  });
+  if (!r.passed) fail(`tên giải có chữ số: từ chối — ${r.issues.map((i) => i.rule).join(", ")}`);
+}
 
 console.log("");
 if (failures > 0) {
