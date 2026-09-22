@@ -88,7 +88,7 @@ Bạn sẽ nhận một danh sách các CHỈ SỐ ĐÃ ĐO. Đó là những s�
 
 LUẬT BẮT BUỘC:
 1. Không bao giờ nêu một con số không có trong danh sách. Không tính, không cộng trừ, không ước lượng, không suy ra số mới từ các số đã cho.
-2. Mỗi chỉ số có PHẠM VI. Chỉ số ghi "cấp GIẢI" mô tả cả giải, KHÔNG phải đội đang viết. Nếu dùng nó, phải nêu tên giải ngay trong câu đó. Viết một con số cấp giải mà không nói ra là biến nó thành con số của đội.
+2. Chỉ viết về CHÍNH đội (hoặc cặp đối đầu) của trang này. Số liệu chung của cả giải — tỷ lệ trận trên 2,5 bàn, tỷ lệ chủ nhà thắng, tổng số trận toàn giải — KHÔNG có trong danh sách và trang đã hiển thị chúng ở một mục riêng. Nhắc lại chúng ở đây là viết cùng một câu trên mọi trang của giải đó.
 3. Không diễn đạt tỷ lệ bằng chữ ("một nửa", "một phần ba", "đa số"). Muốn nêu tỷ lệ thì dùng đúng con số đã đo, nguyên văn.
 4. Viết số ĐÚNG như cách nó được in trong danh sách. "52,0%" viết là "52,0%", không đổi thành "52%" hay "52.0%".
 5. Bạn được phép bỏ qua bất kỳ chỉ số nào. Bạn không được thêm chỉ số nào.
@@ -124,6 +124,36 @@ function fingerprintOf(facts: readonly FootballFact[], season: string, displayNa
     .map((f) => `${f.key}=${f.value}`)
     .join("|");
   return crypto.createHash("sha256").update(`${season}|${displayName}|${body}`).digest("hex").slice(0, 16);
+}
+
+/**
+ * Chỉ số cấp GIẢI KHÔNG đi vào tập fact của model — và đây là phép sửa một
+ * bệnh ĐO ĐƯỢC, không phải một tinh chỉnh khẩu vị.
+ *
+ * Đo 22/9/2026, `npm run entity:distinctness -- 8` trên 8 trang đội trải 5
+ * giải, 28 cặp. Mạch từ tiếng Việt dài nhất dùng chung: nhỏ nhất 6, giữa 10,
+ * LỚN NHẤT 29. Cặp tệ nhất là Manchester City vs Arsenal, và mạch 29 từ đó
+ * chính là câu bối cảnh giải:
+ *
+ *     "toan giai ngoai hang anh da da 50 tran voi ty le tran tren 2 5 ban
+ *      la 52 0 va ty le chu nha thang la 36 0"
+ *
+ * Nguyên nhân là CẤU TRÚC: cả 20 đội Ngoại hạng Anh nhận y hệt bộ chỉ số cấp
+ * giải, nên model viết ra y hệt một câu. Riêng giải đó là 190 cặp trang chia
+ * nhau cùng một câu — đúng hình dạng "21/76 trang in governmentData trùng
+ * khít từng chữ số" của nghề tai nạn, chỉ đổi trục.
+ *
+ * Nâng trần sẽ là giấu bệnh. Chỗ đúng của số cấp giải là một MỤC TẤT ĐỊNH —
+ * `league-context` trong đặc tả đã làm việc đó — chứ không phải văn xuôi trả
+ * tiền để viết lại cùng một câu 20 lần.
+ *
+ * Lọc ở đây chứ không ở `teamFacts`: trang VẪN cần chỉ số cấp giải để render
+ * mục của nó. Chỉ riêng người đọc "model" là không được nhận. Và vì validator
+ * chấm văn bản trên CHÍNH tập này, một con số cấp giải lọt vào văn sẽ bị từ
+ * chối là `unsupported_number` — luật tự thi hành, không cần thêm lời dặn.
+ */
+function forModel(facts: FootballFact[]): FootballFact[] {
+  return facts.filter((f) => f.scope !== "LEAGUE");
 }
 
 const leagueCodeOf = (slug: string): LeagueCode | null => {
@@ -168,7 +198,7 @@ export async function buildEntityFactSet(
   if (axis === "team") {
     const team = s.teams.find((t) => teamSlug(t) === parsed.team);
     if (!team) return null;
-    const facts = teamFacts(teamStats(s, team), lg);
+    const facts = forModel(teamFacts(teamStats(s, team), lg));
     return { ...base, displayName: team, facts, fingerprint: fingerprintOf(facts, season, team) };
   }
 
@@ -178,7 +208,7 @@ export async function buildEntityFactSet(
     const b = s.teams.find((t) => teamSlug(t) === slugB);
     if (!a || !b) return null;
     const name = `${a} gặp ${b}`;
-    const facts = fixtureFacts(fixtureStats(s, a, b), lg);
+    const facts = forModel(fixtureFacts(fixtureStats(s, a, b), lg));
     return { ...base, displayName: name, facts, fingerprint: fingerprintOf(facts, season, name) };
   }
 

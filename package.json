@@ -48,7 +48,8 @@
     "verify:entity-spec": "tsx scripts/verify-entity-spec.ts",
     "readiness": "tsx scripts/readiness.ts",
     "verify:entity-validator": "tsx scripts/verify-entity-validator.ts",
-    "entity:generate": "tsx scripts/generate-entity-text.ts"
+    "entity:generate": "tsx scripts/generate-entity-text.ts",
+    "entity:distinctness": "tsx scripts/measure-entity-distinctness.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
