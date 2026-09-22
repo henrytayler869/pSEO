@@ -46,7 +46,8 @@
     "verify:football-facts": "tsx scripts/verify-football-facts.ts",
     "football:sync": "tsx scripts/sync-football-entities.ts",
     "verify:entity-spec": "tsx scripts/verify-entity-spec.ts",
-    "readiness": "tsx scripts/readiness.ts"
+    "readiness": "tsx scripts/readiness.ts",
+    "verify:entity-validator": "tsx scripts/verify-entity-validator.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
