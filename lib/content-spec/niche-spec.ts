@@ -340,6 +340,17 @@ const MOVING: NicheContentSpec = {
     },
   ],
   cluster: {
+    // Dẫn bằng NƠI CHỐN và THỰC THỂ DỮ LIỆU, giống site tai nạn. Nhưng ở đây
+    // có một rủi ro site kia không có: hai truy vấn top 10 duy nhất của site
+    // này đều nằm trên trang CỤM — "chicago il zip code" hạng 9 và
+    // "11385 county" hạng 10, chốt 20/9/2026. Site tai nạn đổi title khi có 0
+    // impression; site này đổi đúng nhóm trang đang xếp hạng. Chủ dự án biết
+    // và duyệt.
+    //
+    // "Migration & Housing Data" phủ cả ba mục của nghề — mobility cấp ZIP,
+    // IRS migration cấp hạt, housing cấp ZIP — và KHÔNG khai chỉ số nào
+    // không có. Không khai phạm vi nên không nói quá về độ phân giải.
+    title: "{place} ZIP Codes — Migration & Housing Data",
     // Nguyên văn những chuỗi cluster-view đang in, chuyển từ mã sang dữ liệu.
     // Site chuyển nhà phải KHÔNG đổi một ký tự nào sau lần này.
     description:
@@ -373,6 +384,7 @@ const MOVING: NicheContentSpec = {
     title: "Household Migration and Housing Data — AT Moving Services",
   },
   market: {
+    title: "ZIP {zip} ({place}) — Migration & Housing Data",
     // Nguyên văn thứ publisher đang in cho nghề này.
     leadMetrics: [
       { metric: "irs_migration_net_households", phrase: "Net household migration {display} a year countywide" },
