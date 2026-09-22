@@ -377,6 +377,25 @@ const MOVING: NicheContentSpec = {
     distinguishing: "housing and mobility estimates",
     topicsHeading: "By kind of move",
   },
+  stateHub: {
+    // KHÔNG có "by County", khác site tai nạn — và khác đó là CHỦ Ý.
+    //
+    // Đo trang hub thật 22/9/2026, đếm từ trong HTML đã bỏ script/style:
+    //
+    //   /moving-services/tx        median ×6  housing ×2  migration 0  inflow 0
+    //   /auto-accident-attorney/tx crash ×1   fatal ×1    (cả hai đến TỪ title)
+    //
+    // Hub bang là một MỤC LỤC. Site tai nạn thuần mục lục; site này có vài số
+    // tổng hợp, nhưng KHÔNG phải migration. Nên "Migration & Housing Data"
+    // đúng với thứ trang có (housing) và mô tả tập trang bên dưới (migration)
+    // — còn một chữ "by County" sẽ chỉ vào dữ liệu không xuất hiện ở đây.
+    //
+    // Title mục lục mô tả mục lục là quy ước bình thường, không phải nói dối.
+    // Chủ dự án đã xét chuyện này cho site tai nạn và QUYẾT GIỮ NGUYÊN. Ghi
+    // lại để sau không ai phát hiện lại nó như một lỗi rồi đi "sửa" — hai
+    // site không cùng công thức ở hub bang, và đó là lựa chọn đã cân nhắc.
+    title: "{state} ZIP Codes — Migration & Housing Data",
+  },
   home: {
     // "Household Migration" ở cấp HẠT (IRS), "Housing Data" ở cấp ZIP
     // (Census). Câu này không khai phạm vi nào nên không hứa sai — khác
