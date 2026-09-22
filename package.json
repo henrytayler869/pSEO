@@ -44,7 +44,8 @@
     "verify:ucl-archive": "tsx scripts/verify-ucl-archive.ts",
     "verify:page-axis": "tsx scripts/verify-page-axis.ts",
     "verify:football-facts": "tsx scripts/verify-football-facts.ts",
-    "football:sync": "tsx scripts/sync-football-entities.ts"
+    "football:sync": "tsx scripts/sync-football-entities.ts",
+    "verify:entity-spec": "tsx scripts/verify-entity-spec.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
