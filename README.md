@@ -22,7 +22,16 @@ removed with it — publishing, on-page optimization, and per-page Search
 Console analysis all belong to each real website, which owns its own
 content and reports up to `/publisher`.
 
-## `/markets` — one page, tabs
+## `/markets` — one page, a country dropdown, then tabs
+
+**Country first, tabs second** (2026-09-22). `?country=vn` switches the whole
+page to the Vietnam market; anything else — including no param — is the US
+market described below, unchanged. The two sides do not share a shape, which
+is the point: see "Vietnam market" below for why the Vietnam side has no
+score column at all. `MarketCountryPicker` *drops* `import`/`tab`/`older`/
+`newer`/`ucl` when it switches, rather than preserving them like the other
+pickers do — those params only mean something on one side, and carrying them
+across lands the back-button on a tab that doesn't exist over there.
 
 Market Explorer, niche research, traffic trend, and coverage diff used to be
 four separate pages/sidebar items. They're one page now (`/markets`), split
@@ -50,6 +59,59 @@ Detail drill-downs stay as their own routes (`/markets/[vertical]` for
 PAYOUT, `/markets/research/[vertical]` for TRAFFIC) since they're reached by
 clicking into a card, not by sidebar navigation — consolidating those too
 would just be one giant page instead of a cluttered sidebar.
+
+## Vietnam market — football, and deliberately no score
+
+`?country=vn` on `/markets`. One niche only — men's football — so there is
+**no "Điểm" column anywhere on that side, by design**. Two reasons, and both
+are decisions rather than gaps:
+
+1. One niche has nothing to rank against. The US side ranks verticals by
+   expected value; a single-row ranking is a table with a misleading header.
+2. CPC and keyword difficulty for Vietnam would have to be bought from
+   DataForSEO (`location_code` 2704), and the standing instruction is free
+   sources first.
+
+An empty "Điểm" cell in a scored table is an invitation for someone to fill
+it in later with a number that has no source — so the column does not exist.
+What the page shows instead is what can be measured for free and actually
+decides work: how much data there is, how fresh it is, and whether a second
+source agrees.
+
+**Data layer** (`lib/football/`, HQ only — the publisher repo does not have
+it yet):
+
+- 5 domestic leagues from `openfootball/football.json`, with the `.txt`
+  edition overlaid on top for fresher results. Where both cover a match, the
+  overlap is a **gate**: the two scores must agree, and conflicts are
+  recorded rather than silently resolved.
+- Champions League as a **15-season archive only** (2011-12…2025-26). The
+  upstream repo has no folder for the current season and last pushed
+  2026-07-02, while the domestic repos are pushed daily — so that competition
+  is fine for evergreen pages and unusable for fixtures/results.
+- Staleness measured 2026-09-22: 2 days for England/Spain/Italy/Germany,
+  **9 days for Ligue 1**, which also has no second source (openfootball has
+  no `france` repo). Every read carries `stalenessDays`; pages must render it
+  rather than assume.
+- **No player data exists in this source.** Match files carry no scorers, no
+  lineups, no minutes; `openfootball/players` is a name roster (position,
+  height, birth date — no club, no statistics) and has exactly **1** Vietnamese
+  player. Any "player form" page would therefore have to invent numbers.
+- **No V.League.** The only free source found (TheSportsDB) returns Wigan
+  Athletic, Blackpool and Leicester as V.League 1 clubs — wrong data, not
+  missing data, so it cannot even be used as a placeholder.
+
+**Two gates, deliberately not in CI**: `npm run verify:openfootball` and
+`npm run verify:ucl-archive`. Both read the network, and a GitHub hiccup
+would redden every open PR while saying nothing about the code — same
+reasoning as the "NOT run here" block in the deploy workflow. They check
+football invariants rather than "the JSON parsed": match counts, per-team
+schedule length, goals balancing, penalties never level, half-time ≤ 90' ≤
+120', and a hand-written champions table that compares the data against the
+world rather than against itself.
+
+Handover brief for the publisher session that will build on this:
+`docs/VN_FOOTBALL_PUBLISHER_BRIEF.md`.
 
 ## Researching niches without a network (TRAFFIC mode)
 
@@ -785,6 +847,11 @@ correlate against).
 - `lib/net/curl-fetch.ts` — shared `fetch`-first/`curl`-fallback helper
   (see "Publisher" above) — used by every adapter that talks to a host
   Node's own networking has shown trouble reaching in this environment
+- `lib/football/` — Vietnam-market data layer (see "Vietnam market" above):
+  `openfootball.ts` (JSON base + merge), `openfootball-txt.ts` (fresher `.txt`
+  overlay and its parser), `ucl-archive.ts` (15 Champions League seasons),
+  `season.ts` (current season derived from the date, not hardcoded), and
+  `cached.ts` — **the only file here that may import Next**; see AGENTS.md
 - `lib/validation/` — completeness/outlier/freshness/cross-check rules +
   batch-gate orchestration
 - `lib/queries/` — read-side queries backing the UI
@@ -879,6 +946,16 @@ signature. `lib/collector/adapters/pvwatts-mock.ts` (clearly labeled,
 synthetic, seeds a couple of deliberate failure/outlier cases so the
 Validator has something to catch) is only used when `NREL_API_KEY` isn't
 set.
+
+Football data (`lib/football/`, Vietnam market) is entirely real and fetched
+live from `openfootball` at render time — there is no mock, no fixture file,
+and no seeded sample. What it does have is *documented absences*, which is a
+different thing from fake data: no player-level records anywhere in the
+source, no V.League at all, and a Champions League archive that stops at the
+last finished season because upstream stopped updating. Those are stated on
+the page itself rather than papered over, and the reason is the same one
+behind the whole validator layer here — a plausible number with no source is
+worse than a visible gap.
 
 Google Search Console has exactly one integration: `lib/google/search-console.ts`
 (Publisher — GSC/GA4 reporting for real external websites). Its
