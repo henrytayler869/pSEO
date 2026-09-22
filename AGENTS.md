@@ -122,8 +122,6 @@ khác.
    `publisher/_archive/theaccidentrecord-scaffold-20260915.tar.gz`, 94 KB.
    Xoá được nếu không ai cần.
 
-<!-- BEGIN:nextjs-agent-rules -->
-
 ## `lib/football/` phải KHÔNG BIẾT GÌ về Next — và không có cổng nào canh
 
 `scripts/verify-openfootball.ts` và `scripts/verify-ucl-archive.ts` chạy bằng
@@ -147,6 +145,42 @@ với khối "NOT run here" trong `.github/workflows/deploy.yml`. Chạy tay:
 
     npm run verify:openfootball     # 5 giải quốc nội, mùa đang đá
     npm run verify:ucl-archive      # 15 mùa Champions League đã kết thúc
+
+## AGENTS.md: ĐỪNG viết gì vào giữa hai marker `nextjs-agent-rules`
+
+Khối ở cuối file nằm giữa hai marker `BEGIN:nextjs-agent-rules` và
+`END:nextjs-agent-rules` (chúng là comment HTML; ở đây cố tình KHÔNG viết đủ
+dấu comment — xem đoạn cuối mục này). `next dev` GHI ĐÈ toàn bộ vùng đó. Đọc
+`node_modules/next/dist/server/lib/generate-agent-files.js`, hàm
+`upsertAgentRulesBlock`:
+
+    const before = existing.slice(0, startIdx);
+    const after  = existing.slice(endIdx + AGENT_RULES_END_MARKER.length);
+    return before + normalizedBlock + after;
+
+`trước BEGIN` + khối chuẩn MỚI + `sau END`. Mọi thứ người ta viết xen vào
+giữa bị vứt — không cảnh báo, không lỗi, không gì đỏ lên.
+
+Mục `lib/football/` phía trên ĐÃ nằm trong vùng đó từ 21/9/2026 tới
+22/9/2026, chỉ vì tôi dán nó ngay trước tiêu đề của Next mà không để ý hai
+dòng marker. Nó sống sót do may.
+
+Và bẫy đóng lại ở câu cuối của chính khối kia: "committing it with your work
+keeps the tree clean". Lời khuyên đó đúng cho khối Next và SAI cho mọi thứ
+người ta lỡ đặt cạnh nó — nó dạy người ta commit một thay đổi họ không đọc.
+Nếu vài chục dòng bất biến biến mất trong cùng diff đó, đúng câu ấy là thứ
+khiến người ta bấm qua.
+
+Viết mọi thứ của kho này TRƯỚC dòng BEGIN.
+
+VÀ ĐỪNG TRÍCH NGUYÊN VĂN MARKER Ở BẤT CỨ ĐÂU TRONG FILE. Next tìm bằng
+`existing.indexOf(...)` — tức lần xuất hiện ĐẦU TIÊN. Bản đầu của chính mục
+này trích đủ cả `<!--` và `-->` để cho dễ đọc, và thế là marker giả ở đây trở
+thành điểm bắt đầu, còn vùng bị ghi đè kéo dài từ đây xuống tận cuối file.
+Phát hiện bằng cách chạy lại chính thuật toán của Next lên file mới: nó báo
+mất 26 dòng ở chỗ lẽ ra không mất gì.
+
+<!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know
 
