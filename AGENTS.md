@@ -1,3 +1,29 @@
+# TẠM THỜI (22/9/2026): ĐỪNG SINH MIGRATION TỪ DB PRODUCTION
+
+Hai bảng `EntityIdentity` và `AiEntityGeneration` ĐÃ áp vào DB production
+nhưng CHƯA có trong `prisma/migrations/` của main, và cũng chưa có model
+trong `prisma/schema.prisma` của main. Đo trực tiếp trên production
+22/9/2026: cả hai bảng tồn tại, `EntityIdentity` có **977 hàng**.
+
+Nên với schema của main thì hai bảng đó trông THỪA. `prisma migrate dev`,
+hoặc `prisma migrate diff --from-url` trỏ vào production, sẽ sinh ra:
+
+    DROP TABLE "AiEntityGeneration";
+    DROP TABLE "EntityIdentity";
+
+Một migration xoá 977 hàng, và nó trông HOÀN TOÀN HỢP LỆ trong diff của PR —
+vì so với schema của main thì nó đúng.
+
+    migrate status               xanh, "up to date"        <- KHÔNG phát hiện
+    migrate deploy               "no pending migrations"   <- KHÔNG phát hiện
+    migrate diff --from-url      DROP hai bảng             <- chỗ nguy hiểm
+
+Kiểm drift thì dùng `migrate diff --from-migrations --to-schema-datamodel`
+với shadow DB: chiều đó không đọc DB thật nên không thấy hai bảng.
+
+**XOÁ MỤC NÀY** khi nhánh `vn-football-publisher` vào main — lúc đó migration
+và model đều có trong repo, và cửa sổ này đóng lại.
+
 # Bố cục máy này
 
 Kho publisher nằm LỒNG TRONG kho này, có chủ ý:
