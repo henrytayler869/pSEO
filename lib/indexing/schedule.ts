@@ -90,7 +90,10 @@ export interface RunOutcome {
  * "chưa tới hạn" là biến một cái nút thành một câu đố.
  */
 export async function runRecheckFor(
-  site: { id: string; name: string; gscPropertyUrl: string },
+  // `gscPropertyUrl` nullable: hàm này ĐÃ có nhánh xử lý ca đó bên dưới
+  // ("site chưa gắn property Search Console") từ trước khi kiểu được sửa.
+  // Kiểu cũ nói dối về một ca mà chính thân hàm đã lường trước.
+  site: { id: string; name: string; gscPropertyUrl: string | null },
   opts: { trigger: "scheduled" | "manual"; force?: boolean },
 ): Promise<RunOutcome> {
   const base = { websiteId: site.id, websiteName: site.name, checked: 0, failed: 0 };

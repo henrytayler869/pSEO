@@ -929,12 +929,42 @@ model Website {
   // Search Console property identity, e.g. "sc-domain:example.com" or
   // "https://example.com/" (URL-prefix form) — GSC requires the exact
   // registered format, see README once written.
-  gscPropertyUrl String
+  /**
+   * Property trong Google Search Console, dạng "sc-domain:example.com".
+   *
+   * NULLABLE, và nó phải thế. Một site được tạo ở /domains TRƯỚC khi có ai
+   * dựng property GSC cho nó — thứ tự đó là bình thường, không phải trạng
+   * thái hỏng. Khai NOT NULL buộc người tạo site phải bịa một chuỗi, và
+   * `@@unique` bên dưới còn khiến chỉ MỘT site được phép chưa có GSC.
+   *
+   * Cột trong DB production vốn ĐÃ nullable — đo 22/9/2026,
+   * information_schema.columns trả is_nullable=YES — trong khi migration
+   * 20260906000000_website khai TEXT NOT NULL và schema này khai String.
+   * Ba nguồn, hai câu trả lời. Lệch đó nằm im vì mọi hàng đều có giá trị,
+   * cho tới khi site thứ ba ra đời không có GSC và Prisma ném P2032 lúc
+   * ĐỌC, làm gãy prerender /publisher và chặn mọi deploy HQ.
+   *
+   * Nên migration đi kèm chỉ chép lại sự thật đã có ở production; nó là
+   * no-op ở đó và chỉ sửa cho repo khớp thực tế.
+   *
+   * Postgres cho phép nhiều NULL trong unique index, nên `@@unique` bên dưới
+   * vẫn đúng: hai site chưa có GSC không đụng nhau.
+   */
+  gscPropertyUrl String?
 
   // GA4 numeric property ID (the "G-XXXXXXX" measurement ID is different
   // from this — GA4 Data API calls use "properties/{propertyId}", the
   // numeric Analytics property ID, not the measurement ID).
-  ga4PropertyId String
+  /**
+   * NULLABLE, cùng lý do và cùng sự cố với `gscPropertyUrl` ở trên: site tạo
+   * ra trước khi có ai dựng property, và cột trong DB production vốn đã
+   * nullable trong khi migration lẫn schema khai NOT NULL.
+   *
+   * Sửa một mình `gscPropertyUrl` sẽ cho một lần deploy đỏ THỨ HAI y hệt ở
+   * trường này — đo 22/9/2026: hàng bongda.invalid có 13 cột NULL, và đúng
+   * HAI trong số đó bị schema khai NOT NULL.
+   */
+  ga4PropertyId String?
 
   // The OTHER GA4 identifier: the "G-XXXXXXXXXX" measurement ID that the
   // site itself sends events with. Stored here so it is managed in one place
