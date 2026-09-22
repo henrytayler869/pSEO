@@ -145,6 +145,37 @@ function decide(m: FootballMatch): Pick<UclMatch, "winner" | "decidedBy"> {
   return { winner: null, decidedBy: null };
 }
 
+/**
+ * Tỷ số trận chung kết, XOAY VỀ PHÍA NHÀ VÔ ĐỊCH.
+ *
+ * Bảng lưu trữ đặt cột "Vô địch" trước cột "Á quân", nên tỷ số cũng phải đọc
+ * theo thứ tự đó. Lấy nguyên thứ tự chủ-khách của nguồn thì bảng nói ngược
+ * lại chính nó, và tôi đã dựng đúng bản như vậy trước khi xem nó trên trang:
+ *
+ *     Vô địch            Á quân               Chung kết
+ *     Chelsea FC (ENG)   Bayern München (GER) 1-1 (luân lưu 3-4)
+ *     Bayern München     Borussia Dortmund    1-2
+ *
+ * Chelsea vô địch bằng cách thắng luân lưu 4-3, nhưng ô bên cạnh ghi 3-4 vì
+ * Bayern là chủ nhà. Mọi con số đều ĐÚNG; thứ tự đọc thì sai, và không
+ * validator nào bắt được vì không có số nào sai. Đúng điểm mù đã gặp ở tầng
+ * fact: số đúng, nhãn sai.
+ *
+ * Nằm ở đây chứ không ở lớp hiển thị để cổng canh kiểm được — lớp đệm của
+ * trang import Next, và script `tsx` không nạp được module đó.
+ */
+export function finalScoreLabel(final: UclMatch | null): string | null {
+  if (!final?.fullTime) return null;
+  // winner === "away" nghĩa là nhà vô địch ở vế khách, nên phải đảo mọi cặp.
+  const flip = final.winner === "away";
+  const pair = (p: [number, number]) => (flip ? `${p[1]}-${p[0]}` : `${p[0]}-${p[1]}`);
+  if (final.decidedBy === "pen" && final.penalties) {
+    return `${pair(final.extraTime ?? final.fullTime)} (luân lưu ${pair(final.penalties)})`;
+  }
+  if (final.decidedBy === "aet" && final.extraTime) return `${pair(final.extraTime)} sau hiệp phụ`;
+  return pair(final.fullTime);
+}
+
 export interface UclSeason {
   season: string;
   name: string;
