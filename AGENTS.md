@@ -134,6 +134,45 @@ với khối "NOT run here" trong `.github/workflows/deploy.yml`. Chạy tay:
     npm run verify:football-facts   # chỉ số cấp đội đối chiếu chéo buildStandings
     npm run verify:page-axis        # khoá trang + hàng EntityIdentity trong DB
 
+## TẠM THỜI: database production ĐI TRƯỚC repo — đừng sinh migration từ nó
+
+Có hiệu lực từ 22/9/2026 cho tới khi nhánh `vn-football-publisher` vào main.
+Xoá mục này khi nó đã merge.
+
+Migration `20260928000000_entity_page_axis` ĐÃ ÁP vào DB production — hai bảng
+`EntityIdentity`, `AiEntityGeneration`, 977 hàng — nhưng nó CHƯA có trong
+`prisma/migrations` của main, và `schema.prisma` của main chưa khai hai model
+đó.
+
+Hai chiều đọc, và chỉ một chiều an toàn. Đo 22/9/2026 trên shadow DB:
+
+    migrate status                 "Database schema is up to date!"
+    migrate deploy                 "No pending migrations to apply."  exit 0
+    migrate diff --from-url <DB>   DROP TABLE "AiEntityGeneration";
+                                   DROP TABLE "EntityIdentity";
+
+Deploy KHÔNG gãy vì một migration đã áp mà thư mục không có. Nhưng bất kỳ ai
+SINH migration từ DB thật — `prisma migrate dev`, hay `migrate diff --from-url`
+trỏ production — sẽ nhận một migration XOÁ hai bảng cùng 977 hàng. Và nó sẽ
+trông hoàn toàn hợp lệ trong diff của PR, vì với schema của main thì hai bảng
+ấy ĐÚNG là thừa.
+
+Nên: **không `prisma migrate dev`, không sinh migration từ production** cho
+tới khi nhánh kia merge. Kiểm drift thì dùng
+
+    npx prisma migrate diff --from-migrations prisma/migrations \
+      --to-schema-datamodel prisma/schema.prisma \
+      --shadow-database-url postgresql://postgres:shadow@127.0.0.1:55440/shadow
+
+Chiều đó không đọc DB thật nên không thấy hai bảng. Shadow DB dựng bằng một
+dòng và vứt đi được:
+
+    docker run -d --name pseo-shadow -e POSTGRES_PASSWORD=shadow \
+      -e POSTGRES_DB=shadow -p 55440:5432 postgres:16-alpine
+
+Bài học chung, và nó đã nằm sẵn ở brief mục 6: một phép thử âm chỉ bác được
+đúng thứ nó thử. "deploy chạy được" không phải "migration này an toàn".
+
 ĐỌC NGUỒN QUA `fetchLeagueSeasonMerged`, KHÔNG PHẢI `fetchLeagueSeason`.
 Bản JSON là NỀN; lớp phủ .txt mới là thứ mang kết quả mới nhất. Đo 22/9/2026,
 cùng một ngày, cùng một giải:
