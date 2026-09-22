@@ -13,6 +13,10 @@ import { SuggestedNicheRow } from "@/components/suggested-niche-row";
 import { RunAllSuggestedNichesForm } from "@/components/run-all-suggested-niches-form";
 import { TrafficTrendViewer } from "@/components/traffic-trend-viewer";
 import { MarketsTabs } from "@/components/markets-tabs";
+import { MarketCountryPicker, type MarketCountry } from "@/components/market-country-picker";
+import { VietnamFootballMarket } from "@/components/vietnam-football-market";
+import { getLeagueCards, getUclArchive } from "@/lib/football/cached";
+import { UCL_ARCHIVE_SEASONS } from "@/lib/football/ucl-archive";
 import { getCoverageImports, getVerticalSummaries } from "@/lib/queries/market-explorer";
 import { getTrafficVerticalSummaries, getTrafficScoreTrend } from "@/lib/queries/traffic-research";
 import { getSuggestedNiches } from "@/lib/markets/candidate-niches";
@@ -32,12 +36,67 @@ const CHANGE_LABELS: Record<string, string> = {
 // else below needs to change.
 const SHOW_DIFF_TAB = false;
 
+/**
+ * Đầu trang: tiêu đề + ô chọn thị trường. Ô chọn phải có ở MỌI nhánh.
+ *
+ * Nhánh "chưa có dữ liệu nào" của phía Hoa Kỳ từng là một ngõ cụt sau khi
+ * thêm ô chọn: người dùng sang Việt Nam rồi về Hoa Kỳ khi DB chưa có gì sẽ
+ * thấy một cảnh báo và không còn cách nào đổi ngược lại. Nên dựng ở một chỗ
+ * dùng chung thay vì lặp lại từng nhánh và bỏ sót một cái.
+ */
+function MarketsHeader({ country, description }: { country: MarketCountry; description: string }) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-4">
+      <PageHeader icon={TrendingUp} title="Thị trường" description={description} />
+      <MarketCountryPicker country={country} />
+    </div>
+  );
+}
+
+const US_DESCRIPTION =
+  "Xếp hạng theo giá trị kỳ vọng trong từng ngành, nghiên cứu niche mới, và xem xu hướng traffic theo thời gian — tất cả trong một chỗ.";
+
 export default async function MarketExplorerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ import?: string; older?: string; newer?: string; tab?: string }>;
+  searchParams: Promise<{
+    import?: string;
+    older?: string;
+    newer?: string;
+    tab?: string;
+    country?: string;
+    ucl?: string;
+  }>;
 }) {
-  const { import: importIdParam, older, newer } = await searchParams;
+  const { import: importIdParam, older, newer, country: countryParam, ucl } = await searchParams;
+
+  // Nhánh Việt Nam đứng TRƯỚC mọi truy vấn Postgres, có chủ ý: nó không cần
+  // một hàng nào trong DB, nên nó vẫn dựng được khi tunnel tới DB production
+  // đang đứt — tình huống xảy ra thường xuyên trên máy dev.
+  if (countryParam === "vn") {
+    const [leagues, archive] = await Promise.all([
+      getLeagueCards(new Date()),
+      // 15 mùa chỉ tải khi người ta thật sự mở bảng ra. Mặc định tải cả thì
+      // mỗi lần xem trang là 15 lượt gọi mạng cho một bảng phần lớn lần
+      // không ai cuộn tới.
+      ucl === "1" ? getUclArchive() : Promise.resolve(null),
+    ]);
+    return (
+      <div className="flex flex-col gap-6">
+        <MarketsHeader
+          country="vn"
+          description="Một niche duy nhất — bóng đá nam — nên không xếp hạng theo điểm. Chỗ này theo dõi dữ liệu có bao nhiêu, mới tới đâu, và có nguồn thứ hai kiểm chéo hay không."
+        />
+        <VietnamFootballMarket
+          leagues={leagues}
+          archive={archive}
+          archiveSeasonCount={UCL_ARCHIVE_SEASONS.length}
+          archiveHref="/markets?country=vn&ucl=1"
+        />
+      </div>
+    );
+  }
+
   const [imports, trafficSummaries, suggestions] = await Promise.all([
     getCoverageImports(),
     getTrafficVerticalSummaries(),
@@ -47,9 +106,8 @@ export default async function MarketExplorerPage({
   if (imports.length === 0 && trafficSummaries.length === 0) {
     return (
       <div className="flex flex-col gap-6">
-        <PageHeader
-          icon={TrendingUp}
-          title="Thị trường"
+        <MarketsHeader
+          country="us"
           description="Xếp hạng theo giá trị kỳ vọng trong từng ngành. Các ngành không bao giờ được so sánh với nhau trong cùng một bảng — vì thang giá và độ khó chuyển đổi khác biệt quá lớn để việc so sánh có ý nghĩa."
         />
         <Alert variant="destructive">
@@ -195,11 +253,7 @@ export default async function MarketExplorerPage({
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        icon={TrendingUp}
-        title="Thị trường"
-        description="Xếp hạng theo giá trị kỳ vọng trong từng ngành, nghiên cứu niche mới, và xem xu hướng traffic theo thời gian — tất cả trong một chỗ."
-      />
+      <MarketsHeader country="us" description={US_DESCRIPTION} />
 
       <MarketsTabs
         showDiff={SHOW_DIFF_TAB}

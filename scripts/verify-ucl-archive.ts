@@ -24,6 +24,7 @@ import {
   fetchUclSeason,
   splitTeam,
   classifyStage,
+  finalScoreLabel,
   type UclSeason,
 } from "../lib/football/ucl-archive";
 import { parseSeasonTxt } from "../lib/football/openfootball-txt";
@@ -123,6 +124,53 @@ function selfTest(): void {
     usablePenalties([4, 4]) === null && JSON.stringify(usablePenalties([1, 4])) === "[1,4]",
     "loạt luân lưu hoà bị loại, luân lưu thật thì giữ"
   );
+
+  // Trận chung kết mà ĐỘI KHÁCH vô địch — ca duy nhất cần đảo, và ca tôi đã
+  // dựng sai lần đầu: bảng ghi "Chelsea vô địch" cạnh tỷ số luân lưu "3-4".
+  const awayWinsFinal = {
+    round: "Final",
+    date: "2012-05-19",
+    stage: "final" as const,
+    home: "Bayern München (GER)",
+    away: "Chelsea FC (ENG)",
+    homeClub: "Bayern München",
+    homeCountry: "GER",
+    awayClub: "Chelsea FC",
+    awayCountry: "ENG",
+    fullTime: [1, 1] as [number, number],
+    halfTime: [0, 0] as [number, number],
+    extraTime: [1, 1] as [number, number],
+    penalties: [3, 4] as [number, number],
+    winner: "away" as const,
+    decidedBy: "pen" as const,
+  };
+  check(
+    finalScoreLabel(awayWinsFinal) === "1-1 (luân lưu 4-3)",
+    `tỷ số chung kết xoay về phía nhà vô địch (${finalScoreLabel(awayWinsFinal)})`
+  );
+  check(
+    finalScoreLabel({ ...awayWinsFinal, winner: "home", penalties: [4, 3] }) === "1-1 (luân lưu 4-3)",
+    "và KHÔNG đảo khi nhà vô địch là chủ nhà"
+  );
+}
+
+/**
+ * Tỷ số chung kết phải đọc được theo thứ tự cột: vô địch trước, á quân sau.
+ *
+ * Bất biến: số đầu >= số sau ở tỷ số, và > ở loạt luân lưu (luân lưu không
+ * hoà). Một bảng ghi "Chelsea vô địch ... 3-4" thoả mọi phép kiểm về SỐ, nên
+ * chỉ phép kiểm về THỨ TỰ mới bắt được.
+ */
+function checkFinalLabel(label: string | null, where: string): void {
+  if (label === null) {
+    check(false, `${where}: không dựng được tỷ số chung kết`);
+    return;
+  }
+  const score = /^(\d+)-(\d+)/.exec(label);
+  const pen = /luân lưu (\d+)-(\d+)/.exec(label);
+  const scoreOk = score !== null && Number(score[1]) >= Number(score[2]);
+  const penOk = pen === null || Number(pen[1]) > Number(pen[2]);
+  check(scoreOk && penOk, `${where}: tỷ số chung kết đọc theo phía vô địch ("${label}")`);
 }
 
 function checkSeason(s: UclSeason): void {
@@ -172,6 +220,8 @@ function checkSeason(s: UclSeason): void {
   );
   check(penOk, `${label}: không có loạt luân lưu hoà`);
   check(s.final !== null && s.champion !== null, `${label}: có chung kết và xác định được nhà vô địch`);
+
+  if (s.final) checkFinalLabel(finalScoreLabel(s.final), label);
 
   const want = CHAMPIONS[s.season];
   if (want) {
