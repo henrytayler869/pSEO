@@ -149,7 +149,14 @@ export function patternsFor(vertical: string): Pattern[] {
     // way to tell on-trade from off-trade, and a scan that cannot tell them
     // apart produces a number that looks like a result but is not one.
     throw new Error(
-      `Chưa có từ vựng nghề cho "${vertical}" trong TRADE_VOCAB — không quét, vì không phân biệt được đúng nghề với lạc nghề. Thêm mục cho ngành này trước.`
+      `Chưa có từ vựng nghề cho "${vertical}" trong TRADE_VOCAB — không quét, vì không phân biệt được ` +
+        `đúng nghề với lạc nghề.\n\n` +
+        `Nếu đây là nghề đi TRỤC THỰC THỂ (không địa lý): ĐỪNG thêm mục vào đây. TRADE_VOCAB mô tả ` +
+        `nghề dịch vụ có PHÍA CUNG — "providers", "contractors" — và một site thống kê không có phía ` +
+        `cung nào để nói lạc sang. Bảo vệ tương ứng của trục đó nằm ở ba chỗ khác: ` +
+        `UNSUPPORTED_TERMS và BETTING_TERMS trong lib/ai/entity-validate.ts (cấm nói về thứ không nguồn ` +
+        `nào đo), và FOREIGN_WORDS trong scripts/verify-rendered.ts bên publisher (cấm in từ vựng của ` +
+        `nghề kia ra HTML).`
     );
   }
   const ownTerms = new Set(own.terms);

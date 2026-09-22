@@ -1,24 +1,18 @@
-// Scans every stored, passing generation for the four failure patterns the
-// validator CANNOT see.
-//
-// This exists because "validator green" has been mistaken for "content
-// correct" three separate times in this project, and every time the text was
-// wrong in a way no numeric check could catch:
-//
-//   - moving-services copy discussing plumbing, roofing and warranties
-//     (46% of texts) — every number in it was real
-//   - search volume printed as reader copy (83%) — a real measurement, but
-//     internal SEO telemetry, not something a person hiring movers needs
-//   - "2,400 searches, so expect several providers competing" — a claim
-//     about SUPPLY inferred from a measurement of DEMAND, stated in words
-//     where the numeric validator has nothing to compare
-//
-// So this is not a linter for style. It is the check for the class of error
-// the validator is structurally blind to: sentences that are false, or
-// off-trade, while containing no wrong number. It reports; it never edits.
-//
-// Usage: tsx scripts/scan-generated-copy.ts <vertical>
-
+/**
+ * PHẠM VI: CHỈ trục ZIP. Đọc `AiGeneration`, tức văn của trang thị trường.
+ *
+ * Văn của trục THỰC THỂ nằm ở bảng khác — `AiEntityGeneration` — nên script
+ * này không thấy nó. Chạy với một nghề trục thực thể sẽ trả 0 hàng và in ra
+ * "không có vấn đề", tức một kết quả sạch hoàn hảo dựng trên số không.
+ *
+ * Nêu ở đây vì đó đúng là dạng hỏng mà cả tầng cổng canh này tồn tại để
+ * chống, và nó lặp lại nhiều lần trong ngày 22/9/2026: một phép quét không
+ * nhìn thấy gì đọc y hệt một phép quét không tìm thấy gì.
+ *
+ * Bảo vệ tương ứng của trục thực thể: `npm run verify:entity-validator` (luật
+ * chạy trên văn trước khi lưu) và `verify:rendered` bên publisher (quét HTML
+ * đã dựng).
+ */
 import { prisma } from "../lib/db/prisma";
 import { VERTICALS_WITH_BRIEFS } from "../lib/ai/generate";
 import { buildFactSet } from "../lib/ai/facts";
