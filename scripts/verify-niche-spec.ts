@@ -143,68 +143,75 @@ const MARKET_TITLE_PLACEHOLDERS = new Set(["zip", "place"]);
 const STATE_HUB_PLACEHOLDERS = new Set(["state", "stateName", "count"]);
 
 /**
- * NGƯỠNG CẮT TITLE, và vì sao nó là CẢNH BÁO chứ không phải lỗi.
+ * NGÂN SÁCH TITLE — và vì sao nó KHÔNG đoán giá trị dài nhất.
  *
- * Google cắt title theo BỀ RỘNG PIXEL (~600px), không theo số ký tự, nên
- * không có con số nào đúng tuyệt đối. 60 ký tự là ước lượng thô quen dùng.
- * Vượt ngưỡng nghĩa là phần đuôi nhiều khả năng bị cắt trên SERP — khó chịu,
- * nhưng không sai sự thật và không hỏng trang. Làm đỏ cổng vì nó là biến một
- * chuyện thẩm mỹ thành chuyện chặn merge.
+ * Bản đầu của phép kiểm này lấy giá trị dài nhất của từng chỗ thay rồi ghép
+ * lại. Nó báo `market.title` dài 63 ký tự, dẫn chứng là chuỗi:
  *
- * Nhưng IM LẶNG thì cũng sai: title dài chỉ lộ ra khi chỗ thay gặp giá trị
- * DÀI NHẤT, mà giá trị dài nhất thì hiếm. Đo 22/9/2026 trên
- * data/sites/theaccidentrecord.com/markets.json (184 thị trường, chính dữ
- * liệu các trang này render):
+ *     ZIP 23462 (Nashville-Davidson, TN) — Fatal Crash & Commute Data
  *
- *   {place} trang cụm      "Nashville-Davidson"       18
- *   {place} trang một ZIP  "Nashville-Davidson, TN"   22
- *   {zip}                  luôn 5
- *   {state}                luôn 2
- *   {stateName}            "Massachusetts"            13  (chưa có bang dài hơn)
- *   {count}                tới 3 chữ số
- *   {counties}             DANH SÁCH — không chặn trên được
+ * Chuỗi đó KHÔNG TỒN TẠI. 23462 là Virginia Beach VA, và cả nó lẫn
+ * Nashville-Davidson đều có `clusterSize` 2 — tức cả hai đi đường trang CỤM
+ * và không sinh ra trang ZIP nào. Tôi ghép ZIP dài nhất của thị trường này
+ * với tên nơi dài nhất của thị trường kia, rồi báo cáo con số như một sự
+ * thật. Số thật là 61, ở Rancho Cucamonga CA, 1 trên 63 trang.
  *
- * Số này sẽ trôi khi tập thị trường đổi. Đo lại bằng cách đọc lại chính file
- * markets.json ở kho publisher.
+ * HAI LỖI CHỒNG NHAU, và lỗi thứ hai nặng hơn:
+ *
+ * 1. Cực đại của từng chỗ thay không ghép được thành cực đại của cả chuỗi.
+ * 2. HQ ĐI ĐOÁN TRANG NÀO TỒN TẠI. Quy tắc cụm (`clusterSize <= 1`) thuộc
+ *    Pubsite — `lib/publisher/inventory.ts` nói thẳng: chép nó sang HQ là tạo
+ *    định nghĩa THỨ HAI về việc trang nào tồn tại. Lọc ứng viên theo
+ *    clusterSize ở đây sẽ sửa được con số nhưng vi phạm đúng ranh giới đó,
+ *    và định nghĩa thứ hai sẽ trôi khỏi định nghĩa thật vào một ngày không
+ *    ai để ý.
+ *
+ * Nên phép kiểm này chỉ nói thứ HQ THẬT SỰ BIẾT: độ dài phần CỐ ĐỊNH của
+ * template, và do đó còn bao nhiêu ký tự cho các chỗ thay. Không cần dữ liệu
+ * thị trường, không cần biết trang nào tồn tại, không thể sai.
+ *
+ *     cluster    39 cố định -> còn 21 cho {place}
+ *     market     36 cố định -> còn 24 cho {zip}+{place}, tức {place} <= 19
+ *     stateHub   39 cố định -> còn 21 cho {state}
+ *
+ * Đếm bao nhiêu TRANG THẬT vượt ngưỡng là việc của kho publisher: nó có
+ * markets.json và nó sở hữu quy tắc cụm. Ở đó phép đếm đúng; ở đây nó chỉ có
+ * thể là phỏng đoán khoác áo con số.
+ *
+ * Ngưỡng 60 là ước lượng thô: Google cắt theo BỀ RỘNG PIXEL (~600px) chứ
+ * không theo ký tự. Nên vượt ngưỡng là CẢNH BÁO. Chỉ một ca làm đỏ cổng:
+ * phần cố định tự nó đã >= 60 — lúc đó title chắc chắn bị cắt với MỌI giá
+ * trị, và đó không còn là phỏng đoán nữa.
  */
 const TITLE_LIMIT = 60;
 
-/**
- * BỀ RỘNG TÁCH THEO LOẠI TRANG, không dùng chung một bảng.
- *
- * `{place}` là cùng một cái tên nhưng KHÔNG cùng một tập giá trị: trang cụm
- * điền tên cụm ("Nashville-Davidson", 18), trang một ZIP điền thành phố kèm
- * bang ("Nashville-Davidson, TN", 22). Dùng chung số 22 cho cả hai thì title
- * cụm bị báo 61 trong khi thật ra dài nhất là 57 — một cảnh báo sai, và cảnh
- * báo sai làm hỏng cổng nhanh hơn là không có cảnh báo.
- */
-const WORST_CASE_WIDTH: Record<string, Record<string, number>> = {
-  cluster: { place: 18, count: 3, counties: 40 },
-  market: { place: 22, zip: 5 },
-  stateHub: { state: 2, stateName: 13, count: 3 },
-};
-
 const warnings: string[] = [];
 
-/** Độ dài title khi mọi chỗ thay nhận giá trị dài nhất đã đo cho LOẠI TRANG đó. */
-function titleWorstCase(kind: string, template: string): number {
-  const widths = WORST_CASE_WIDTH[kind] ?? {};
-  return template.replace(/\{([^}]*)\}/g, (_, name: string) =>
-    "X".repeat(widths[name] ?? 10)
-  ).length;
+/** Phần cố định của template: bỏ hết chỗ thay, đếm những gì còn lại. */
+function fixedWidth(template: string): number {
+  return template.replace(/\{[^}]*\}/g, "").length;
 }
 
-function checkTitleLength(vertical: string, kind: string, template: string | undefined): void {
-  if (!template) return;
+function checkTitleLength(vertical: string, kind: string, template: string | undefined): string[] {
+  if (!template) return [];
   const where = `${kind}.title`;
-  const n = titleWorstCase(kind, template);
-  if (n > TITLE_LIMIT) {
-    warnings.push(
-      `${vertical}: ${where} dài tới ${n} ký tự khi chỗ thay nhận giá trị dài nhất đã đo ` +
-        `(ngưỡng ${TITLE_LIMIT}) — phần đuôi nhiều khả năng bị cắt trên SERP ở những thị trường đó`
-    );
+  const fixed = fixedWidth(template);
+  const slots = [...template.matchAll(/\{([^}]*)\}/g)].map((m) => m[1]);
+  const room = TITLE_LIMIT - fixed;
+
+  if (room <= 0) {
+    return [
+      `${vertical}: ${where} có phần cố định ${fixed} ký tự, tự nó đã chạm ngưỡng ${TITLE_LIMIT} ` +
+        `trước khi điền chỗ thay nào — title này bị cắt ở MỌI trang`,
+    ];
   }
+  warnings.push(
+    `${where}: phần cố định ${fixed} ký tự, còn ${room} cho ${slots.map((x) => `{${x}}`).join(" + ")} ` +
+      `trước ngưỡng ~${TITLE_LIMIT}. Đếm trang thật vượt ngưỡng là việc của cổng bên publisher.`
+  );
+  return [];
 }
+
 
 function checkClusterSpec(spec: NicheContentSpec): string[] {
   const c = spec.cluster;
@@ -235,7 +242,7 @@ function checkClusterSpec(spec: NicheContentSpec): string[] {
     }
   }
 
-  checkTitleLength(spec.vertical, "cluster", c.title);
+  errors.push(...checkTitleLength(spec.vertical, "cluster", c.title));
 
   const named = metricsNamedBy(spec);
   for (const tile of c.tiles) {
@@ -289,7 +296,7 @@ function checkMarketSpec(spec: NicheContentSpec): string[] {
         errors.push(`${spec.vertical}: market.title nhắc "${word}" — chữ của nghề khác`);
       }
     }
-    checkTitleLength(spec.vertical, "market", m.title);
+    errors.push(...checkTitleLength(spec.vertical, "market", m.title));
   }
 
   const named = metricsNamedBy(spec);
@@ -397,7 +404,7 @@ function checkStateHub(spec: NicheContentSpec): string[] {
       errors.push(`${spec.vertical}: stateHub.title nhắc "${word}" — chữ của nghề khác`);
     }
   }
-  checkTitleLength(spec.vertical, "stateHub", h.title);
+  errors.push(...checkTitleLength(spec.vertical, "stateHub", h.title));
   return errors;
 }
 
@@ -417,5 +424,6 @@ console.log(`  ✓ khối trang một ZIP: ${allSpecs().filter((s) => s.market).
 console.log(`  ✓ khối trang cụm: ${allSpecs().filter((s) => s.cluster).length}/${allSpecs().length} nghề có, chỗ thay hợp lệ, không nghề nào nhắc chữ của nghề khác.`);
 const withTitle = allSpecs().filter((s) => s.cluster?.title || s.market?.title || s.stateHub?.title).length;
 console.log(`  ✓ title do đặc tả cấp: ${withTitle}/${allSpecs().length} nghề có; nghề chưa khai thì publisher giữ nguyên chuỗi cũ.`);
-// Cảnh báo in SAU dấu ✓ và KHÔNG làm đỏ cổng — xem ghi chú ở TITLE_LIMIT.
-for (const w of warnings) console.log(`  ! ${w}`);
+// Ngân sách title: in luôn, không chỉ khi có vấn đề — con số này là thứ
+// người viết title cần TRƯỚC khi viết, không phải sau khi bị cắt.
+for (const w of warnings) console.log(`  · ${w}`);
