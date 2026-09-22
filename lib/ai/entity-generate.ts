@@ -112,7 +112,21 @@ export interface EntityFactSet {
   /** Số ngày từ trận mới nhất có tỷ số. Đi vào prompt để văn không nói
    *  "cập nhật hôm nay" theo thời điểm dựng trang — brief mục 4.2. */
   stalenessDays: number | null;
+  /** TOÀN BỘ chỉ số, kể cả cấp GIẢI. Đây là thứ TRANG render. */
   facts: FootballFact[];
+  /**
+   * Tập đưa cho MODEL, đã bỏ chỉ số cấp giải.
+   *
+   * Tách khỏi `facts` sau khi đo 22/9/2026 và thấy cài đặt mâu thuẫn với
+   * thiết kế của chính nó: `forModel` lọc ngay trong `buildEntityFactSet`,
+   * nên endpoint — vốn dùng cùng hàm đó — trả về tập ĐÃ LỌC cho trang, và
+   * mục `league-context` không bao giờ render được. Chú thích của `forModel`
+   * đã ghi đúng ý định ("trang VẪN cần chỉ số cấp giải") và mã làm ngược lại.
+   *
+   * Validator chấm văn bản trên CHÍNH tập này, nên hai trường không được
+   * hoán đổi cho nhau.
+   */
+  modelFacts: FootballFact[];
   fingerprint: string;
 }
 
@@ -191,15 +205,17 @@ export async function buildEntityFactSet(
   const base = { vertical, axis, key, leagueName: LEAGUES[code], season, stalenessDays: lg.stalenessDays };
 
   if (axis === "league") {
+    // Trang GIẢI: chỉ số cấp giải CHÍNH LÀ nội dung của nó, nên không lọc.
     const facts = leagueFacts(lg);
-    return { ...base, displayName: LEAGUES[code], facts, fingerprint: fingerprintOf(facts, season, LEAGUES[code]) };
+    return { ...base, displayName: LEAGUES[code], facts, modelFacts: facts, fingerprint: fingerprintOf(facts, season, LEAGUES[code]) };
   }
 
   if (axis === "team") {
     const team = s.teams.find((t) => teamSlug(t) === parsed.team);
     if (!team) return null;
-    const facts = forModel(teamFacts(teamStats(s, team), lg));
-    return { ...base, displayName: team, facts, fingerprint: fingerprintOf(facts, season, team) };
+    const facts = teamFacts(teamStats(s, team), lg);
+    const modelFacts = forModel(facts);
+    return { ...base, displayName: team, facts, modelFacts, fingerprint: fingerprintOf(modelFacts, season, team) };
   }
 
   if (axis === "fixture") {
@@ -208,15 +224,16 @@ export async function buildEntityFactSet(
     const b = s.teams.find((t) => teamSlug(t) === slugB);
     if (!a || !b) return null;
     const name = `${a} gặp ${b}`;
-    const facts = forModel(fixtureFacts(fixtureStats(s, a, b), lg));
-    return { ...base, displayName: name, facts, fingerprint: fingerprintOf(facts, season, name) };
+    const facts = fixtureFacts(fixtureStats(s, a, b), lg);
+    const modelFacts = forModel(facts);
+    return { ...base, displayName: name, facts, modelFacts, fingerprint: fingerprintOf(modelFacts, season, name) };
   }
 
   return null;
 }
 
 export function renderEntityFactsForPrompt(fs: EntityFactSet): string {
-  const lines = fs.facts.map((f) => {
+  const lines = fs.modelFacts.map((f) => {
     const scope =
       f.scope === "LEAGUE"
         ? `phạm vi: cấp GIẢI — mô tả toàn bộ ${f.scopeName}, KHÔNG phải riêng ${fs.displayName}`
@@ -284,7 +301,7 @@ export async function getCachedEntityInterpretation(
   key: string
 ): Promise<EntityGenerateOutcome | null> {
   const fs = await buildEntityFactSet(vertical, axis, key);
-  if (!fs || fs.facts.length === 0) return null;
+  if (!fs || fs.modelFacts.length === 0) return null;
 
   const identity = await prisma.entityIdentity.findUnique({
     where: { vertical_axis_key: { vertical, axis, key } },
@@ -298,7 +315,7 @@ export async function getCachedEntityInterpretation(
   });
   if (!cached) return null;
 
-  const recheck = validateEntityText(cached.text, fs.facts);
+  const recheck = validateEntityText(cached.text, fs.modelFacts);
   if (!recheck.passed) return null;
 
   return {
@@ -306,7 +323,7 @@ export async function getCachedEntityInterpretation(
     cached: true,
     validation: recheck,
     factsFingerprint: fs.fingerprint,
-    facts: fs.facts,
+    facts: fs.modelFacts,
     attempts: 0,
     costUsd: 0,
   };
@@ -329,7 +346,7 @@ export async function getOrGenerateEntityInterpretation(
   if (!fs) return null;
   // Không fact nào thì KHÔNG sinh. Một trang chưa đá trận nào không có gì để
   // diễn giải, và bắt model viết về một tập rỗng là mời nó bịa.
-  if (fs.facts.length === 0) return null;
+  if (fs.modelFacts.length === 0) return null;
 
   const identity = await prisma.entityIdentity.findUnique({
     where: { vertical_axis_key: { vertical, axis, key } },
@@ -358,7 +375,7 @@ export async function getOrGenerateEntityInterpretation(
     }
     totalCost += result.costUsd;
     lastText = result.text;
-    last = validateEntityText(result.text, fs.facts);
+    last = validateEntityText(result.text, fs.modelFacts);
 
     // Ghi CẢ bản trượt, kèm lý do. Một bản bị từ chối là bằng chứng về prompt,
     // và vứt nó đi lặng lẽ sẽ giấu mất một vấn đề có hệ thống.
@@ -383,7 +400,7 @@ export async function getOrGenerateEntityInterpretation(
         cached: false,
         validation: last,
         factsFingerprint: fs.fingerprint,
-        facts: fs.facts,
+        facts: fs.modelFacts,
         attempts: attempt,
         costUsd: totalCost,
       };
@@ -395,7 +412,7 @@ export async function getOrGenerateEntityInterpretation(
     cached: false,
     validation: last,
     factsFingerprint: fs.fingerprint,
-    facts: fs.facts,
+    facts: fs.modelFacts,
     attempts: MAX_ATTEMPTS,
     costUsd: totalCost,
   };

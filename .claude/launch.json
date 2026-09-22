@@ -2,30 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "pseo-control-panel-dev",
+      "name": "hq-vn-football",
       "runtimeExecutable": "npm",
       "runtimeArgs": [
         "--prefix",
-        "/Users/user/Documents/pseo-control-panel",
+        "/Users/user/Documents/pseo-vn-football",
         "run",
         "dev"
       ],
-      "port": 3000,
+      "port": 3010,
       "autoPort": true
-    },
-    {
-      "name": "publisher",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": [
-        "--prefix",
-        "/Users/user/Documents/pseo-control-panel/publisher/atmovingservices",
-        "run",
-        "dev",
-        "--",
-        "--port",
-        "3002"
-      ],
-      "port": 3002
     }
   ]
 }
