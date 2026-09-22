@@ -926,15 +926,42 @@ model Website {
   indexSubmissions IndexSubmission[]
   apiKeys          PublisherApiKey[]
 
-  // Search Console property identity, e.g. "sc-domain:example.com" or
-  // "https://example.com/" (URL-prefix form) — GSC requires the exact
-  // registered format, see README once written.
-  gscPropertyUrl String
+  /// Search Console property identity, e.g. "sc-domain:example.com" or
+  /// "https://example.com/" (URL-prefix form) — GSC requires the exact
+  /// registered format.
+  ///
+  /// NULLABLE từ 22/9/2026, và đây là việc ÁP một lý lẽ kho này đã viết sẵn
+  /// chứ không phải nới lỏng một cổng canh.
+  ///
+  /// `ga4MeasurementId` bên dưới đã nullable, với đúng lập luận: "một site có
+  /// thể được nối cho GSC và WordPress reporting trước khi ai đó dựng
+  /// analytics, và từ chối kết nối cho tới lúc đó là BỊA RA MỘT PHỤ THUỘC
+  /// KHÔNG TỒN TẠI". Lập luận ấy đúng y hệt cho hai cột này, và đã không được
+  /// áp cho chúng.
+  ///
+  /// Mâu thuẫn đo được: `REQUIRED_FOR_BUILD` trong lib/publisher/site-config.ts
+  /// — định nghĩa của CHÍNH kho này về "đủ để dựng site" — gồm name, url,
+  /// vertical, tagline, description. KHÔNG có GSC, KHÔNG có GA4. Sản phẩm nói
+  /// analytics không cần để dựng; database thì không cho tạo hàng khi thiếu.
+  ///
+  /// Hậu quả thật, không giả định: site bóng đá Việt Nam chưa có domain nên
+  /// không có GSC property, nên không tạo được `Website`, nên không tạo được
+  /// `PublisherApiKey` (khoá treo vào websiteId), nên publisher gọi HQ bị 401
+  /// và MỌI trang của nó 404. Một site bị chặn hoàn toàn bởi hai cột mà sản
+  /// phẩm vốn không coi là bắt buộc.
+  ///
+  /// CỔNG CHẶN THẬT KHÔNG ĐỔI: `judgeReadiness` vẫn quyết định site nào được
+  /// DỰNG, và `/api/v1/sites/{host}/config` vẫn trả `ready: false` kèm danh
+  /// sách `missing`. Nullable ở đây chỉ tách "đăng ký được" khỏi "dựng được" —
+  /// hai câu hỏi khác nhau mà một cột NOT NULL đang trộn làm một.
+  gscPropertyUrl String?
 
-  // GA4 numeric property ID (the "G-XXXXXXX" measurement ID is different
-  // from this — GA4 Data API calls use "properties/{propertyId}", the
-  // numeric Analytics property ID, not the measurement ID).
-  ga4PropertyId String
+  /// GA4 numeric property ID (the "G-XXXXXXX" measurement ID is different
+  /// from this — GA4 Data API calls use "properties/{propertyId}", the
+  /// numeric Analytics property ID, not the measurement ID).
+  ///
+  /// Nullable cùng lý do và cùng lúc với `gscPropertyUrl` — xem trên.
+  ga4PropertyId String?
 
   // The OTHER GA4 identifier: the "G-XXXXXXXXXX" measurement ID that the
   // site itself sends events with. Stored here so it is managed in one place

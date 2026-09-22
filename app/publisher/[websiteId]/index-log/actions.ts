@@ -17,7 +17,14 @@ export async function recheckAction(_prev: IndexActionResult, formData: FormData
   // một sổ. Gọi thẳng recheckAll() ở đây sẽ tạo một lần đo mà sổ chạy không
   // biết — và màn hình ngay bên dưới sẽ nói "lần đo gần nhất" là một thời
   // điểm khác với thứ người dùng vừa tự tay làm.
-  const r = await runRecheckFor(site, { trigger: "manual", force: true });
+  // GSC property có thể chưa cấu hình (site chưa có domain). Nói ra, đừng đo
+  // rỗng: "0 URL được index" và "chưa nối Search Console" là hai câu khác hẳn
+  // nhau, và gộp chúng sẽ báo cáo một site chưa đo được thành một site chết.
+  const gscProperty = site.gscPropertyUrl;
+  if (!gscProperty) {
+    return { ok: false, message: "Site này chưa cấu hình Search Console property — không đo được trạng thái index." };
+  }
+  const r = await runRecheckFor({ ...site, gscPropertyUrl: gscProperty }, { trigger: "manual", force: true });
   revalidatePath(`/publisher/${websiteId}/index-log`);
   if (r.error) return { ok: false, message: r.error };
   if (r.skipped) return { ok: false, message: `Không đo: ${r.skipped}` };
@@ -42,6 +49,13 @@ export async function recordManualAction(_prev: IndexActionResult, formData: For
   const site = await prisma.website.findUnique({ where: { id: websiteId }, select: { url: true, gscPropertyUrl: true } });
   if (!site) return { ok: false, message: "Không tìm thấy website." };
 
+  // GSC property có thể chưa cấu hình (site chưa có domain). Nói ra, đừng đo
+  // rỗng: "0 URL được index" và "chưa nối Search Console" là hai câu khác hẳn
+  // nhau, và gộp chúng sẽ báo cáo một site chưa đo được thành một site chết.
+  const gscProperty = site.gscPropertyUrl;
+  if (!gscProperty) {
+    return { ok: false, message: "Site này chưa cấu hình Search Console property — không đo được trạng thái index." };
+  }
   const base = site.url.replace(/\/+$/, "");
   const urls = raw
     .split(/[\s,]+/)
@@ -63,7 +77,7 @@ export async function recordManualAction(_prev: IndexActionResult, formData: For
     }
     let indexed: boolean | null = null;
     try {
-      indexed = await fetchUrlIndexStatus(site.gscPropertyUrl, url);
+      indexed = await fetchUrlIndexStatus(gscProperty, url);
     } catch {
       indexed = null;
     }

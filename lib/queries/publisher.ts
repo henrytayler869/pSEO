@@ -55,16 +55,29 @@ export async function getWebsiteOverviewRows(): Promise<WebsiteOverviewRow[]> {
         const wpAdmin = deriveWpAdminUrl(website.wpApiBaseUrl, website.url);
       const [sitemapCount, searchTotals, trafficTotals] = await Promise.all([
           fetchSitemapCounts(website.url),
-          fetchSiteSearchTotals(website.gscPropertyUrl, OVERVIEW_WINDOW_DAYS),
-          fetchSiteTrafficTotals(website.ga4PropertyId, OVERVIEW_WINDOW_DAYS),
+          // Site chưa nối GSC/GA4 thì hai ô này để trống thay vì làm hỏng cả
+          // hàng. Bảng tổng quan liệt kê MỌI site, nên một site chưa cấu hình
+          // vẫn phải hiện ra — biến mất khỏi bảng là cách tệ nhất để báo
+          // "chưa cấu hình".
+          website.gscPropertyUrl
+            ? fetchSiteSearchTotals(website.gscPropertyUrl, OVERVIEW_WINDOW_DAYS)
+            : Promise.resolve(null),
+          website.ga4PropertyId
+            ? fetchSiteTrafficTotals(website.ga4PropertyId, OVERVIEW_WINDOW_DAYS)
+            : Promise.resolve(null),
         ]);
         return {
           website,
           wpAdmin,
           sitemapCount,
+          // null = KHÔNG ĐO ĐƯỢC (chưa nối GSC/GA4), không phải "bằng không".
+          // Hai thứ đó đọc giống nhau trong một ô trống, nên chỗ hiển thị phải
+          // phân biệt — xem chú thích của aiBudgetUsd, cùng một nguyên tắc.
           indexRateEstimate:
-            sitemapCount.total > 0 ? searchTotals.pagesWithImpressions / sitemapCount.total : null,
-          engagedSessions: trafficTotals.engagedSessions,
+            searchTotals && sitemapCount.total > 0
+              ? searchTotals.pagesWithImpressions / sitemapCount.total
+              : null,
+          engagedSessions: trafficTotals ? trafficTotals.engagedSessions : null,
           error: null,
         };
       } catch (err) {
@@ -148,7 +161,7 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
         return { ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." };
       }
       ),
-    listSitemaps(website.gscPropertyUrl).then(
+    (website.gscPropertyUrl ? listSitemaps(website.gscPropertyUrl) : Promise.resolve([])).then(
       (v) => ({ ok: true as const, value: v }),
       (err) => {
         logDependencyFailure("gsc-sitemaps", err, { websiteId, site: website.url });
@@ -172,14 +185,20 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
         return { ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." };
       }
     ),
-    Promise.all([fetchSiteSearchTotals(website.gscPropertyUrl, days), fetchTopPages(website.gscPropertyUrl, days)]).then(
+    (website.gscPropertyUrl
+      ? Promise.all([fetchSiteSearchTotals(website.gscPropertyUrl, days), fetchTopPages(website.gscPropertyUrl, days)])
+      : Promise.resolve([null, []] as const)
+    ).then(
       ([search, topPages]) => ({ ok: true as const, value: { search, topPages } }),
       (err) => {
         logDependencyFailure("gsc-search", err, { websiteId, site: website.url });
         return { ok: false as const, error: err instanceof Error ? err.message : "Lỗi không rõ." };
       }
     ),
-    Promise.all([fetchSiteTrafficTotals(website.ga4PropertyId, days), fetchTrafficBySource(website.ga4PropertyId, days)]).then(
+    (website.ga4PropertyId
+      ? Promise.all([fetchSiteTrafficTotals(website.ga4PropertyId, days), fetchTrafficBySource(website.ga4PropertyId, days)])
+      : Promise.resolve([null, null] as const)
+    ).then(
       ([traffic, trafficBySource]) => ({ ok: true as const, value: { traffic, trafficBySource } }),
       (err) => {
         logDependencyFailure("ga4-traffic", err, { websiteId, site: website.url });
@@ -201,7 +220,7 @@ export async function getWebsiteDetail(websiteId: string, days = OVERVIEW_WINDOW
     postCount: postCountResult.ok ? postCountResult.value : null,
     postCountError: postCountResult.ok ? null : postCountResult.error,
     search: gscResult.ok ? gscResult.value.search : null,
-    topPages: gscResult.ok ? gscResult.value.topPages : null,
+    topPages: gscResult.ok ? [...gscResult.value.topPages] : null,
     gscError: gscResult.ok ? null : gscResult.error,
     traffic: ga4Result.ok ? ga4Result.value.traffic : null,
     trafficBySource: ga4Result.ok ? ga4Result.value.trafficBySource : null,

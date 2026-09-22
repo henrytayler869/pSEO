@@ -147,6 +147,23 @@ export async function runDueRechecks(): Promise<RunOutcome[]> {
   const out: RunOutcome[] = [];
   // Tuần tự: hai site dùng CHUNG một service account, và bắn song song vào
   // URL Inspection chỉ để tiết kiệm vài giây là cách tự đụng rate limit.
-  for (const site of sites) out.push(await runRecheckFor(site, { trigger: "scheduled" }));
+  for (const site of sites) {
+    const gscProperty = site.gscPropertyUrl;
+    // Site chưa cấu hình GSC property thì KHÔNG đo được — ghi ra một kết quả
+    // "skipped" thay vì lặng lẽ bỏ khỏi danh sách. Một site biến mất khỏi báo
+    // cáo đọc y hệt một site không có vấn đề gì.
+    if (!gscProperty) {
+      out.push({
+        websiteId: site.id,
+        websiteName: site.name,
+        checked: 0,
+        failed: 0,
+        skipped: "chưa cấu hình Search Console property",
+        error: null,
+      });
+      continue;
+    }
+    out.push(await runRecheckFor({ ...site, gscPropertyUrl: gscProperty }, { trigger: "scheduled" }));
+  }
   return out;
 }

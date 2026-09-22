@@ -63,13 +63,22 @@ export async function getGscTabData(websiteId: string, days: Window): Promise<Gs
     select: { id: true, name: true, url: true, gscPropertyUrl: true },
   });
   if (!website) return null;
+  // Chưa nối Search Console thì KHÔNG có gì để đọc. Trả null, và bảng điều
+  // khiển hiện "chưa có dữ liệu".
+  //
+  // GIỚI HẠN ĐÃ BIẾT, ghi ra chứ không giấu: null ở đây trùng với null của
+  // "không tìm thấy website", nên hai trạng thái khác nhau đang nói cùng một
+  // câu. Tách chúng là việc tiếp theo, và nó thuộc về tầng trình bày chứ
+  // không thuộc chỗ này.
+  const gscProperty = website.gscPropertyUrl;
+  if (!gscProperty) return null;
 
   const [totals, pages, queries] = await Promise.all([
-    load("gsc-totals", websiteId, fetchSiteSearchTotals(website.gscPropertyUrl, days)),
-    load("gsc-pages", websiteId, fetchTopPages(website.gscPropertyUrl, days)),
-    load("gsc-queries", websiteId, fetchTopQueries(website.gscPropertyUrl, days)),
+    load("gsc-totals", websiteId, fetchSiteSearchTotals(gscProperty, days)),
+    load("gsc-pages", websiteId, fetchTopPages(gscProperty, days)),
+    load("gsc-queries", websiteId, fetchTopQueries(gscProperty, days)),
   ]);
-  return { website, days, totals, pages, queries };
+  return { website: { ...website, gscPropertyUrl: gscProperty }, days, totals, pages, queries };
 }
 
 export interface GaTabData {
@@ -92,16 +101,21 @@ export async function getGaTabData(websiteId: string, days: Window): Promise<GaT
     select: { id: true, name: true, url: true, ga4PropertyId: true },
   });
   if (!website) return null;
+  // Chưa cấu hình GA4 property thì không có gì để đọc — xem ghi chú ở
+  // getGscTabData về giới hạn của việc dùng chung null.
+  const ga4 = website.ga4PropertyId;
+  if (!ga4) return null;
+  const site = { ...website, ga4PropertyId: ga4 };
 
   const [totals, bySource, landing, hostLeak, lastScheduled] = await Promise.all([
-    load("ga4-totals", websiteId, fetchSiteTrafficTotals(website.ga4PropertyId, days)),
-    load("ga4-source", websiteId, fetchTrafficBySource(website.ga4PropertyId, days)),
-    load("ga4-landing", websiteId, fetchLandingPages(website.ga4PropertyId, days)),
+    load("ga4-totals", websiteId, fetchSiteTrafficTotals(ga4, days)),
+    load("ga4-source", websiteId, fetchTrafficBySource(ga4, days)),
+    load("ga4-landing", websiteId, fetchLandingPages(ga4, days)),
     // KHÔNG theo `days` của bộ chọn khoảng: câu hỏi "còn đường bắn nào không"
     // không phải câu hỏi về khoảng đang xem. Người chọn 7 ngày để đọc lưu
     // lượng không có ý nói "chỉ quan tâm rò rỉ trong 7 ngày".
-    load("ga4-host-leak", websiteId, checkHostLeak(website, 28)),
+    load("ga4-host-leak", websiteId, checkHostLeak(site, 28)),
     getLastHostLeakCheck(websiteId),
   ]);
-  return { website, days, totals, bySource, landing, hostLeak, lastScheduled };
+  return { website: site, days, totals, bySource, landing, hostLeak, lastScheduled };
 }

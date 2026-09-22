@@ -121,7 +121,17 @@ export async function runAllHostLeakChecks() {
   const sites = await prisma.website.findMany({ select: { id: true, name: true, url: true, ga4PropertyId: true } });
   const out = [];
   // Tuần tự: cùng một service account cho mọi property.
-  for (const site of sites) out.push(await runHostLeakCheck(site));
+  for (const site of sites) {
+    const ga4 = site.ga4PropertyId;
+    // Không có GA4 property thì phép kiểm rò gtag không chạy được. Bỏ qua CÓ
+    // GHI NHẬN: "không phát hiện rò" và "không kiểm được" là hai kết luận khác
+    // hẳn nhau, và cái sau không được phép đọc như cái trước.
+    if (!ga4) {
+      out.push({ websiteName: site.name, ok: false, detail: "chưa cấu hình GA4 property — KHÔNG kiểm được, khác với \"không phát hiện rò\"" });
+      continue;
+    }
+    out.push(await runHostLeakCheck({ ...site, ga4PropertyId: ga4 }));
+  }
   return out;
 }
 

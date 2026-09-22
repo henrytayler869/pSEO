@@ -299,6 +299,11 @@ export async function submitSitemapAction(_prev: ActionResult, formData: FormDat
     const website = await prisma.website.findUniqueOrThrow({ where: { id: websiteId } });
     const sitemapUrl = `${website.url.replace(/\/+$/, "")}/sitemap.xml`;
 
+    // Nộp sitemap qua Search Console cần property. Nói thẳng khi thiếu, thay
+    // vì ném một lỗi Google khó đọc từ sâu trong stack.
+    if (!website.gscPropertyUrl) {
+      return { ok: false, message: "Site này chưa cấu hình Search Console property — không nộp sitemap được." };
+    }
     await submitSitemap(website.gscPropertyUrl, sitemapUrl);
     const after = await listSitemaps(website.gscPropertyUrl);
     revalidatePath(`/publisher/${websiteId}`);
