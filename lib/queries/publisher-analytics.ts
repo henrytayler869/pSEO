@@ -50,7 +50,9 @@ async function load<T>(what: string, websiteId: string, p: Promise<T>): Promise<
 }
 
 export interface GscTabData {
-  website: { id: string; name: string; url: string; gscPropertyUrl: string };
+  /** `gscPropertyUrl` có thể null: site tạo ra trước khi có property. Màn
+   *  hình cần biết điều đó để nói "chưa gắn" thay vì "không có dữ liệu". */
+  website: { id: string; name: string; url: string; gscPropertyUrl: string | null };
   days: Window;
   totals: Loaded<SiteSearchTotals>;
   pages: Loaded<PageSearchRow[]>;
@@ -82,7 +84,8 @@ export async function getGscTabData(websiteId: string, days: Window): Promise<Gs
 }
 
 export interface GaTabData {
-  website: { id: string; name: string; url: string; ga4PropertyId: string };
+  /** Null khi site chưa gắn property GA4 — xem ghi chú ở GscTabData. */
+  website: { id: string; name: string; url: string; ga4PropertyId: string | null };
   days: Window;
   totals: Loaded<SiteTrafficTotals>;
   bySource: Loaded<TrafficBreakdownRow[]>;

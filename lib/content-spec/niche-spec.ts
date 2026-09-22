@@ -240,6 +240,27 @@ export interface NicheStateHubSpec {
   title: string;
 }
 
+/**
+ * TRANG CHỦ của site.
+ *
+ * Tách khỏi `tagline` có lý do, không phải để có thêm một trường. Tagline là
+ * chữ HIỆN TRÊN TRANG dưới tên site, nên nó cần đủ mô tả cho người đọc. Title
+ * là chữ Google in ra, nên nó cần ngắn và đặt từ quan trọng lên đầu. Hiện cả
+ * hai đang là một: `layout.tsx` dựng `title.default` = `{name} — {tagline}`,
+ * và kết quả là 63 và 64 ký tự cho hai site — quá ngưỡng cắt ~60.
+ *
+ * Sửa tagline KHÔNG giải được: tagline càng đủ mô tả thì chuỗi ghép càng dài.
+ * Hai mục đích khác nhau thì phải là hai chuỗi.
+ *
+ * KHÔNG CÓ CHỖ THAY NÀO. Trang chủ không biết một nơi chốn hay một mã ZIP
+ * nào cả — nó là trang duy nhất trong site không có bối cảnh địa lý. Cổng
+ * canh làm đỏ nếu có `{...}` xuất hiện ở đây, vì một chỗ thay không ai điền
+ * sẽ in nguyên văn dấu ngoặc lên thẻ title.
+ */
+export interface NicheHomeSpec {
+  title: string;
+}
+
 export interface NicheContentSpec {
   vertical: string;
   sections: readonly NicheSection[];
@@ -260,6 +281,7 @@ export interface NicheContentSpec {
    * đây: hai nguồn cho cùng một khối là hai bộ câu hỏi sẽ lệch nhau, và bản
    * viết tay đang chạy tốt với 5 câu.
    */
+  home?: NicheHomeSpec;
   stateHub?: NicheStateHubSpec;
   faq?: {
     /**
@@ -318,6 +340,17 @@ const MOVING: NicheContentSpec = {
     },
   ],
   cluster: {
+    // Dẫn bằng NƠI CHỐN và THỰC THỂ DỮ LIỆU, giống site tai nạn. Nhưng ở đây
+    // có một rủi ro site kia không có: hai truy vấn top 10 duy nhất của site
+    // này đều nằm trên trang CỤM — "chicago il zip code" hạng 9 và
+    // "11385 county" hạng 10, chốt 20/9/2026. Site tai nạn đổi title khi có 0
+    // impression; site này đổi đúng nhóm trang đang xếp hạng. Chủ dự án biết
+    // và duyệt.
+    //
+    // "Migration & Housing Data" phủ cả ba mục của nghề — mobility cấp ZIP,
+    // IRS migration cấp hạt, housing cấp ZIP — và KHÔNG khai chỉ số nào
+    // không có. Không khai phạm vi nên không nói quá về độ phân giải.
+    title: "{place} ZIP Codes — Migration & Housing Data",
     // Nguyên văn những chuỗi cluster-view đang in, chuyển từ mã sang dữ liệu.
     // Site chuyển nhà phải KHÔNG đổi một ký tự nào sau lần này.
     description:
@@ -344,7 +377,33 @@ const MOVING: NicheContentSpec = {
     distinguishing: "housing and mobility estimates",
     topicsHeading: "By kind of move",
   },
+  stateHub: {
+    // KHÔNG có "by County", khác site tai nạn — và khác đó là CHỦ Ý.
+    //
+    // Đo trang hub thật 22/9/2026, đếm từ trong HTML đã bỏ script/style:
+    //
+    //   /moving-services/tx        median ×6  housing ×2  migration 0  inflow 0
+    //   /auto-accident-attorney/tx crash ×1   fatal ×1    (cả hai đến TỪ title)
+    //
+    // Hub bang là một MỤC LỤC. Site tai nạn thuần mục lục; site này có vài số
+    // tổng hợp, nhưng KHÔNG phải migration. Nên "Migration & Housing Data"
+    // đúng với thứ trang có (housing) và mô tả tập trang bên dưới (migration)
+    // — còn một chữ "by County" sẽ chỉ vào dữ liệu không xuất hiện ở đây.
+    //
+    // Title mục lục mô tả mục lục là quy ước bình thường, không phải nói dối.
+    // Chủ dự án đã xét chuyện này cho site tai nạn và QUYẾT GIỮ NGUYÊN. Ghi
+    // lại để sau không ai phát hiện lại nó như một lỗi rồi đi "sửa" — hai
+    // site không cùng công thức ở hub bang, và đó là lựa chọn đã cân nhắc.
+    title: "{state} ZIP Codes — Migration & Housing Data",
+  },
+  home: {
+    // "Household Migration" ở cấp HẠT (IRS), "Housing Data" ở cấp ZIP
+    // (Census). Câu này không khai phạm vi nào nên không hứa sai — khác
+    // tagline cũ "ZIP by ZIP", vốn khai cấp ZIP cho cả ba mục.
+    title: "Household Migration and Housing Data — AT Moving Services",
+  },
   market: {
+    title: "ZIP {zip} ({place}) — Migration & Housing Data",
     // Nguyên văn thứ publisher đang in cho nghề này.
     leadMetrics: [
       { metric: "irs_migration_net_households", phrase: "Net household migration {display} a year countywide" },
@@ -444,6 +503,17 @@ const AUTO_ACCIDENT: NicheContentSpec = {
     // KHÔNG "what this means for you": trang không biết người đọc là ai, và
     // một lời hứa tư vấn trên trang chỉ có số liệu là lời hứa không giữ được.
     interpretationHeading: "What these figures show for {place}",
+  },
+  home: {
+    // Đặt "Fatal Crash Statistics" lên ĐẦU và tên site xuống cuối. Hai site
+    // này có DR 0,2 và 0,0 — không ai tìm chúng bằng tên, nên 19-20 ký tự
+    // đầu của thẻ title, chỗ đắt nhất, không nên dành cho một thương hiệu
+    // chưa ai biết.
+    //
+    // KHÔNG nhắc commute ở đây dù trang có: title không nói hết được, và
+    // chọn phần nào là việc của SEO. Cái title này KHÔNG được nói là có dữ
+    // liệu ZIP cho tai nạn — FARS ở cấp hạt, và "by County" nói đúng điều đó.
+    title: "Fatal Crash Statistics by County — The Accident Record",
   },
   stateHub: {
     // {state} = mã hai chữ. Trang bang liệt kê ZIP theo hạt, nên "by County"

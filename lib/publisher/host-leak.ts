@@ -57,7 +57,7 @@ function normalizeHost(value: string): string {
 }
 
 export async function checkHostLeak(
-  site: { url: string; ga4PropertyId: string },
+  site: { url: string; ga4PropertyId: string | null },
   days = 28,
 ): Promise<HostLeakResult> {
   const expectedHost = normalizeHost(site.url);
@@ -99,7 +99,7 @@ export async function runHostLeakCheck(site: {
   id: string;
   name: string;
   url: string;
-  ga4PropertyId: string;
+  ga4PropertyId: string | null;
 }): Promise<{ websiteName: string; ok: boolean; detail: string }> {
   let ok = false;
   let detail: string;

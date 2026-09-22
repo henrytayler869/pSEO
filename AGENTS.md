@@ -152,57 +152,7 @@ với khối "NOT run here" trong `.github/workflows/deploy.yml`. Chạy tay:
     npm run verify:football-facts   # chỉ số cấp đội đối chiếu chéo buildStandings
     npm run verify:page-axis        # khoá trang + hàng EntityIdentity trong DB
 
-## TẠM THỜI: database production ĐI TRƯỚC repo — đừng sinh migration từ nó
-
-Có hiệu lực từ 22/9/2026 cho tới khi nhánh `vn-football-publisher` vào main.
-Xoá mục này khi nó đã merge.
-
-Migration `20260928000000_entity_page_axis` ĐÃ ÁP vào DB production — hai bảng
-`EntityIdentity`, `AiEntityGeneration`, 977 hàng — nhưng nó CHƯA có trong
-`prisma/migrations` của main, và `schema.prisma` của main chưa khai hai model
-đó.
-
-Hai chiều đọc, và chỉ một chiều an toàn. Đo 22/9/2026 trên shadow DB:
-
-    migrate status                 "Database schema is up to date!"
-    migrate deploy                 "No pending migrations to apply."  exit 0
-    migrate diff --from-url <DB>   DROP TABLE "AiEntityGeneration";
-                                   DROP TABLE "EntityIdentity";
-
-Deploy KHÔNG gãy vì một migration đã áp mà thư mục không có. Nhưng bất kỳ ai
-SINH migration từ DB thật — `prisma migrate dev`, hay `migrate diff --from-url`
-trỏ production — sẽ nhận một migration XOÁ hai bảng cùng 977 hàng. Và nó sẽ
-trông hoàn toàn hợp lệ trong diff của PR, vì với schema của main thì hai bảng
-ấy ĐÚNG là thừa.
-
-Nên: **không `prisma migrate dev`, không sinh migration từ production** cho
-tới khi nhánh kia merge. Kiểm drift thì dùng
-
-    npx prisma migrate diff --from-migrations prisma/migrations \
-      --to-schema-datamodel prisma/schema.prisma \
-      --shadow-database-url postgresql://postgres:shadow@127.0.0.1:55440/shadow
-
-Chiều đó không đọc DB thật nên không thấy hai bảng. Shadow DB dựng bằng một
-dòng và vứt đi được:
-
-    docker run -d --name pseo-shadow -e POSTGRES_PASSWORD=shadow \
-      -e POSTGRES_DB=shadow -p 55440:5432 postgres:16-alpine
-
-Bài học chung, và nó đã nằm sẵn ở brief mục 6: một phép thử âm chỉ bác được
-đúng thứ nó thử. "deploy chạy được" không phải "migration này an toàn".
-
-ĐỌC NGUỒN QUA `fetchLeagueSeasonMerged`, KHÔNG PHẢI `fetchLeagueSeason`.
-Bản JSON là NỀN; lớp phủ .txt mới là thứ mang kết quả mới nhất. Đo 22/9/2026,
-cùng một ngày, cùng một giải:
-
-    fetchLeagueSeason        Ngoại hạng Anh  40/380 trận, trễ 8 ngày
-    fetchLeagueSeasonMerged  Ngoại hạng Anh  50/380 trận, trễ 2 ngày
-
-Mười trận và sáu ngày. Không có gì đỏ lên khi dùng nhầm hàm — trang vẫn dựng
-đủ, bảng xếp hạng vẫn cộng đúng, chỉ là của tuần trước. Ligue 1 không có lớp
-phủ nên hai hàm cho cùng kết quả, và đó chính là lý do nó trễ 9 ngày.
-
-## HÀM QC VIẾT CHO TIẾNG ANH KHÔNG DÙNG ĐƯỢC CHO TIẾNG VIỆT
+### HÀM QC VIẾT CHO TIẾNG ANH KHÔNG DÙNG ĐƯỢC CHO TIẾNG VIỆT
 
 Site bóng đá viết tiếng Việt. Hai nguyên hàm dùng chung trong kho này chuẩn
 hoá văn bản bằng biểu thức chỉ biết ASCII, và với tiếng Việt chúng KHÔNG hỏng
@@ -232,6 +182,42 @@ Bản tiếng Việt nằm riêng:
 
 Bất cứ phép kiểm văn bản nào thêm sau này cho site tiếng Việt phải đi qua hai
 file đó, hoặc tự hỏi bộ chuẩn hoá của nó làm gì với dấu.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## AGENTS.md: ĐỪNG viết gì vào giữa hai marker `nextjs-agent-rules`
+
+Khối ở cuối file nằm giữa hai marker `BEGIN:nextjs-agent-rules` và
+`END:nextjs-agent-rules` (chúng là comment HTML; ở đây cố tình KHÔNG viết đủ
+dấu comment — xem đoạn cuối mục này). `next dev` GHI ĐÈ toàn bộ vùng đó. Đọc
+`node_modules/next/dist/server/lib/generate-agent-files.js`, hàm
+`upsertAgentRulesBlock`:
+
+    const before = existing.slice(0, startIdx);
+    const after  = existing.slice(endIdx + AGENT_RULES_END_MARKER.length);
+    return before + normalizedBlock + after;
+
+`trước BEGIN` + khối chuẩn MỚI + `sau END`. Mọi thứ người ta viết xen vào
+giữa bị vứt — không cảnh báo, không lỗi, không gì đỏ lên.
+
+Mục `lib/football/` phía trên ĐÃ nằm trong vùng đó từ 21/9/2026 tới
+22/9/2026, chỉ vì tôi dán nó ngay trước tiêu đề của Next mà không để ý hai
+dòng marker. Nó sống sót do may.
+
+Và bẫy đóng lại ở câu cuối của chính khối kia: "committing it with your work
+keeps the tree clean". Lời khuyên đó đúng cho khối Next và SAI cho mọi thứ
+người ta lỡ đặt cạnh nó — nó dạy người ta commit một thay đổi họ không đọc.
+Nếu vài chục dòng bất biến biến mất trong cùng diff đó, đúng câu ấy là thứ
+khiến người ta bấm qua.
+
+Viết mọi thứ của kho này TRƯỚC dòng BEGIN.
+
+VÀ ĐỪNG TRÍCH NGUYÊN VĂN MARKER Ở BẤT CỨ ĐÂU TRONG FILE. Next tìm bằng
+`existing.indexOf(...)` — tức lần xuất hiện ĐẦU TIÊN. Bản đầu của chính mục
+này trích đủ cả `<!--` và `-->` để cho dễ đọc, và thế là marker giả ở đây trở
+thành điểm bắt đầu, còn vùng bị ghi đè kéo dài từ đây xuống tận cuối file.
+Phát hiện bằng cách chạy lại chính thuật toán của Next lên file mới: nó báo
+mất 26 dòng ở chỗ lẽ ra không mất gì.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
