@@ -7,12 +7,12 @@ import { ConnectWebsiteForm } from "@/components/connect-website-form";
 import { WpAdminLinkCell } from "@/components/wp-admin-link";
 import { RemoveWebsiteButton } from "@/components/remove-website-button";
 import { getWebsiteOverviewRows } from "@/lib/queries/publisher";
-import { getVerticalsWithMarkets } from "@/lib/queries/verticals";
+import { getVerticalsWithPages } from "@/lib/queries/verticals";
 import { getBudgetStatus, formatBudgetPercent } from "@/lib/ai/budget";
 import { AlertTriangle } from "lucide-react";
 
 export default async function PublisherPage() {
-  const [rows, verticals] = await Promise.all([getWebsiteOverviewRows(), getVerticalsWithMarkets()]);
+  const [rows, verticals] = await Promise.all([getWebsiteOverviewRows(), getVerticalsWithPages()]);
 
   // Ngân sách hiện ở ĐÂY nữa, không chỉ trong trang chi tiết. Một cảnh báo
   // chỉ thấy được sau khi đã mở đúng site là một cảnh báo dành cho người đã

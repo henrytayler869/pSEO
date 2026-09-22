@@ -93,7 +93,7 @@ import { assertValidGscProperty } from "../lib/google/search-console";
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "../lib/google/analytics-data";
 import { deriveWpApiBaseUrl } from "../lib/wordpress/rest-api";
 import { saveServiceAccountKey, getServiceAccountStatus } from "../lib/google/service-account";
-import { getVerticalsWithMarkets } from "../lib/queries/verticals";
+import { getVerticalsWithPages } from "../lib/queries/verticals";
 
 function arg(flag: string): string | null {
   const i = process.argv.indexOf(flag);
@@ -233,11 +233,11 @@ async function main() {
     ? readSecretFile(wpLoopbackSecretFile, "--wp-loopback-secret-file")
     : null;
 
-  const known = await getVerticalsWithMarkets();
+  const known = await getVerticalsWithPages();
   if (!known.includes(vertical)) {
     console.error(
       vertical
-        ? `\nNgành "${vertical}" chưa có market nào. Đang có: ${known.join(", ")}`
+        ? `\nNgành "${vertical}" chưa có trang nào (cả MarketIdentity lẫn EntityIdentity). Đang có: ${known.join(", ")}`
         : `\nThiếu --vertical. Đang có: ${known.join(", ")}`
     );
     process.exitCode = 1;

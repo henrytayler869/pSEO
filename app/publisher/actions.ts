@@ -7,7 +7,7 @@ import { setWordPressAdminPassword, generatePassword, MIN_PASSWORD_LENGTH, WpAdm
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "@/lib/google/analytics-data";
 import { notifySiteConfigChanged } from "@/lib/publisher/notify-site";
 import { normalizeHost } from "@/lib/publisher/link-domain";
-import { getVerticalsWithMarkets } from "@/lib/queries/verticals";
+import { getVerticalsWithPages } from "@/lib/queries/verticals";
 import { createPublisherKey, revokePublisherKey } from "@/lib/settings/api-key";
 import { pushKeyToSite, isHeaderSafeSecret } from "@/lib/publisher/push-key";
 import { judgeReadiness } from "@/lib/publisher/site-config";
@@ -62,12 +62,12 @@ export async function connectWebsiteAction(_prev: ActionResult, formData: FormDa
    * site whose content checks silently do nothing. Rejecting at the door is
    * the only place that failure is still visible.
    */
-  const knownVerticals = await getVerticalsWithMarkets();
+  const knownVerticals = await getVerticalsWithPages();
   if (!knownVerticals.includes(vertical)) {
     return {
       ok: false,
       message: vertical
-        ? `Ngành "${vertical}" chưa có market nào trong hệ thống. Đang có: ${knownVerticals.join(", ")}.`
+        ? `Ngành "${vertical}" chưa có trang nào trong hệ thống — không hàng MarketIdentity (trục ZIP) lẫn EntityIdentity (trục không địa lý). Đang có: ${knownVerticals.join(", ")}.`
         : `Chưa chọn ngành. Mọi luật nội dung đều tra theo ngành, nên thiếu nó thì các phép kiểm chạy mà không soi gì.`,
     };
   }
