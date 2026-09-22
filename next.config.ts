@@ -33,6 +33,28 @@ const nextConfig: NextConfig = {
     PSEO_COMMIT: commitAtBuildTime(),
     PSEO_BUILT_AT: new Date().toISOString(),
   },
+  turbopack: {
+    /**
+     * Gốc dự án, khai TƯỜNG MINH vì suy ra tự động cho kết quả sai trong git
+     * worktree.
+     *
+     * Turbopack suy gốc bằng cách đi ngược tìm lockfile. Trong một worktree
+     * dùng chung `node_modules` qua symlink, đường đi đó dẫn về KHO CHÍNH —
+     * nơi thường đã có một `next dev` khác đang chạy. Next 16 khoá dev server
+     * theo THƯ MỤC, nên nó coi worktree là cùng một dự án với kho chính, báo
+     * "Another next dev server is already running" và thoát ngay.
+     *
+     * Đo 22/9/2026: `npm run predev` chạy sạch (exit 0), `.next/dev/logs/` được
+     * tạo ra, log RỖNG, tiến trình biến mất trong vài giây và không cổng nào
+     * lắng nghe. Không thông báo nào tới được terminal vì nó chết trước khi
+     * kịp ghi log.
+     *
+     * `import.meta.dirname` chứ không phải chuỗi cứng: file này sống trong cả
+     * kho chính lẫn mọi worktree, và một đường dẫn viết cứng sẽ đúng ở đúng
+     * một nơi.
+     */
+    root: import.meta.dirname,
+  },
 };
 
 export default nextConfig;

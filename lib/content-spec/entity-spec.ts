@@ -167,8 +167,8 @@ const FOOTBALL: EntityContentSpec = {
             key: "vi-tri",
             question: "{team} đang xếp thứ mấy ở {league}?",
             answer:
-              "{team} đang đứng hạng {metric:team_position} với {metric:team_points} sau " +
-              "{metric:team_played}. Bảng xếp hạng này tính từ chính các trận đã đá trong mùa {season}, " +
+              "{team} đang đứng hạng {metric:team_position} với {metric:team_points} điểm sau " +
+              "{metric:team_played} trận. Bảng xếp hạng này tính từ chính các trận đã đá trong mùa {season}, " +
               "nên nó đổi sau mỗi vòng đấu.",
             requires: ["team_position", "team_points", "team_played"],
           },
@@ -176,8 +176,8 @@ const FOOTBALL: EntityContentSpec = {
             key: "san-nha-san-khach",
             question: "{team} chơi ở sân nhà hay sân khách tốt hơn?",
             answer:
-              "{team} giành {metric:team_home_points} qua {metric:team_home_played} trên sân nhà, và " +
-              "{metric:team_away_points} qua {metric:team_away_played} trên sân khách. Số trận ở hai sân " +
+              "{team} giành {metric:team_home_points} điểm qua {metric:team_home_played} trận trên sân nhà, và " +
+              "{metric:team_away_points} điểm qua {metric:team_away_played} trận trên sân khách. Số trận ở hai sân " +
               "thường lệch nhau trong giai đoạn đầu mùa, nên hãy đọc điểm cùng với số trận chứ đừng đọc " +
               "riêng điểm.",
             requires: ["team_home_points", "team_home_played", "team_away_points", "team_away_played"],
@@ -191,8 +191,8 @@ const FOOTBALL: EntityContentSpec = {
             answer:
               "Trang này không công bố danh sách ghi bàn, vì nguồn dữ liệu đang dùng chỉ có tỷ số từng " +
               "trận — không có người ghi bàn, không có phút ghi bàn, không có đội hình ra sân. Thứ trang " +
-              "trả lời được là ở cấp đội: {team} đã ghi {metric:team_goals_for} và thủng " +
-              "{metric:team_goals_against} sau {metric:team_played}.",
+              "trả lời được là ở cấp đội: {team} đã ghi {metric:team_goals_for} bàn và thủng " +
+              "{metric:team_goals_against} bàn sau {metric:team_played} trận.",
             requires: ["team_goals_for", "team_goals_against", "team_played"],
           },
         ],
@@ -232,9 +232,9 @@ const FOOTBALL: EntityContentSpec = {
             key: "doi-dau",
             question: "{team} và {opponent} đã gặp nhau bao nhiêu lần?",
             answer:
-              "Trong tập dữ liệu mùa {season}, hai đội đã gặp nhau {metric:h2h_meetings}: {team} thắng " +
-              "{metric:h2h_wins_a}, {opponent} thắng {metric:h2h_wins_b}, và {metric:h2h_draws} kết thúc " +
-              "hoà. Giải đấu vòng tròn hai lượt nên mỗi cặp gặp nhau đúng hai lần mỗi mùa.",
+              "Trong tập dữ liệu mùa {season}, hai đội đã gặp nhau {metric:h2h_meetings} lần: {team} thắng " +
+              "{metric:h2h_wins_a} trận, {opponent} thắng {metric:h2h_wins_b} trận, và {metric:h2h_draws} trận " +
+              "kết thúc hoà. Giải đấu vòng tròn hai lượt nên mỗi cặp gặp nhau đúng hai lần mỗi mùa.",
             requires: ["h2h_meetings", "h2h_wins_a", "h2h_wins_b", "h2h_draws"],
           },
         ],
