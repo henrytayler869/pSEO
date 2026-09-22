@@ -45,7 +45,8 @@
     "verify:page-axis": "tsx scripts/verify-page-axis.ts",
     "verify:football-facts": "tsx scripts/verify-football-facts.ts",
     "football:sync": "tsx scripts/sync-football-entities.ts",
-    "verify:entity-spec": "tsx scripts/verify-entity-spec.ts"
+    "verify:entity-spec": "tsx scripts/verify-entity-spec.ts",
+    "readiness": "tsx scripts/readiness.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",

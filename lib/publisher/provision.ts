@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
-import { checkNicheReadiness } from "@/lib/publisher/niche-readiness";
+import { checkReadiness } from "@/lib/publisher/readiness";
 import { getCredential } from "@/lib/settings/credentials";
 import { ensureDnsRecord, findDnsRecord } from "@/lib/cloudflare/dns";
 import { createPropertyWithWebStream, listAccounts, AnalyticsAdminError } from "@/lib/google/analytics-admin";
@@ -111,7 +111,7 @@ export async function provisionSite(input: ProvisionInput): Promise<ProvisionRep
    * người ta học cách đi vòng. Nhưng nó phải NÓI RA, ở bước đầu tiên, kèm tên
    * thứ thiếu và chuyện đã xảy ra khi thiếu.
    */
-  const readiness = await checkNicheReadiness(input.vertical);
+  const readiness = await checkReadiness(input.vertical);
   const missing = readiness.checks.filter((c) => !c.ok);
   push({
     key: "niche",

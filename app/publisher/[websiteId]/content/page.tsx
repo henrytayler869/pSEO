@@ -9,7 +9,7 @@ import { getSpendUsdForVertical } from "@/lib/ai/anthropic";
 import { ContentFillQueue } from "@/components/content-fill-queue";
 import { ClusterFillQueue } from "@/components/cluster-fill-queue";
 import { buildClusterFillQueue } from "@/lib/queries/cluster-fill-queue";
-import { checkNicheReadiness } from "@/lib/publisher/niche-readiness";
+import { checkReadiness } from "@/lib/publisher/readiness";
 
 /**
  * Hàng đợi điền nội dung của một publisher.
@@ -37,7 +37,7 @@ export default async function ContentPage({ params }: { params: Promise<{ websit
     buildFillQueue(site),
     buildClusterFillQueue(site),
     getSpendUsdForVertical(site.vertical),
-    checkNicheReadiness(site.vertical),
+    checkReadiness(site.vertical),
   ]);
   const notReady = readiness.checks.filter((c) => !c.ok);
 
