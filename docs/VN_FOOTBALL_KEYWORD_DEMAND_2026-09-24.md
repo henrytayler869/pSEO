@@ -36,14 +36,42 @@ Lần đo đầu tôi chỉ chạy mồi `"đối đầu mu vs liverpool"`, đư
 luận "trục này không có cầu". Mồi thứ hai bác bỏ điều đó. **Một mồi trả về 0
 là dữ liệu về MỒI, không phải về chủ đề.**
 
-### 2. Thứ tự tên đội đổi lưu lượng gấp 31 lần
+### 2. ~~Thứ tự tên đội đổi lưu lượng gấp 31 lần~~ — RÚT LẠI 25/9/2026
 
-    liverpool vs mu   40.500
-    mu vs liverpool    1.300
+**Kết luận này SAI. Đừng đổi thứ tự khoá cặp.**
 
-Cùng hai đội. Trang cặp phải chọn thứ tự theo cầu, không theo bảng chữ cái
-hay theo chủ/khách. Hiện `entities.json` khoá cặp theo thứ tự nào thì cần
-kiểm lại.
+Bản đầu viết:
+
+>     liverpool vs mu   40.500
+>     mu vs liverpool    1.300
+>
+> Cùng hai đội. Trang cặp phải chọn thứ tự theo cầu…
+
+Hai con số đó đến từ `related_keywords`, và đó là **dùng sai công cụ**.
+Endpoint ấy trả về *lân cận ngữ nghĩa của một mồi* — nên 40.500 và 1.300 là
+cực đại của HAI vùng lân cận KHÁC NHAU, sinh từ hai mồi khác nhau. Đặt chúng
+cạnh nhau như hai giá trị của cùng một đại lượng là một phép so không hợp lệ,
+độc lập với việc con số bằng bao nhiêu.
+
+Đo TRỰC TIẾP bằng `search_volume` (phiên SEO bóng đá, 25/9/2026):
+
+    mu vs liverpool      9.900   KD 0
+    liverpool vs mu      9.900   KD 0
+    arsenal vs chelsea   8.100   KD 0
+    chelsea vs arsenal   8.100   KD 0
+
+**Bằng nhau từng cặp, ở hai cặp độc lập.** Google Ads gộp cả hai thứ tự vào
+cùng một nhóm — đúng hiện tượng "gộp biến thể" đã ghi ở §8, chỉ là lần này
+nó gộp THỨ TỰ thay vì gộp cách viết.
+
+Hệ quả: đổi `fixtureKey` là đổi **876 URL để đổi lấy không gì cả**. Và tài
+liệu này suýt đẩy việc đó đi — chính tôi đã viết rằng đây là "cửa sổ duy nhất
+đổi khoá mà không phải định vị lại".
+
+**Vì sao nó lọt:** phép đo đầu tiên cho ra một chênh lệch lớn, và một chênh
+lệch lớn tự nó trông như phát hiện. Không ai hỏi hai con số có cùng đơn vị
+không. Phần "1. đối đầu vs vs" ở trên thì vẫn đúng — nó so *có kết quả* với
+*không có kết quả*, không so hai độ lớn.
 
 ### 3. Ba nhánh có cầu LỚN, và site đang phục vụ đúng một
 
