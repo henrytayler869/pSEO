@@ -36,6 +36,7 @@
  * `lib/football/`, xem AGENTS.md.
  */
 import type { FootballMatch } from "./openfootball";
+import { teamDisplayName } from "./team-display-names";
 
 /** Múi giờ IANA của từng giải. Dùng IANA chứ không dùng độ lệch cố định:
  *  độ lệch đổi hai lần mỗi năm và đổi vào ngày khác nhau giữa Anh và lục địa. */
@@ -130,8 +131,20 @@ function toUpcoming(match: FootballMatch, leagueCode: string): UpcomingMatch {
     sourceDate: match.date,
     sourceTime: match.time ?? null,
     round: match.round,
-    home: match.home,
-    away: match.away,
+    /**
+     * Tên HIỂN THỊ, không phải tên nguồn.
+     *
+     * Đo 25/9/2026 khi đọc HTML thật lần đầu: trang đội có H1 "MU" và title
+     * "Lịch thi đấu MU", nhưng danh sách lịch ngay dưới in "Manchester United
+     * FC vs Tottenham Hotspur FC". Cùng một đội, hai cái tên, cách nhau ba
+     * dòng.
+     *
+     * Không cổng nào bắt: mọi con số đúng, mọi chuỗi hợp lệ, build xanh,
+     * verify:rendered xanh. Chỉ mở trang ra đọc mới thấy — cùng họ với sự cố
+     * bảng C1 ở bàn giao §6.
+     */
+    home: teamDisplayName(match.home),
+    away: teamDisplayName(match.away),
     kickoff,
     kickoffVn: kickoff ? formatVn(kickoff, { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }) : null,
     dateVn: kickoff ? formatVn(kickoff, { day: "2-digit", month: "2-digit", year: "numeric" }) : null,
