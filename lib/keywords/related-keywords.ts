@@ -1,10 +1,9 @@
 import { prisma } from "@/lib/db/prisma";
 import { getCredential } from "@/lib/settings/credentials";
 import { latestPerKeyword } from "./latest";
+import { marketFor } from "./markets";
 
 const DATAFORSEO_BASE_URL = "https://api.dataforseo.com/v3";
-const US_LOCATION_CODE = 2840;
-const LANGUAGE_CODE = "en";
 const RELATED_KEYWORDS_LIMIT = 20;
 
 export interface RelatedKeywordResult {
@@ -36,14 +35,25 @@ export async function fetchRelatedKeywordsForVertical(vertical: string): Promise
     throw new Error("Chưa cấu hình DATAFORSEO_LOGIN/DATAFORSEO_PASSWORD (ở trang Cài đặt hoặc biến môi trường) — không thể lấy từ khóa liên quan.");
   }
   const auth = "Basic " + Buffer.from(`${login}:${password}`).toString("base64");
-  const seedKeyword = vertical.replace(/-/g, " ");
+  // Vùng, ngôn ngữ và mồi lấy từ registry thị trường — KHÔNG suy từ slug.
+  // `bong-da-nam` suy ra "bong da nam", không dấu, không ai gõ, và DataForSEO
+  // vẫn trả dữ liệu trông hợp lệ cho truy vấn không tồn tại đó. Xem markets.ts.
+  const market = marketFor(vertical);
 
   const response = await fetch(`${DATAFORSEO_BASE_URL}/dataforseo_labs/google/related_keywords/live`, {
     method: "POST",
     headers: { Authorization: auth, "Content-Type": "application/json" },
-    body: JSON.stringify([
-      { keyword: seedKeyword, location_code: US_LOCATION_CODE, language_code: LANGUAGE_CODE, limit: RELATED_KEYWORDS_LIMIT },
-    ]),
+    // MỘT TASK MỖI MỒI. DataForSEO tính tiền theo task, và ba mồi ở ba nhánh
+    // khác nhau là cách duy nhất phân biệt "nhánh này không có cầu" với "mình
+    // hỏi sai chỗ" — xem markets.ts.
+    body: JSON.stringify(
+      market.seeds.map((keyword) => ({
+        keyword,
+        location_code: market.locationCode,
+        language_code: market.languageCode,
+        limit: RELATED_KEYWORDS_LIMIT,
+      }))
+    ),
   });
   if (!response.ok) {
     throw new Error(`Yêu cầu DataForSEO (related_keywords) thất bại: ${response.status} ${response.statusText}.`);
@@ -100,11 +110,34 @@ interface RelatedKeywordItem {
   foreignIntent: string[];
 }
 
-function extractRelatedKeywordItems(body: unknown): RelatedKeywordItem[] | null {
-  const result = firstTaskResult(body);
-  if (!Array.isArray(result) || result.length === 0) return null;
-  const items = (result[0] as Record<string, unknown> | null)?.items;
-  if (!Array.isArray(items)) return null;
+/**
+ * Gom items của MỌI task, không phải task đầu.
+ *
+ * Bản trước gọi `firstTaskResult` — đúng khi mỗi lần gọi chỉ gửi MỘT mồi.
+ * Từ khi gửi nhiều mồi, nó trở thành lỗi TRẢ TIỀN MÀ VỨT: DataForSEO tính
+ * tiền theo task, nên ba mồi là ba lần trả, và hàm này dùng đúng một.
+ *
+ * Không có gì đỏ lên — kết quả của mồi thứ nhất là một danh sách hợp lệ.
+ * Chỉ khi đối chiếu số task gửi đi với số task đọc về mới thấy.
+ */
+export function extractRelatedKeywordItems(body: unknown): RelatedKeywordItem[] | null {
+  if (typeof body !== "object" || body === null) return null;
+  const tasks = (body as Record<string, unknown>).tasks;
+  if (!Array.isArray(tasks) || tasks.length === 0) return null;
+
+  const items: unknown[] = [];
+  let okTasks = 0;
+  for (const t of tasks) {
+    const task = t as Record<string, unknown> | null;
+    if (!task || (task.status_code !== undefined && task.status_code !== 20000)) continue;
+    okTasks++;
+    const result = task.result;
+    if (!Array.isArray(result) || result.length === 0) continue;
+    const got = (result[0] as Record<string, unknown> | null)?.items;
+    if (Array.isArray(got)) items.push(...got);
+  }
+  // Mọi task hỏng thì đây là lỗi thật, không phải "nghề này không có từ khoá".
+  if (okTasks === 0) return null;
 
   const rows: RelatedKeywordItem[] = [];
   for (const item of items) {
@@ -160,14 +193,6 @@ function isNumberOrNull(v: unknown): v is number | null {
   return v === null || v === undefined || typeof v === "number";
 }
 
-function firstTaskResult(body: unknown): unknown {
-  if (typeof body !== "object" || body === null) return null;
-  const tasks = (body as Record<string, unknown>).tasks;
-  if (!Array.isArray(tasks) || tasks.length === 0) return null;
-  const task = tasks[0] as Record<string, unknown> | null;
-  if (!task || (task.status_code !== undefined && task.status_code !== 20000)) return null;
-  return task?.result ?? null;
-}
 
 export async function getLatestSemanticKeywords(vertical: string): Promise<RelatedKeywordResult[]> {
   const rows = await prisma.semanticKeyword.findMany({ where: { vertical } });
