@@ -73,21 +73,47 @@ lệch lớn tự nó trông như phát hiện. Không ai hỏi hai con số có
 không. Phần "1. đối đầu vs vs" ở trên thì vẫn đúng — nó so *có kết quả* với
 *không có kết quả*, không so hai độ lớn.
 
-### 3. Ba nhánh có cầu LỚN, và site đang phục vụ đúng một
+### 3. ~~Ba nhánh có cầu LỚN~~ — ĐO LẠI 25/9/2026, một nửa bảng KHÔNG SỐNG
 
-    nhận định bóng đá              673.000   ← soi kèo/dự đoán TRƯỚC trận
-    lịch thi đấu ngoại hạng anh    550.000   ← lịch, đã HOÃN tích hợp
-    lịch thi đấu bóng đá việt nam  165.000   ← lịch, và là V.League: KHÔNG có nguồn
-    bảng xếp hạng la liga          135.000   ← site CÓ (trang giải)
-    bảng xếp hạng serie a / ý       49.500
-    kết quả bóng đá hôm nay        49.500   ← site CÓ, trễ 2 ngày
+Bảng cũ ở mục này lấy số từ `related_keywords`, **cùng cái sai đã rút lại ở
+§2**. Đo lại trực tiếp bằng `search_volume` ($0,025, 12 chuỗi):
 
-`nhận định` là nhánh lớn nhất và nó là **dự đoán TRƯỚC trận**. Chủ dự án đã
-chốt làm **bài SAU trận**. Hai thứ khác nhau, và cầu nằm ở phía kia.
+| chuỗi | số CŨ (related_keywords) | ĐO TRỰC TIẾP | KD |
+| --- | --- | --- | --- |
+| `kết quả bóng đá hôm nay` | 49.500 | **1.220.000** | 59 |
+| `nhận định bóng đá` | 673.000 | 673.000 | 70 |
+| `lịch thi đấu ngoại hạng anh` | 550.000 | 550.000 | 22 |
+| `lịch thi đấu bóng đá việt nam` | 165.000 | 165.000 | 14 |
+| `lịch thi đấu mu` | 135.000 | 135.000 | 0 |
+| `bảng xếp hạng la liga` | 135.000 | **không có dữ liệu** | |
+| `bảng xếp hạng serie a` | 49.500 | **không có dữ liệu** | |
+| `bảng xếp hạng bundesliga` | 49.500 | **không có dữ liệu** | |
+| `bảng xếp hạng bóng đá ý` | 49.500 | **không có dữ liệu** | |
+| `kết quả bóng đá việt nam` | 40.500 | **không có dữ liệu** | |
+| `chuyển nhượng mu` | 22.200 | **không có dữ liệu** | |
 
-`lịch thi đấu` là nhánh lớn thứ hai và đã bị hoãn tích hợp — trong khi dữ
-liệu lịch thì **đã có sẵn** trong file mùa giải (trận chưa đá có
-`fullTime: null`).
+**6/12 chuỗi không sống.** Và `related_keywords` sai theo CẢ HAI hướng: nó
+thổi phồng bốn dòng `bảng xếp hạng` thành con số không có thật, đồng thời
+báo `kết quả bóng đá hôm nay` thấp hơn thực tế **25 lần**.
+
+### Hệ quả: câu "site CÓ nhánh bảng xếp hạng" là sai
+
+Bảng cũ dùng bốn dòng `bảng xếp hạng <giải>` để nói site đang phục vụ một
+nhánh có cầu. Bốn dòng đó không đo được. Phiên SEO bóng đá đo độc lập 151
+mẫu và ra cùng kết luận: **chỉ Ngoại hạng Anh có cầu ở loại trang này**
+(`bxh ngoại hạng anh` 246.000, KD 21); La Liga, Serie A, Bundesliga, Ligue 1
+đều không có dòng nào.
+
+Tức trong 5 trang giải của site, **một** trang có cầu đo được.
+
+### Ba nhánh THẬT SỰ có cầu, sau khi đo lại
+
+    kết quả bóng đá hôm nay       1.220.000  KD 59   site CÓ, trễ 2 ngày
+    nhận định bóng đá               673.000  KD 70   soi kèo — xem §7
+    lịch thi đấu ngoại hạng anh     550.000  KD 22   site KHÔNG phục vụ
+    lịch thi đấu bóng đá việt nam   165.000  KD 14   V.League, KHÔNG có nguồn
+    lịch thi đấu mu                 135.000  KD  0   site KHÔNG phục vụ
+    bxh ngoại hạng anh              246.000  KD 21   site CÓ (1/5 giải)
 
 ### 4. Trục cặp là cái đuôi dài, không phải thân
 
