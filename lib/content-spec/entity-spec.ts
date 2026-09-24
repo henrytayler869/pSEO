@@ -36,11 +36,47 @@
  */
 export type EntityScope = "TEAM" | "LEAGUE" | "FIXTURE";
 
+/**
+ * Mục này đọc hình dạng dữ liệu nào.
+ *
+ * `metrics` là mặc định và là thứ duy nhất tồn tại trước 24/9/2026: một tập
+ * `FootballFact`, tức con số kèm nhãn.
+ *
+ * `fixtures` đọc một DANH SÁCH trận chưa đá. Nó phải là loại riêng chứ không
+ * gò vào fact, vì một lịch thi đấu không phải con số — gò nó vào sẽ phải bịa
+ * những khoá kiểu `next_match_1_home`, và `requires` mất khả năng nói mục này
+ * cần gì.
+ *
+ * ═══ VÌ SAO LOẠI MỤC NÀY ĐƯỢC THÊM ═══
+ *
+ * Đo cầu tìm kiếm 24/9/2026 (DataForSEO, 2704/vi), so hai nhánh trên CÙNG bộ
+ * trang đội:
+ *
+ *     trang đội là trang SỐ LIỆU   ->   0/78 mẫu có cầu
+ *     trang đội là trang LỊCH      ->   lịch thi đấu mu   135.000  KD 0
+ *                                       lịch mu            60.500  KD 0
+ *                                       lịch thi đấu arsenal 33.100 KD 0
+ *
+ * Cùng 96 trang, cùng dữ liệu đã có (trận chưa đá nằm sẵn trong file mùa với
+ * `fullTime: null`). Khác nhau ở thứ trang trả lời.
+ */
+export type EntitySectionKind = "metrics" | "fixtures";
+
 export interface EntitySection {
   key: string;
   /** Tiêu đề mục trên trang. Người đọc thấy chuỗi này. */
   heading: string;
   scope: EntityScope;
+  /** Thiếu thì coi là `metrics` — mọi mục viết trước 24/9/2026 đều là loại đó. */
+  kind?: EntitySectionKind;
+  /**
+   * Số trận tối đa của mục `fixtures`. Bỏ qua với mục `metrics`.
+   *
+   * Có giới hạn chứ không in cả mùa: đo 24/9/2026, Ngoại hạng Anh còn **330**
+   * trận chưa đá. Một danh sách 330 dòng không trả lời câu "đội này đá trận
+   * tới khi nào" — nó chôn câu trả lời xuống dưới màn hình thứ mười.
+   */
+  fixtureLimit?: number;
   /** Thiếu bất kỳ chỉ số nào ở đây thì KHÔNG render mục. */
   requires: readonly string[];
   /** Nhắc thêm nếu có; thiếu thì mục vẫn render. */
@@ -102,12 +138,49 @@ const FOOTBALL: EntityContentSpec = {
   pages: [
     {
       axis: "team",
-      title: "{team} — {league} {season}",
+      /**
+       * Title dẫn bằng "Lịch thi đấu", không dẫn bằng "Số liệu".
+       *
+       * Đo 24/9/2026: `lịch thi đấu mu` 135.000 lượt ở KD 0, trong khi MỌI
+       * mẫu truy vấn cấp đội về số liệu — `phong độ gần đây của mu`,
+       * `thống kê mu mùa này`, `mu thắng mấy trận` — đều không có dữ liệu.
+       * Trang vẫn chứa cả hai; title nói thứ người ta đi tìm.
+       */
+      title: "Lịch thi đấu {team} — {league} {season}",
       description:
-        "Số liệu {team} ở {league} mùa {season}: thứ hạng, phong độ, tách sân nhà và sân khách, " +
-        "bàn thắng theo hiệp — kèm ngày của trận gần nhất đã tính vào.",
+        "Lịch thi đấu sắp tới của {team} ở {league} theo giờ Việt Nam, kèm số liệu mùa {season}: " +
+        "thứ hạng, phong độ, tách sân nhà và sân khách — và ngày của trận gần nhất đã tính vào.",
       interpretationHeading: "Những con số này cho thấy gì về {team}",
       sections: [
+        /**
+         * Mục LỊCH đứng ĐẦU, trước mọi mục số liệu.
+         *
+         * Thứ tự mục là thứ tự đọc, và cầu đo được nằm ở lịch chứ không ở số
+         * liệu (xem `EntitySectionKind`). Đặt lịch xuống dưới năm mục số liệu
+         * là chôn câu trả lời dưới phần không ai hỏi.
+         */
+        {
+          key: "lich-thi-dau",
+          heading: "{team} đá trận tới khi nào",
+          scope: "TEAM",
+          kind: "fixtures",
+          fixtureLimit: 5,
+          /**
+           * KHÔNG đòi chỉ số nào: mục này đọc danh sách trận, không đọc fact.
+           *
+           * Nhưng `requires: []` nghĩa là `sectionRenderable()` luôn trả true,
+           * nên phía publisher PHẢI tự kiểm danh sách rỗng cho mục
+           * `kind: "fixtures"` — mùa đã đá hết thì không còn trận nào, và một
+           * tiêu đề "đá trận tới khi nào" trên một danh sách rỗng là tệ hơn
+           * không có mục.
+           */
+          requires: [],
+          says:
+            "Các trận CHƯA đá của đội này, sớm nhất trước, giờ đã quy về múi giờ Việt Nam. " +
+            "Trận nào nguồn không ghi giờ thì nói rõ là chưa có giờ — KHÔNG điền 00:00, cùng " +
+            "luật với halfTime null nghĩa là 'không biết'. Đo 24/9/2026: Ngoại hạng Anh đủ giờ " +
+            "cho cả 330 trận chưa đá, còn Bundesliga thiếu giờ ở 198/270 trận.",
+        },
         {
           key: "standing",
           heading: "{team} đang đứng ở đâu",
@@ -261,12 +334,43 @@ const FOOTBALL: EntityContentSpec = {
     },
     {
       axis: "league",
-      title: "{league} {season} — bảng xếp hạng và số liệu",
+      /**
+       * Title giữ "bảng xếp hạng" ĐỨNG TRƯỚC, và thêm "lịch thi đấu" sau.
+       *
+       * Khác trang đội có chủ ý. Ở cấp GIẢI cả hai nhánh đều có cầu đo được
+       * 24/9/2026, và bảng xếp hạng lớn hơn:
+       *
+       *     bxh ngoại hạng anh            246.000  KD 21
+       *     lịch thi đấu ngoại hạng anh   550.000  KD 22
+       *     lịch ngoại hạng anh           368.000  KD 13
+       *
+       * Lịch thật ra lớn hơn — nhưng trang này ĐÃ phục vụ bảng xếp hạng và
+       * đang là thứ duy nhất trong 977 trang có cầu ánh xạ vững, nên đảo thứ
+       * tự title là đổi thứ đang đứng để lấy thứ chưa dựng. Thêm vào, không
+       * thay thế.
+       */
+      title: "{league} {season} — bảng xếp hạng và lịch thi đấu",
       description:
-        "Bảng xếp hạng {league} mùa {season} tính từ các trận đã đá, kèm tỷ lệ trận trên 2,5 bàn và " +
-        "tỷ lệ chủ nhà thắng, và ngày của trận gần nhất đã tính vào.",
+        "Bảng xếp hạng {league} mùa {season} tính từ các trận đã đá, lịch thi đấu sắp tới theo giờ " +
+        "Việt Nam, kèm tỷ lệ trận trên 2,5 bàn và tỷ lệ chủ nhà thắng, và ngày của trận gần nhất đã tính vào.",
       interpretationHeading: "Mùa {season} của {league} đang diễn ra thế nào",
       sections: [
+        {
+          key: "lich-thi-dau",
+          heading: "Lịch thi đấu {league} sắp tới",
+          scope: "LEAGUE",
+          kind: "fixtures",
+          /**
+           * 10 trận, không phải 5 như trang đội: một vòng đấu có 9–10 trận,
+           * nên 5 sẽ cắt ngang vòng và người đọc thấy nửa vòng mà không biết
+           * mình đang thấy nửa.
+           */
+          fixtureLimit: 10,
+          requires: [],
+          says:
+            "Các trận CHƯA đá của giải, sớm nhất trước, giờ đã quy về múi giờ Việt Nam. Cấp GIẢI — " +
+            "đây là lịch của toàn giải, không phải của một đội; trang đội có mục riêng.",
+        },
         {
           key: "league-shape",
           heading: "Mặt bằng của giải",

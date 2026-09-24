@@ -95,6 +95,38 @@ function checkStrings(spec: EntityContentSpec): void {
 
     // Một trang không mục nào là một trang trống được coi là hợp lệ.
     if (page.sections.length === 0) fail(`trang "${page.axis}" không có mục nào`);
+
+    /**
+     * Hai loại mục đọc HAI hình dạng dữ liệu, nên phải khai đúng bộ trường.
+     *
+     * Không có phép kiểm này thì hai chỗ hỏng đi qua im lặng:
+     *
+     *   - mục `fixtures` khai `requires` chỉ số: phần `requires` sẽ được
+     *     `sectionRenderable()` kiểm, tức mục lịch bị tắt vì thiếu một con số
+     *     mà nó không hề dùng;
+     *   - mục `metrics` khai `requires: []`: `sectionRenderable()` trả true
+     *     vô điều kiện, nên mục render ra một khối rỗng trên MỌI trang.
+     *
+     * Cái thứ hai là cách một mục chết đi mà vẫn chiếm chỗ.
+     */
+    for (const s of page.sections) {
+      const kind = s.kind ?? "metrics";
+      if (kind === "fixtures") {
+        if (s.requires.length > 0) {
+          fail(`mục "${page.axis}.${s.key}" là fixtures nhưng khai ${s.requires.length} chỉ số — nó đọc danh sách trận, không đọc fact`);
+        }
+        if (!s.fixtureLimit || s.fixtureLimit < 1) {
+          fail(`mục "${page.axis}.${s.key}" là fixtures nhưng thiếu fixtureLimit — không giới hạn thì Ngoại hạng Anh in 330 dòng`);
+        }
+      } else {
+        if (s.requires.length === 0) {
+          fail(`mục "${page.axis}.${s.key}" là metrics nhưng không đòi chỉ số nào — nó sẽ render một khối rỗng trên mọi trang`);
+        }
+        if (s.fixtureLimit !== undefined) {
+          fail(`mục "${page.axis}.${s.key}" là metrics nhưng khai fixtureLimit — trường đó chỉ có nghĩa với fixtures`);
+        }
+      }
+    }
   }
   if (used.size === 0) fail("không chuỗi nào dùng chỗ thay — mọi trang sẽ mang tiêu đề giống hệt nhau");
 }
