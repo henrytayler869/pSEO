@@ -42,6 +42,7 @@
     "test:outcome-parity": "tsx scripts/test-outcome-claims-parity.ts",
     "verify:openfootball": "tsx scripts/verify-openfootball.ts",
     "verify:ucl-archive": "tsx scripts/verify-ucl-archive.ts",
+    "verify:keyword-markets": "tsx scripts/verify-keyword-markets.ts",
     "verify:page-axis": "tsx scripts/verify-page-axis.ts",
     "verify:football-facts": "tsx scripts/verify-football-facts.ts",
     "football:sync": "tsx scripts/sync-football-entities.ts",
