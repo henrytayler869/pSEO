@@ -53,7 +53,8 @@
     "entity:generate": "tsx scripts/generate-entity-text.ts",
     "entity:distinctness": "tsx scripts/measure-entity-distinctness.ts",
     "entity:export": "tsx scripts/export-entity-site.ts",
-    "entity:batch": "tsx scripts/generate-entity-batch.ts"
+    "entity:batch": "tsx scripts/generate-entity-batch.ts",
+    "verify:team-display-names": "tsx scripts/verify-team-display-names.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
