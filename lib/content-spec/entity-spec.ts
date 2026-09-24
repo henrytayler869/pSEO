@@ -200,7 +200,26 @@ const FOOTBALL: EntityContentSpec = {
     },
     {
       axis: "fixture",
-      title: "{team} gặp {opponent} — đối đầu ở {league}",
+      /**
+       * `vs`, KHÔNG phải `gặp` — và đây là chữ đo được, không phải chữ chọn
+       * cho thuận tai.
+       *
+       * Đo 24/9/2026 (DataForSEO, location 2704, language vi):
+       *
+       *     "đối đầu mu vs liverpool"  ->  0 từ khoá có volume
+       *     "mu vs liverpool"          ->  8 từ khoá, cao nhất 1.300
+       *     "liverpool vs mu"          ->  40.500
+       *
+       * Người Việt gõ `vs`. `gặp` và `đối đầu` là tiếng Việt đúng và đọc tự
+       * nhiên hơn — nhưng title là chỗ khớp TRUY VẤN, không phải chỗ viết
+       * văn. `đối đầu` ở lại trong mô tả và tiêu đề mục, nơi nó mô tả nội
+       * dung cho người đọc chứ không gánh việc khớp truy vấn.
+       *
+       * Thứ tự hai đội cũng đổi lưu lượng — 40.500 so với 1.300 cho CÙNG
+       * một cặp — nhưng đó là việc của `fixtureKey()`, không phải của
+       * title: title chỉ in ra thứ tự mà khoá đã chọn.
+       */
+      title: "{team} vs {opponent} — đối đầu ở {league}",
       description:
         "Lịch sử đối đầu giữa {team} và {opponent} ở {league} mùa {season}: số trận, kết quả và bàn " +
         "thắng của mỗi bên, kèm ngày của trận gần nhất đã tính vào.",
