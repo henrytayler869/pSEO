@@ -49,6 +49,21 @@ export const LEAGUE_TIMEZONE: Record<string, string> = {
 
 export const VN_TIMEZONE = "Asia/Ho_Chi_Minh";
 
+/**
+ * Số trận chưa đá tối đa mà DATASET mang theo.
+ *
+ * Trần của TẦNG VẬN CHUYỂN, không phải của trang: `fixtureLimit` trong
+ * entity-spec quyết định trang in bao nhiêu (5 cho đội, 10 cho giải). Trần
+ * này chỉ chặn việc nhét cả 330 trận còn lại của Ngoại hạng Anh vào mỗi
+ * phản hồi API.
+ *
+ * Hai con số ở hai nơi là một chỗ trôi lệch: đặt `fixtureLimit` lớn hơn trần
+ * này thì trang xin 30 và nhận 20, KHÔNG có gì đỏ lên, và trang trông như
+ * giải chỉ còn 20 trận. `verify-entity-spec.ts` đỏ khi hai số lệch nhau.
+ */
+export const UPCOMING_CAP = 20;
+
+
 export interface UpcomingMatch {
   /** Ngày thi đấu theo giờ GIẢI, ISO "2026-10-10". Giữ lại để đối chiếu nguồn. */
   sourceDate: string;

@@ -27,6 +27,7 @@ import { currentEuropeanSeason } from "@/lib/football/season";
 import { fixtureFacts, fixtureStats, leagueFacts, leagueStats, teamFacts, teamStats } from "@/lib/football/facts";
 import { allEntitySpecs, metricsNamedByEntity, type EntityContentSpec } from "@/lib/content-spec/entity-spec";
 import { isKnownAxis } from "@/lib/page-axis/axes";
+import { UPCOMING_CAP } from "@/lib/football/fixtures";
 
 let failures = 0;
 const fail = (msg: string) => {
@@ -117,6 +118,10 @@ function checkStrings(spec: EntityContentSpec): void {
         }
         if (!s.fixtureLimit || s.fixtureLimit < 1) {
           fail(`mục "${page.axis}.${s.key}" là fixtures nhưng thiếu fixtureLimit — không giới hạn thì Ngoại hạng Anh in 330 dòng`);
+        } else if (s.fixtureLimit > UPCOMING_CAP) {
+          // Xin nhiều hơn thứ dataset mang theo thì trang nhận thiếu và KHÔNG
+          // có gì đỏ lên — nó chỉ trông như giải sắp hết trận.
+          fail(`mục "${page.axis}.${s.key}" xin ${s.fixtureLimit} trận nhưng dataset chỉ mang ${UPCOMING_CAP} (UPCOMING_CAP)`);
         }
       } else {
         if (s.requires.length === 0) {

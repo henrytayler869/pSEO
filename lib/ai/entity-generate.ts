@@ -8,6 +8,7 @@ import {
 } from "@/lib/football/facts";
 import { LEAGUES, fetchLeagueSeasonMerged, type LeagueCode } from "@/lib/football/openfootball";
 import { currentEuropeanSeason } from "@/lib/football/season";
+import { upcomingMatches, UPCOMING_CAP, type UpcomingMatch } from "@/lib/football/fixtures";
 import { FOOTBALL_VERTICAL, parseKey, teamSlug } from "@/lib/page-axis/axes";
 
 /**
@@ -114,6 +115,23 @@ export interface EntityFactSet {
   stalenessDays: number | null;
   /** TOÀN BỘ chỉ số, kể cả cấp GIẢI. Đây là thứ TRANG render. */
   facts: FootballFact[];
+  /**
+   * Trận CHƯA đá, sớm nhất trước, giờ đã quy về Việt Nam.
+   *
+   * Hình dạng dữ liệu THỨ HAI bên cạnh `facts`, và cố ý không gộp: lịch là
+   * một danh sách, fact là một con số. Mục `kind: "fixtures"` trong
+   * `entity-spec` đọc trường này; mục `metrics` không bao giờ chạm tới.
+   *
+   * KHÔNG đi vào `modelFacts`, nên KHÔNG vào prompt và KHÔNG vào fingerprint.
+   * Ba lý do, lý do cuối là lý do thật:
+   *   - nó không phải chỉ số đo được, và validator sẽ từ chối mọi con số model
+   *     trích từ đây — đúng cái bẫy `stalenessDays` đã mắc ngày 22/9;
+   *   - văn diễn giải nói về số liệu ĐÃ đá, không dự đoán trận chưa đá, và
+   *     chủ dự án đã chốt site không dự đoán;
+   *   - fingerprint đổi mỗi khi lịch tiến, tức MỖI VÒNG ĐẤU sinh lại 351
+   *     trang văn — $5,89 mỗi lần, cho một đoạn văn không nhắc tới lịch.
+   */
+  upcoming: UpcomingMatch[];
   /**
    * Tập đưa cho MODEL, đã bỏ chỉ số cấp giải.
    *
@@ -232,7 +250,8 @@ export async function buildEntityFactSet(
   if (axis === "league") {
     // Trang GIẢI: chỉ số cấp giải CHÍNH LÀ nội dung của nó, nên không lọc.
     const facts = leagueFacts(lg);
-    return { ...base, displayName: LEAGUES[code], facts, modelFacts: facts, fingerprint: fingerprintOf(facts, season, LEAGUES[code]) };
+    const upcoming = upcomingMatches(s.matches, code, { limit: UPCOMING_CAP });
+    return { ...base, displayName: LEAGUES[code], facts, upcoming, modelFacts: facts, fingerprint: fingerprintOf(facts, season, LEAGUES[code]) };
   }
 
   if (axis === "team") {
@@ -240,7 +259,8 @@ export async function buildEntityFactSet(
     if (!team) return null;
     const facts = teamFacts(teamStats(s, team), lg);
     const modelFacts = forModel(facts);
-    return { ...base, displayName: team, facts, modelFacts, fingerprint: fingerprintOf(modelFacts, season, team) };
+    const upcoming = upcomingMatches(s.matches, code, { team, limit: UPCOMING_CAP });
+    return { ...base, displayName: team, facts, upcoming, modelFacts, fingerprint: fingerprintOf(modelFacts, season, team) };
   }
 
   if (axis === "fixture") {
@@ -251,7 +271,12 @@ export async function buildEntityFactSet(
     const name = `${a} gặp ${b}`;
     const facts = fixtureFacts(fixtureStats(s, a, b), lg);
     const modelFacts = forModel(facts);
-    return { ...base, displayName: name, facts, modelFacts, fingerprint: fingerprintOf(modelFacts, season, name) };
+    // Cặp: chỉ những lần HAI đội này gặp nhau mà chưa đá — không phải lịch
+    // của từng đội. `upcomingMatches` lọc theo MỘT đội, nên lọc thêm đội kia.
+    const upcoming = upcomingMatches(s.matches, code, { team: a })
+      .filter((m) => m.home === b || m.away === b)
+      .slice(0, UPCOMING_CAP);
+    return { ...base, displayName: name, facts, upcoming, modelFacts, fingerprint: fingerprintOf(modelFacts, season, name) };
   }
 
   return null;
