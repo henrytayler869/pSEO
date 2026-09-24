@@ -49,7 +49,33 @@ function firstTaskResult(body: unknown): unknown {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+  let args = process.argv.slice(2);
+
+  /**
+   * Vùng và ngôn ngữ KHAI ĐƯỢC, mặc định giữ nguyên Hoa Kỳ/tiếng Anh.
+   *
+   * Thêm vì site bóng đá Việt Nam: hỏi cùng một chuỗi ở hai thị trường ra
+   * hai câu trả lời khác hẳn, và mặc định Mỹ sẽ trả lời cho một thị trường
+   * không ai hỏi — im lặng, có số, trông hợp lệ. Cùng cái bẫy mà
+   * `lib/keywords/markets.ts` đã ghi lại cho mồi suy từ slug.
+   *
+   * Mặc định KHÔNG đổi: 13 nghề Mỹ gọi script này không truyền cờ, và phải
+   * nhận đúng thứ chúng vẫn nhận.
+   */
+  let locationCode = US_LOCATION_CODE;
+  let languageCode = LANGUAGE_CODE;
+  for (;;) {
+    if (args[0] === "--location") {
+      locationCode = Number(args[1]);
+      if (!Number.isInteger(locationCode)) throw new Error(`--location phải là số: "${args[1]}"`);
+      args = args.slice(2);
+    } else if (args[0] === "--language") {
+      languageCode = String(args[1] ?? "").trim();
+      if (!languageCode) throw new Error("--language cần một mã, ví dụ vi");
+      args = args.slice(2);
+    } else break;
+  }
+
   let keywords: string[];
   if (args[0] === "--file") {
     keywords = fs.readFileSync(args[1], "utf-8").split("\n").map((l) => l.trim()).filter(Boolean);
@@ -57,13 +83,17 @@ async function main() {
     keywords = args.map((a) => a.trim()).filter(Boolean);
   }
   if (keywords.length === 0) {
-    console.error('Cách dùng: tsx scripts/probe-keywords.ts "từ khoá 1" "từ khoá 2" ...');
+    console.error(
+      'Cách dùng: tsx scripts/probe-keywords.ts [--location 2704] [--language vi] "từ khoá 1" "từ khoá 2" ...\n' +
+        "           tsx scripts/probe-keywords.ts [--location ...] [--language ...] --file đường/dẫn.txt"
+    );
     process.exitCode = 1;
     return;
   }
 
   const auth = await authHeader();
-  const payload = [{ keywords, location_code: US_LOCATION_CODE, language_code: LANGUAGE_CODE }];
+  const payload = [{ keywords, location_code: locationCode, language_code: languageCode }];
+  console.error(`# location_code=${locationCode} language_code=${languageCode} — ${keywords.length} từ khoá`);
 
   const [volBody, kdBody] = await Promise.all([
     post("/keywords_data/google_ads/search_volume/live", auth, payload),

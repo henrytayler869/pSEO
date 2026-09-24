@@ -15,7 +15,7 @@
  * 3. NGHỀ MỸ BỊ ĐỔI HÀNH VI. 13 nghề đang chạy phải giữ nguyên vùng 2840,
  *    ngôn ngữ "en", và mồi suy từ slug.
  */
-import { marketFor, hasExplicitMarket } from "../lib/keywords/markets";
+import { marketFor, hasExplicitMarket, verticalsWithExplicitMarket } from "../lib/keywords/markets";
 import { extractRelatedKeywordItems } from "../lib/keywords/related-keywords";
 
 let failed = 0;
@@ -47,9 +47,39 @@ console.log("\n  thị trường Việt Nam");
 const vn = marketFor("bong-da-nam");
 check(vn.locationCode === 2704 && vn.languageCode === "vi", `vùng 2704, ngôn ngữ vi`);
 check(vn.seeds.length >= 3, `${vn.seeds.length} mồi, ở nhiều nhánh khác nhau`);
-check(vn.seeds.every((s) => /[àáâãèéêìíòóôõùúýăđĩũơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i.test(s)),
-  "mọi mồi CÓ DẤU — mồi không dấu là truy vấn không ai gõ");
-check(!vn.seeds.some((s) => s === "bong da nam"), "không mồi nào là slug suy ra");
+/**
+ * ÍT NHẤT MỘT mồi có dấu — trước đây đòi MỌI mồi, và điều đó đã sai.
+ *
+ * Luật cũ đúng khi mọi mồi là cụm tiếng Việt. Nhưng đo 24/9/2026 cho thấy
+ * hai loại mồi hợp lệ KHÔNG có dấu, và cả hai đều là chữ người Việt thật sự
+ * gõ:
+ *
+ *     "mu vs liverpool"    <- chính mồi đã chứng minh người Việt gõ `vs`
+ *     "manchester united"  <- tên CLB, vốn là chữ Latin
+ *
+ * Bắt mọi mồi phải có dấu sẽ loại đúng cái mồi đắt giá nhất trong đợt đo.
+ *
+ * Thứ luật này sinh ra để chặn là mồi suy từ slug (`bong da nam`) — một cụm
+ * tiếng Việt bị bỏ dấu. Phép kiểm ngay dưới đã bắt CHÍNH nó, chính xác và
+ * không cần suy đoán. Nên ở đây chỉ giữ lại phần proxy còn có ích: danh sách
+ * phải chứa tiếng Việt thật, chứ không phải toàn chuỗi không dấu.
+ */
+check(vn.seeds.some((s) => /[àáâãèéêìíòóôõùúýăđĩũơưạảấầẩẫậắằẳẵặẹẻẽếềểễệỉịọỏốồổỗộớờởỡợụủứừửữựỳỵỷỹ]/i.test(s)),
+  "có mồi mang dấu — danh sách không phải toàn chuỗi bỏ dấu");
+/**
+ * Mồi suy từ slug — kiểm cho MỌI nghề, không chỉ cho `bong-da-nam`.
+ *
+ * Bản trước viết cứng đúng một chuỗi. Nó đủ khi luật "mọi mồi có dấu" còn
+ * đứng, vì luật ấy phủ rộng. Nhưng luật đó vừa được nới (xem ngay trên), nên
+ * phép kiểm này trở thành phòng tuyến DUY NHẤT còn lại — và một phòng tuyến
+ * duy nhất mà chỉ canh một nghề thì nghề Việt thứ hai đi qua sạch sẽ.
+ *
+ * Nới một luật thì phải siết luật mà nó vừa để lộ ra. Đây là chỗ đó.
+ */
+for (const v of verticalsWithExplicitMarket()) {
+  const slugSeed = v.replace(/-/g, " ");
+  check(!marketFor(v).seeds.includes(slugSeed), `${v}: không mồi nào trùng chuỗi suy từ slug ("${slugSeed}")`);
+}
 
 console.log("\n  nghề Mỹ giữ nguyên hành vi");
 for (const v of ["moving-services", "auto-accident-attorney"]) {

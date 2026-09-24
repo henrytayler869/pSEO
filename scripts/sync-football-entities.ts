@@ -21,6 +21,7 @@
 import { LEAGUES, fetchLeagueSeasonMerged, type LeagueCode } from "@/lib/football/openfootball";
 import { currentEuropeanSeason } from "@/lib/football/season";
 import { FOOTBALL_VERTICAL, fixtureKey, leagueKey, teamKey, teamSlug } from "@/lib/page-axis/axes";
+import { teamDisplayName } from "@/lib/football/team-display-names";
 import { prisma } from "@/lib/db/prisma";
 
 interface Row {
@@ -54,7 +55,10 @@ async function main(): Promise<void> {
         axis: "team",
         key: teamKey(code, t),
         parentKey: lKey,
-        displayName: t,
+        // KHOÁ vẫn dựng từ tên nguồn `t`, chữ hiển thị thì không — xem
+        // `lib/football/team-display-names.ts`. Hai vai tách nhau ở đây:
+        // đổi chữ mà không đổi URL.
+        displayName: teamDisplayName(t),
       });
     }
 
@@ -71,7 +75,11 @@ async function main(): Promise<void> {
           axis: "fixture",
           key: fixtureKey(code, a, b),
           parentKey: lKey,
-          displayName: `${first} gặp ${second}`,
+          // `vs`, không phải `gặp` — đo 24/9/2026: mồi "đối đầu mu vs
+          // liverpool" trả 0 từ khoá, còn "mu vs liverpool" trả 8. Chuỗi này
+          // là H1 của trang, nên nó phải mang chữ người ta gõ; `entity-spec`
+          // đã đổi title cùng lý do.
+          displayName: `${teamDisplayName(first)} vs ${teamDisplayName(second)}`,
         });
       }
     }

@@ -79,6 +79,10 @@ export async function GET(
      *  hiển thị, đừng viết "cập nhật hôm nay" theo thời điểm dựng trang. */
     stalenessDays: factSet.stalenessDays,
     facts: factSet.facts,
+    /** Lịch thi đấu sắp tới, giờ đã quy về Việt Nam. Hình dạng dữ liệu thứ
+     *  hai bên cạnh `facts`; mục `kind: "fixtures"` của đặc tả đọc trường
+     *  này. Mảng rỗng là câu trả lời hợp lệ — mùa đã đá hết. */
+    upcoming: factSet.upcoming,
     /** null = chưa sinh. Bình thường, không phải lỗi. */
     interpretation: cached ? { text: cached.text, factsFingerprint: cached.factsFingerprint } : null,
     /** Đặc tả của LOẠI trang này, để publisher biết mục nào cần chỉ số nào mà
