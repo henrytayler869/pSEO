@@ -1,5 +1,7 @@
 import type { KeywordMetricsAdapter, MarketRef, KeywordMetricResult } from "./types";
 import { getKeywordTemplates, renderTemplate, pickBestCandidate, getPlacesNeedingStateSuffix, applyStateSuffix } from "./patterns";
+import { marketFor, type KeywordMarket } from "./markets";
+import { getCredential } from "@/lib/settings/credentials";
 
 const DATAFORSEO_BASE_URL = "https://api.dataforseo.com/v3";
 
@@ -9,6 +11,8 @@ const DATAFORSEO_BASE_URL = "https://api.dataforseo.com/v3";
 // "country=us" assumption the rest of Module 1 already makes.
 const US_LOCATION_CODE = 2840;
 const LANGUAGE_CODE = "en";
+/** Thị trường mặc định — GIỮ NGUYÊN hành vi cho 13 nghề Mỹ đang chạy. */
+const US_MARKET: KeywordMarket = { locationCode: US_LOCATION_CODE, languageCode: LANGUAGE_CODE, seeds: [] };
 const CHUNK_SIZE = 1000; // DataForSEO's documented max keywords per request
 
 /**
@@ -73,7 +77,7 @@ export class DataForSeoKeywordAdapter implements KeywordMetricsAdapter {
 
     for (let i = 0; i < distinct.length; i += CHUNK_SIZE) {
       const chunk = distinct.slice(i, i + CHUNK_SIZE);
-      const [vol, kd] = await Promise.all([this.fetchSearchVolume(chunk), this.fetchKeywordDifficulty(chunk)]);
+      const [vol, kd] = await Promise.all([this.measureVolume(chunk), this.measureDifficulty(chunk)]);
       for (const [k, v] of vol) volumeByKeyword.set(k, v);
       for (const [k, v] of kd) difficultyByKeyword.set(k, v);
     }
@@ -113,12 +117,13 @@ export class DataForSeoKeywordAdapter implements KeywordMetricsAdapter {
     return results;
   }
 
-  private async fetchSearchVolume(keywords: string[]): Promise<Map<string, { searchVolume: number; cpc: number }>> {
+  /** @internal — dùng bởi measureKeywordsForVertical */
+  async measureVolume(keywords: string[], market: KeywordMarket = US_MARKET): Promise<Map<string, { searchVolume: number; cpc: number }>> {
     const response = await fetch(`${DATAFORSEO_BASE_URL}/keywords_data/google_ads/search_volume/live`, {
       method: "POST",
       headers: { Authorization: this.authHeader, "Content-Type": "application/json" },
       body: JSON.stringify([
-        { keywords, location_code: US_LOCATION_CODE, language_code: LANGUAGE_CODE },
+        { keywords, location_code: market.locationCode, language_code: market.languageCode },
       ]),
     });
     if (!response.ok) {
@@ -150,12 +155,13 @@ export class DataForSeoKeywordAdapter implements KeywordMetricsAdapter {
     return map;
   }
 
-  private async fetchKeywordDifficulty(keywords: string[]): Promise<Map<string, number>> {
+  /** @internal */
+  async measureDifficulty(keywords: string[], market: KeywordMarket = US_MARKET): Promise<Map<string, number>> {
     const response = await fetch(`${DATAFORSEO_BASE_URL}/dataforseo_labs/google/bulk_keyword_difficulty/live`, {
       method: "POST",
       headers: { Authorization: this.authHeader, "Content-Type": "application/json" },
       body: JSON.stringify([
-        { keywords, location_code: US_LOCATION_CODE, language_code: LANGUAGE_CODE },
+        { keywords, location_code: market.locationCode, language_code: market.languageCode },
       ]),
     });
     if (!response.ok) {
@@ -301,4 +307,62 @@ function taskErrorMessage(body: unknown): string | null {
   const task = tasks[0] as Record<string, unknown> | null;
   if (!task || task.status_code === undefined || task.status_code === 20000) return null;
   return `DataForSEO task lỗi (status_code ${task.status_code}): ${task.status_message ?? "không rõ"}`;
+}
+
+/**
+ * Đo volume + độ khó cho MỘT DANH SÁCH TỪ KHOÁ TỰ DỰNG, ở thị trường của
+ * nghề đó.
+ *
+ * Khác `fetchForMarkets`: hàm kia sinh ứng viên từ template theo mã ZIP và
+ * chỉ có nghĩa cho trục địa lý. Site không có địa lý — như site bóng đá —
+ * cần hỏi thẳng "mấy chuỗi này có ai tìm không", ví dụ để chọn giữa
+ * "Manchester United FC", "Manchester United", "MU" và "Man Utd" cho 96
+ * trang đội.
+ *
+ * VÌ SAO KHÔNG DÙNG `related_keywords` CHO VIỆC NÀY: endpoint kia cần một
+ * MỒI và trả về lân cận ngữ nghĩa của mồi. Đo 24/9/2026, mồi
+ * `"tottenham hotspur"` trả về **0** từ khoá — hỏi bằng cái tên không ai gõ
+ * thì câu trả lời rỗng, và rỗng ở đó đọc nhầm thành "đội này không ai tìm".
+ * Muốn so các biến thể tên thì phải hỏi TỪNG biến thể, và đó là endpoint
+ * search_volume.
+ *
+ * Gửi tối đa 1.000 chuỗi mỗi task (giới hạn DataForSEO), hai endpoint song
+ * song mỗi lô — cùng khuôn `fetchForMarkets` đã dùng.
+ */
+export interface MeasuredKeyword {
+  keyword: string;
+  searchVolume: number;
+  cpc: number;
+  keywordDifficulty: number | null;
+}
+
+export async function measureKeywordsForVertical(
+  keywords: string[],
+  vertical: string
+): Promise<MeasuredKeyword[]> {
+  const login = await getCredential("DATAFORSEO_LOGIN");
+  const password = await getCredential("DATAFORSEO_PASSWORD");
+  if (!login || !password) {
+    throw new Error("Chưa cấu hình DATAFORSEO_LOGIN/DATAFORSEO_PASSWORD (trang Cài đặt).");
+  }
+  const adapter = new DataForSeoKeywordAdapter(login, password);
+  const market = marketFor(vertical);
+  const distinct = [...new Set(keywords.map((k) => k.trim()).filter(Boolean))];
+
+  const out: MeasuredKeyword[] = [];
+  for (let i = 0; i < distinct.length; i += CHUNK_SIZE) {
+    const chunk = distinct.slice(i, i + CHUNK_SIZE);
+    const [vol, kd] = await Promise.all([
+      adapter.measureVolume(chunk, market),
+      adapter.measureDifficulty(chunk, market),
+    ]);
+    for (const k of chunk) {
+      const v = vol.get(normalizeKeyword(k));
+      // Chuỗi KHÔNG có dữ liệu thì bỏ, không điền 0: "không ai tìm" và
+      // "DataForSEO không trả về" là hai chuyện, và 0 đọc như chuyện thứ nhất.
+      if (!v) continue;
+      out.push({ keyword: k, searchVolume: v.searchVolume, cpc: v.cpc, keywordDifficulty: kd.get(normalizeKeyword(k)) ?? null });
+    }
+  }
+  return out.sort((a, b) => b.searchVolume - a.searchVolume);
 }
