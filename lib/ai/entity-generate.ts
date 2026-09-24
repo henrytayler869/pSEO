@@ -182,11 +182,36 @@ const leagueCodeOf = (slug: string): LeagueCode | null => {
  * null chứ không ném, vì người gọi có thể là một route và một khoá do người lạ
  * gõ phải ra 404 chứ không ra 500.
  */
+/**
+ * Mùa giải đã nạp sẵn, để dựng fact cho HÀNG NGHÌN khoá mà không gọi mạng
+ * hàng nghìn lần.
+ *
+ * `buildEntityFactSet` gọi `fetchLeagueSeasonMerged` một lần mỗi khoá. Với
+ * một khoá thì đúng; với 977 khoá của site bóng đá thì đó là ~1.500 request
+ * tới GitHub (mỗi giải một JSON và một .txt) để lấy đúng NĂM kết quả khác
+ * nhau.
+ *
+ * Nên chỗ gọi theo lô nạp trước bằng `loadSeasons()` rồi truyền map xuống.
+ * KHÔNG đặt cache ở module scope: hàm này còn phục vụ đường sinh văn chạy
+ * trong server dài hạn, và một cache ẩn ở đó sẽ phục vụ số của mùa trước mà
+ * không ai thấy. Tham số tường minh thì chỗ gọi tự quyết vòng đời.
+ */
+export type SeasonCache = Map<string, Awaited<ReturnType<typeof fetchLeagueSeasonMerged>>>;
+
+/** Nạp cả năm giải đúng một lần. Khoá map là mã giải. */
+export async function loadSeasons(now: Date = new Date()): Promise<SeasonCache> {
+  const season = currentEuropeanSeason(now);
+  const codes = Object.keys(LEAGUES) as LeagueCode[];
+  const loaded = await Promise.all(codes.map((c) => fetchLeagueSeasonMerged(c, season, now)));
+  return new Map(codes.map((c, i) => [c, loaded[i]]));
+}
+
 export async function buildEntityFactSet(
   vertical: string,
   axis: string,
   key: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  seasons?: SeasonCache
 ): Promise<EntityFactSet | null> {
   if (vertical !== FOOTBALL_VERTICAL) return null;
   const parsed = parseKey(key);
@@ -198,7 +223,7 @@ export async function buildEntityFactSet(
   const season = currentEuropeanSeason(now);
   // fetchLeagueSeasonMerged, KHÔNG fetchLeagueSeason — xem AGENTS.md. Nền JSON
   // trễ hơn lớp phủ .txt tới sáu ngày, và không có gì đỏ lên khi gọi nhầm.
-  const s = await fetchLeagueSeasonMerged(code, season, now);
+  const s = seasons?.get(code) ?? (await fetchLeagueSeasonMerged(code, season, now));
   const lg = leagueStats(s);
   // Tên giải tiếng Việt, không phải chuỗi của file nguồn: nó đi thẳng vào
   // prompt, và luật 2 buộc model nêu tên giải mỗi lần dùng số cấp giải.

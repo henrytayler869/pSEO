@@ -2,6 +2,7 @@ import { requireApiKey } from "@/lib/api/auth";
 import { apiJson } from "@/lib/api/cache-policy";
 import { prisma } from "@/lib/db/prisma";
 import { axesFor } from "@/lib/page-axis/axes";
+import { buildEntityFactSet, loadSeasons } from "@/lib/ai/entity-generate";
 
 /**
  * GET /api/v1/niches/{vertical}/entities
@@ -70,6 +71,45 @@ export async function GET(request: Request, ctx: { params: Promise<{ vertical: s
     );
   }
 
+  /**
+
+   * `hasContent` — trang này có SỐ để nói hay không, tính cùng một cách với
+
+   * `scripts/export-entity-site.ts`.
+
+   *
+
+   * HAI ĐƯỜNG RA CÙNG MỘT DỮ LIỆU: route này là đường chính thức, script kia
+
+   * là đường tạm khi publisher chưa gọi API. Nếu chỉ một bên phát cờ thì
+
+   * ngày ai đó đổi sang `npm run hq:entities` là ngày cờ biến mất, và
+
+   * sitemap lặng lẽ nhận lại 626 URL 404. Nên cả hai cùng phát, cùng công
+
+   * thức.
+
+   *
+
+   * Nạp mùa giải MỘT LẦN: 977 khoá mà mỗi khoá tự gọi mạng là ~1.500
+
+   * request tới GitHub cho đúng năm kết quả.
+
+   */
+
+  const seasons = await loadSeasons();
+
+  const entities = [];
+
+  for (const r of rows) {
+
+    const fs = await buildEntityFactSet(decoded, r.axis, r.key, new Date(), seasons);
+
+    entities.push({ ...r, hasContent: (fs?.facts.length ?? 0) > 0 });
+
+  }
+
+
   return apiJson({
     vertical: decoded,
     generatedAt: new Date().toISOString(),
@@ -77,6 +117,6 @@ export async function GET(request: Request, ctx: { params: Promise<{ vertical: s
     // hình dạng khoá.
     axes: axes.map((a) => ({ axis: a.axis, label: a.label, parentAxis: a.parentAxis })),
     counts: Object.fromEntries(axes.map((a) => [a.axis, rows.filter((r) => r.axis === a.axis).length])),
-    entities: rows,
+    entities,
   });
 }
