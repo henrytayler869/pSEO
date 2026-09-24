@@ -84,3 +84,52 @@ lưu lượng.
     # mồi khai ở lib/keywords/markets.ts
 
 Mỗi task DataForSEO khoảng **$0,013**. Sáu mồi là $0,077.
+
+## Đợt đo thứ hai: TÊN ĐỘI (thêm $0,050 — tổng $0,127)
+
+`displayName` hiện là tên openfootball — "Manchester United FC",
+"FC Bayern München", "1. FC Köln". Người Việt gõ gì?
+
+| mồi | số từ khoá | cao nhất |
+| --- | --- | --- |
+| `manchester united` | 8 | **135.000** `lịch thi đấu mu` |
+| `bayern munich` | 8 | 12.100 `bayern munich vs real` |
+| `1. fc köln` | **0** | — |
+| `tottenham hotspur` | **0** | — |
+
+### 5. Tên chính thức KHÔNG phải tên người Việt gõ
+
+    lịch thi đấu mu      135.000
+    chuyển nhượng mu      22.200
+
+Họ gõ **"mu"**. Trang đội đang mang tiêu đề "Manchester United FC".
+
+Hai mồi trả **0**: `1. FC Köln` và `Tottenham Hotspur`. Köln là CLB nhỏ ở thị
+trường này nên 0 còn hiểu được; **Tottenham thì không** — đó là CLB lớn, và 0
+ở đây nghĩa là *cái tên đầy đủ* không có cầu, không phải *đội* không có cầu.
+96 trang đội đang đặt tên theo cách không ai tìm.
+
+### 6. Mọi nhánh đều dẫn về LỊCH THI ĐẤU
+
+Sáu mồi, ba đợt, nhánh lớn nhất luôn là lịch:
+
+    lịch thi đấu ngoại hạng anh    550.000
+    lịch thi đấu bóng đá việt nam  165.000
+    lịch thi đấu mu                135.000
+    lịch thi đấu bóng đá wc 2026   135.000
+
+Đây là thứ đã bị **hoãn tích hợp**, trong khi dữ liệu lịch **đã có sẵn** —
+trận chưa đá nằm ngay trong file mùa giải với `fullTime: null`.
+
+## Tổng kết cho người quyết
+
+Bốn quyết định lớn của site, đặt cạnh số đo:
+
+| quyết định | cầu đo được |
+| --- | --- |
+| bài SAU trận, không dự đoán trước | `nhận định bóng đá` **673.000** ở phía trước trận |
+| hoãn lịch thi đấu | nhánh lớn nhất ở MỌI đợt đo |
+| 876/977 trang là cặp đối đầu | cặp lớn nhất 1.300–40.500, phần lớn thấp hơn |
+| tên đội theo openfootball | `mu` 135.000; `Tottenham Hotspur` **0** |
+
+Đây là SỐ, không phải khuyến nghị. Quyết định thuộc về chủ dự án.
