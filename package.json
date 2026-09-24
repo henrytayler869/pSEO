@@ -44,6 +44,7 @@
     "verify:ucl-archive": "tsx scripts/verify-ucl-archive.ts",
     "verify:keyword-markets": "tsx scripts/verify-keyword-markets.ts",
     "keywords:measure": "tsx scripts/measure-keywords.ts",
+    "serp:baseline": "tsx scripts/serp-baseline.ts",
     "verify:page-axis": "tsx scripts/verify-page-axis.ts",
     "verify:football-facts": "tsx scripts/verify-football-facts.ts",
     "football:sync": "tsx scripts/sync-football-entities.ts",
