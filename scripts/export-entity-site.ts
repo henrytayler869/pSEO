@@ -26,6 +26,7 @@ import path from "node:path";
 import { prisma } from "@/lib/db/prisma";
 import { entitySpecFor } from "@/lib/content-spec/entity-spec";
 import { FOOTBALL_VERTICAL, axesFor } from "@/lib/page-axis/axes";
+import { buildEntityFactSet, loadSeasons } from "@/lib/ai/entity-generate";
 
 async function main(): Promise<void> {
   const [host, publisherRoot] = process.argv.slice(2);
@@ -52,6 +53,31 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  /**
+   * `hasContent` — trang này có SỐ để nói hay không.
+   *
+   * Danh tính có từ đầu mùa cho MỌI cặp đối đầu, nhưng 626/876 cặp chưa gặp
+   * nhau, và trang của chúng gọi `notFound()` đúng theo thiết kế. Đổ thẳng
+   * `entities.json` vào sitemap là nộp 626 URL trả 404 — Search Console đọc
+   * đó là site tự khai những trang không tồn tại.
+   *
+   * Cờ phải tính Ở ĐÂY chứ không bên publisher: chỉ HQ có tập chỉ số. Và nó
+   * là `facts.length > 0`, không phải một luật riêng — `fixtureFacts` đã trả
+   * `[]` khi hai đội chưa gặp nhau, nên hỏi "có fact không" là hỏi đúng câu
+   * mà trang sẽ tự hỏi lúc render.
+   *
+   * NẠP MÙA GIẢI MỘT LẦN cho cả lô: `buildEntityFactSet` gọi mạng một lần
+   * mỗi khoá, nên 977 khoá là ~1.500 request tới GitHub cho đúng năm kết
+   * quả. `loadSeasons()` nạp năm giải rồi truyền xuống.
+   */
+  const seasons = await loadSeasons();
+  const withContent = [];
+  for (const r of rows) {
+    const fs = await buildEntityFactSet(vertical, r.axis, r.key, new Date(), seasons);
+    withContent.push({ ...r, hasContent: (fs?.facts.length ?? 0) > 0 });
+  }
+  const contentCount = withContent.filter((r) => r.hasContent).length;
+
   const dir = path.resolve(publisherRoot, "data", "sites", host);
   await mkdir(dir, { recursive: true });
 
@@ -63,7 +89,7 @@ async function main(): Promise<void> {
     generatedAt: new Date().toISOString(),
     axes: axes.map((a) => ({ axis: a.axis, label: a.label, parentAxis: a.parentAxis })),
     counts: Object.fromEntries(axes.map((a) => [a.axis, rows.filter((r) => r.axis === a.axis).length])),
-    entities: rows,
+    entities: withContent,
   };
 
   await writeFile(path.join(dir, "entities.json"), JSON.stringify(entities, null, 2) + "\n", "utf-8");
@@ -75,6 +101,7 @@ async function main(): Promise<void> {
 
   console.log(`✓ ${dir}`);
   console.log(`  entities.json     ${rows.length} trang — ${JSON.stringify(entities.counts)}`);
+  console.log(`  hasContent        ${contentCount}/${rows.length} có số để nói; ${rows.length - contentCount} trang sẽ 404 và KHÔNG vào sitemap`);
   console.log(`  entity-spec.json  ${spec.pages.length} loại trang`);
 }
 
