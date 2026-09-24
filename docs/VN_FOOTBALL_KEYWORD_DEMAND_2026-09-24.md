@@ -224,3 +224,48 @@ Kết quả sai ấy hoá ra hữu ích:
 Cùng một chuỗi, hai thị trường, hai câu trả lời không liên quan gì nhau. Đo
 nhầm thị trường không cho ra lỗi — nó cho ra một bảng số trông hoàn toàn hợp
 lý.
+
+## 9. SERP THẬT — và KD thấp KHÔNG có nghĩa là cửa mở
+
+Đo 25/9/2026, `serp/google/organic/live/advanced`, 2704/vi, 5 truy vấn nền
+tảng, $0,0175.
+
+Câu hỏi: vì sao KD chỉ 14–26 cho volume sáu chữ số? Ba khả năng dẫn tới ba
+quyết định khác nhau — top toàn báo lớn (không chen được), top toàn trang dữ
+liệu chuyên (chen được), hay top toàn trang mỏng (cơ hội lớn). KD không phân
+biệt được. SERP thì có.
+
+**Domain xuất hiện trong top 10, trên 5 truy vấn:**
+
+    10/5   24h.com.vn          ← HAI vị trí mỗi truy vấn
+     5/5   bongda24h.vn
+     5/5   vnexpress.net
+     5/5   baomoi.com
+     5/5   thethao247.vn
+     3/5   bongdaplus.vn
+     3/5   flashscore.vn
+     2/5   vietnamnet.vn · wikipedia · goal.com · facebook
+
+**Câu trả lời là khả năng thứ nhất.** Mọi truy vấn nền tảng đều do báo điện
+tử và cổng thể thao lớn nhất Việt Nam chiếm — `vnexpress.net`, `24h.com.vn`,
+`baomoi.com` nằm trong nhóm site lớn nhất nước. Năm domain có mặt ở **5/5**
+truy vấn. Không có một khe trang-dữ-liệu-chuyên nào trong top 10.
+
+### Hệ quả: đảo ngược §3
+
+§3 viết *"bảng xếp hạng là nhánh site ĐÃ phục vụ"* và ngụ ý đó là điểm mạnh.
+Với KD 26 thì nghe như cơ hội. Với SERP thật thì đó là nhánh **cạnh tranh
+trực diện với báo quốc gia** bằng một domain DR 0, 0 backlink.
+
+KD thấp ở đây nhiều khả năng phản ánh việc các truy vấn này không có ai chạy
+backlink vào — chứ không phản ánh việc top dễ chen. Một head term mà năm tờ
+báo lớn đều có trang riêng là một head term đã có chủ.
+
+### Việc phép đo này KHÔNG nói
+
+Nó đo **5 truy vấn head**. Đuôi dài — `lịch thi đấu mu vòng 7`, `bxh la liga
+sau vòng 5` — chưa đo, và đó mới là chỗ một site nhỏ thường sống được. Muốn
+biết thì đo tiếp, $0,002 mỗi truy vấn.
+
+Nó cũng không đo **tuổi domain hay backlink** của các trang đang đứng top —
+chỉ đếm domain nào xuất hiện.
