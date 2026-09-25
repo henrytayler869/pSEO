@@ -271,6 +271,34 @@ Kho khoá trên VPS là file `.hq-key` cạnh `.env.production`, và nó **sốn
 deploy** vì `deploy.sh` dùng `git reset --hard` chứ không `git clean` — nên khoá
 đã đẩy hôm nay không cần đẩy lại.
 
+#### Bật cam xong thì kiểm `cf-cache-status`, và đọc đúng ba giá trị
+
+Đo 25/9 ngay sau khi bật cam: `solieubongda.com` trả **`DYNAMIC`** trong khi hai
+site cũ trả `HIT`. Nguyên nhân: Cloudflare **không cache HTML mặc định**, kể cả
+khi origin gửi `s-maxage=86400`; hai zone cũ có quy tắc `Cache HTML` ở phase
+`http_request_cache_settings`, zone mới không.
+
+Không có gì hỏng — trang vẫn 200, nội dung vẫn đúng. Chỉ là mọi request HTML
+chạm thẳng VPS, và `/api/revalidate` purge một lớp biên rỗng.
+
+    DYNAMIC   KHÔNG đủ điều kiện cache          ← đây là thứ phải biến mất
+    MISS      đủ điều kiện, node biên này chưa lưu
+    HIT       đã lưu ở node này
+
+**MISS/HIT đổi qua lại giữa các request là bình thường**, mỗi node biên tự lưu
+lần đầu của nó — tôi đọc ba lần MISS liên tiếp và kết luận sai là "không cache
+được", trước khi thấy đúng URL đó trả `HIT` với `age=52`. Phép phân biệt thật là
+**DYNAMIC vs MISS**, không phải MISS vs HIT.
+
+`provisionSite` nay tự chép quy tắc (bước "Quy tắc cache HTML", sau bước proxy),
+nên site thứ tư không gặp lại. Chép tay khi cần chỉ rõ zone nguồn:
+
+```bash
+node_modules/.bin/tsx scripts/ensure-cache-rule.ts --name <domain-mới> --like <domain-nguồn>
+```
+
+Nó KHÔNG ghi đè zone đã có quy tắc, và kiểm zone đích TRƯỚC zone nguồn.
+
 ### Bước 6 — đọc HTML thật · *phiên SEO bóng đá*
 
 Không phải bước hình thức. Hôm nay, ngay khi build chạy được lần đầu, việc

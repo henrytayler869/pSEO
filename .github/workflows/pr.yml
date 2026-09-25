@@ -172,6 +172,15 @@ jobs:
       - name: Đẩy khoá — 200 không xác nhận là thất bại, và host đích không được lẫn với host trung chuyển
         run: npx tsx scripts/test-push-key.ts
 
+      # Không mạng, không DB: hàm thuần, quy tắc nạp từ hình dạng THẬT đọc về từ
+      # Cloudflare 25/9/2026. Hai ca im lặng nó canh:
+      #   - vế loại trừ `/api/` phải sống sót phép thay host. Mất nó thì
+      #     Cloudflare cache cả /api/revalidate, tức nút purge tự purge chính nó.
+      #   - biểu thức còn sót host NGUỒN phải NÉM. Quy tắc mang host site khác
+      #     không bao giờ khớp, nên nó ghi được và trông như đã cấu hình xong.
+      - name: Chép quy tắc cache — vế /api/ phải sống, host sót phải ném
+        run: npx tsx scripts/test-cache-rule-rewrite.ts
+
       # Ca "cờ đứng trước số" là lỗi thật đã đo: Number(argv[2]) gặp --site
       # cho NaN, slice(0, NaN) cho mảng rỗng, script in "31 cụm" và sinh 0
       # đoạn — không lỗi nào. Im lặng nên chỉ test bắt được.
