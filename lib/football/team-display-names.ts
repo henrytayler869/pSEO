@@ -73,6 +73,20 @@ export const TEAM_DISPLAY_NAMES: Readonly<Record<string, string>> = {
   "Paris Saint-Germain FC": "PSG",
 };
 
+/**
+ * Chuỗi ghép tên hai đội của một cặp đối đầu.
+ *
+ * MỘT literal cho cả kho này. Trước 25/9/2026 có HAI: `sync-football-entities`
+ * ghép bằng " vs " còn `fixtureFacts` ghép bằng " gặp ", nên `displayName` của
+ * trang và `scopeName` của chỉ số gọi cùng một cặp bằng hai cái tên. Không
+ * cổng nào đối chiếu hai chuỗi đó với nhau.
+ *
+ * Kho publisher có bản của riêng nó (`FIXTURE_SEPARATOR` trong lib/hq/entity.ts)
+ * vì nó TÁCH chuỗi này ra. Hai kho vẫn là hai literal — ràng buộc đó do
+ * `verify:rendered` canh, không do kiểu dữ liệu.
+ */
+export const FIXTURE_SEPARATOR = " vs ";
+
 /** Chữ hiển thị của một đội. Không có trong bảng thì giữ nguyên tên nguồn. */
 export function teamDisplayName(sourceName: string): string {
   return TEAM_DISPLAY_NAMES[sourceName] ?? sourceName;

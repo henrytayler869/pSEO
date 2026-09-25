@@ -27,9 +27,9 @@ const fail = (msg: string) => {
 };
 
 const FACTS: FootballFact[] = [
-  { key: "team_points", label: "điểm của Arsenal FC", value: 12, display: "12", unit: "điểm", scope: "TEAM", scopeName: "Arsenal FC" },
-  { key: "team_played", label: "số trận Arsenal FC đã đá", value: 4, display: "4", unit: "trận", scope: "TEAM", scopeName: "Arsenal FC" },
-  { key: "team_goals_for", label: "số bàn Arsenal FC ghi", value: 9, display: "9", unit: "bàn", scope: "TEAM", scopeName: "Arsenal FC" },
+  { key: "team_points", label: "điểm của Arsenal", value: 12, display: "12", unit: "điểm", scope: "TEAM", scopeName: "Arsenal" },
+  { key: "team_played", label: "số trận Arsenal đã đá", value: 4, display: "4", unit: "trận", scope: "TEAM", scopeName: "Arsenal" },
+  { key: "team_goals_for", label: "số bàn Arsenal ghi", value: 9, display: "9", unit: "bàn", scope: "TEAM", scopeName: "Arsenal" },
   { key: "league_over25_pct", label: "tỷ lệ trận trên 2,5 bàn ở Ngoại hạng Anh", value: 52, display: "52,0%", unit: "%", scope: "LEAGUE", scopeName: "Ngoại hạng Anh" },
   { key: "league_played", label: "số trận đã đá ở Ngoại hạng Anh", value: 50, display: "50", unit: "trận", scope: "LEAGUE", scopeName: "Ngoại hạng Anh" },
 ];
@@ -69,7 +69,7 @@ expectNumbers("mùa 2026-27 có 50 trận", [2026, 50]);
 console.log("── Luật ──────────────────────────────────────────────────────");
 expectVerdict(
   "văn đúng, nêu tên giải khi dùng số cấp giải",
-  "Arsenal FC có 12 điểm sau 4 trận và đã ghi 9 bàn. Ở Ngoại hạng Anh, 52,0% số trận có trên 2,5 bàn.",
+  "Arsenal có 12 điểm sau 4 trận và đã ghi 9 bàn. Ở Ngoại hạng Anh, 52,0% số trận có trên 2,5 bàn.",
   true
 );
 expectVerdict(
@@ -79,42 +79,61 @@ expectVerdict(
 );
 expectVerdict(
   "mùa giải là năm dương lịch, không phải phép đo",
-  "Arsenal FC có 12 điểm sau 4 trận trong mùa 2026-27.",
+  "Arsenal có 12 điểm sau 4 trận trong mùa 2026-27.",
   true
 );
 expectVerdict(
   "ngưỡng dùng lại ở câu KHÔNG có chữ nào của nhãn",
-  "Arsenal FC có 12 điểm sau 4 trận. Chỉ số 2,5 xuất hiện ở đây.",
+  "Arsenal có 12 điểm sau 4 trận. Chỉ số 2,5 xuất hiện ở đây.",
   false,
   "unsupported_number"
 );
 expectVerdict(
   "số không có trong fact",
-  "Arsenal FC có 12 điểm sau 4 trận và đã ghi 77 bàn.",
+  "Arsenal có 12 điểm sau 4 trận và đã ghi 77 bàn.",
   false,
   "unsupported_number"
 );
 expectVerdict(
   "số cấp giải không nêu tên giải",
-  "Arsenal FC có 12 điểm sau 4 trận. Có 52,0% số trận có trên 2,5 bàn.",
+  "Arsenal có 12 điểm sau 4 trận. Có 52,0% số trận có trên 2,5 bàn.",
   false,
   "scope_overclaim"
 );
 expectVerdict(
   "nói về thứ không nguồn nào đo",
-  "Arsenal FC có 12 điểm sau 4 trận, với 9 bàn đến từ các pha kiến tạo.",
+  "Arsenal có 12 điểm sau 4 trận, với 9 bàn đến từ các pha kiến tạo.",
   false,
   "unsupported_claim"
 );
 expectVerdict(
+  "tên NGUỒN của đội đã có tên hiển thị",
+  "Arsenal FC có 12 điểm sau 4 trận.",
+  false,
+  "source_team_name"
+);
+expectVerdict(
+  "tên HIỂN THỊ thì cho qua",
+  "Arsenal có 12 điểm sau 4 trận.",
+  true
+);
+// Đội KHÔNG có trong bảng giữ nguyên tên nguồn, và đó là văn ĐÚNG — 84 đội
+// cố ý không được đặt tên ngắn vì không có bằng chứng. Luật chặn "đã có tên
+// tốt hơn mà không dùng", không chặn "tên dài".
+expectVerdict(
+  "tên nguồn của đội KHÔNG có trong bảng vẫn hợp lệ",
+  "Fulham FC có 12 điểm sau 4 trận.",
+  true
+);
+expectVerdict(
   "giọng cá cược",
-  "Arsenal FC có 12 điểm sau 4 trận, cửa trên rất rõ ràng.",
+  "Arsenal có 12 điểm sau 4 trận, cửa trên rất rõ ràng.",
   false,
   "betting_or_prediction"
 );
 expectVerdict(
   "tỷ lệ viết bằng chữ",
-  "Arsenal FC có 12 điểm sau 4 trận, một nửa số đó đến trên sân nhà.",
+  "Arsenal có 12 điểm sau 4 trận, một nửa số đó đến trên sân nhà.",
   false,
   "worded_proportion"
 );
@@ -130,14 +149,14 @@ expectVerdict(
 );
 expectVerdict(
   "trang ĐỘI thì vẫn phải nêu",
-  "Arsenal FC có 12 điểm sau 4 trận. Có 52,0% số trận có trên 2,5 bàn.",
+  "Arsenal có 12 điểm sau 4 trận. Có 52,0% số trận có trên 2,5 bàn.",
   false,
   "scope_overclaim",
   "team"
 );
 expectVerdict(
   "chữ số nằm trong TÊN RIÊNG không phải phép đo",
-  "Arsenal FC có 12 điểm sau 4 trận tại Ngoại hạng Anh.",
+  "Arsenal có 12 điểm sau 4 trận tại Ngoại hạng Anh.",
   true
 );
 // "Ligue 1" có chữ số trong TÊN. Trên trang đội, fact cấp giải đã bị lọc nên

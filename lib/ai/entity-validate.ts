@@ -1,5 +1,6 @@
 import { ROUNDING_TOLERANCE } from "@/lib/ai/validate";
 import type { FootballFact } from "@/lib/football/facts";
+import { TEAM_DISPLAY_NAMES } from "@/lib/football/team-display-names";
 
 /**
  * Validator cho văn bản viết về một thực thể (đội / giải / cặp đối đầu).
@@ -49,7 +50,8 @@ export type EntityValidatorRule =
   | "scope_overclaim"
   | "worded_proportion"
   | "unsupported_claim"
-  | "betting_or_prediction";
+  | "betting_or_prediction"
+  | "source_team_name";
 
 export interface EntityValidationIssue {
   rule: EntityValidatorRule;
@@ -353,6 +355,37 @@ export function validateEntityText(
         detail:
           `Văn bản nhắc "${term}". Nội dung là nhận định SAU trận và số liệu đọc quanh năm, không phải ` +
           "dự đoán hay soi kèo — dù hai chỉ số tài xỉu và hai đội cùng ghi bàn vốn là tên hai kèo cược.",
+      });
+    }
+  }
+
+  /**
+   * ── Luật 6: không in tên NGUỒN của đội đã có tên hiển thị ───────────────
+   *
+   * Đo 25/9/2026: 76 trong 361 đoạn văn đã đạt vẫn mở đầu bằng "Arsenal FC
+   * đang đứng thứ 2…" trong khi tiêu đề trang đã là "Arsenal". Cùng một đội,
+   * hai cái tên, cách nhau hai dòng — đúng họ với sự cố lịch thi đấu (#184)
+   * và với bảng C1 "Chelsea vô địch … luân lưu 3-4": mọi con số đúng, chỉ
+   * chữ sai, và không luật nào trong năm luật trên soi tên riêng.
+   *
+   * CHỈ chặn tên có MẶT trong bảng. 84 đội còn lại cố ý giữ tên openfootball
+   * vì không có bằng chứng cho tên ngắn — chặn "Fulham FC" sẽ từ chối một
+   * đoạn văn hoàn toàn đúng. Luật này nói "đã có tên tốt hơn thì dùng nó",
+   * không nói "mọi tên dài đều sai".
+   *
+   * Vì sao là luật của VALIDATOR chứ không phải một phép thay chuỗi sau khi
+   * sinh: thay chuỗi sẽ sửa được câu nhưng giấu mất việc prompt đang đưa tên
+   * sai cho model. Một đoạn văn trượt ở đây là tín hiệu tập fact đầu vào còn
+   * tên nguồn, và đó mới là chỗ phải sửa.
+   */
+  for (const [source, display] of Object.entries(TEAM_DISPLAY_NAMES)) {
+    if (text.includes(source)) {
+      issues.push({
+        rule: "source_team_name",
+        detail:
+          `Văn bản in "${source}" — tên nguyên văn openfootball. Trang này gọi đội đó là ` +
+          `"${display}", và đo 24/9/2026 cho thấy tên nguồn có lượt tìm thấp hơn nhiều lần. ` +
+          "Cùng một đội mang hai tên trên một trang là lỗi người đọc thấy ngay còn cổng số liệu thì không.",
       });
     }
   }

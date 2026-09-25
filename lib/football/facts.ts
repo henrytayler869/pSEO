@@ -31,6 +31,7 @@
  */
 import type { FootballMatch, LeagueSeason, StandingRow } from "./openfootball";
 import { LEAGUES, buildStandings } from "./openfootball";
+import { FIXTURE_SEPARATOR, teamDisplayName } from "./team-display-names";
 
 /**
  * Phạm vi của một con số. Cùng vai trò với `Fact["scope"]` của trục địa lý,
@@ -346,7 +347,15 @@ function push(out: FootballFact[], f: FootballFact | null): void {
 
 export function teamFacts(stats: TeamStats, league: LeagueStats): FootballFact[] {
   const out: FootballFact[] = [];
-  const t = stats.team;
+  /**
+   * Tên HIỂN THỊ, không phải tên nguồn — nhãn chỉ số vừa in lên trang vừa đi
+   * vào prompt. Đo 25/9/2026: trang tiêu đề "Arsenal" in nhãn "điểm của
+   * Arsenal FC", và 76/361 đoạn văn AI mở đầu bằng tên nguồn vì model chỉ
+   * thấy chuỗi đó. Sửa ở đây sửa cả hai chỗ bằng một dòng.
+   *
+   * KHÔNG đổi `stats.team`: nó là khoá đối chiếu với nguồn. Chỉ chữ đổi.
+   */
+  const t = teamDisplayName(stats.team);
   const o = stats.overall;
 
   if (o.played === 0) return out;
@@ -420,16 +429,18 @@ export function leagueFacts(lg: LeagueStats): FootballFact[] {
 
 export function fixtureFacts(fx: FixtureStats, league: LeagueStats): FootballFact[] {
   const out: FootballFact[] = [];
-  const name = `${fx.teamA} gặp ${fx.teamB}`;
+  const nameA = teamDisplayName(fx.teamA);
+  const nameB = teamDisplayName(fx.teamB);
+  const name = `${nameA}${FIXTURE_SEPARATOR}${nameB}`;
   const lname = leagueLabel(league);
   if (fx.meetings.length === 0) return out;
 
   push(out, { key: "h2h_meetings", label: `số lần ${name} đã gặp nhau trong tập dữ liệu`, value: fx.meetings.length, display: showInt(fx.meetings.length), unit: "trận", scope: "FIXTURE", scopeName: name });
-  push(out, { key: "h2h_wins_a", label: `số trận ${fx.teamA} thắng trong các lần gặp ${fx.teamB}`, value: fx.winsA, display: showInt(fx.winsA), unit: "trận", scope: "FIXTURE", scopeName: name });
-  push(out, { key: "h2h_wins_b", label: `số trận ${fx.teamB} thắng trong các lần gặp ${fx.teamA}`, value: fx.winsB, display: showInt(fx.winsB), unit: "trận", scope: "FIXTURE", scopeName: name });
-  push(out, { key: "h2h_draws", label: `số trận hoà giữa ${fx.teamA} và ${fx.teamB}`, value: fx.draws, display: showInt(fx.draws), unit: "trận", scope: "FIXTURE", scopeName: name });
-  push(out, { key: "h2h_goals_a", label: `bàn ${fx.teamA} ghi trong các lần gặp ${fx.teamB}`, value: fx.goalsA, display: showInt(fx.goalsA), unit: "bàn", scope: "FIXTURE", scopeName: name });
-  push(out, { key: "h2h_goals_b", label: `bàn ${fx.teamB} ghi trong các lần gặp ${fx.teamA}`, value: fx.goalsB, display: showInt(fx.goalsB), unit: "bàn", scope: "FIXTURE", scopeName: name });
+  push(out, { key: "h2h_wins_a", label: `số trận ${nameA} thắng trong các lần gặp ${nameB}`, value: fx.winsA, display: showInt(fx.winsA), unit: "trận", scope: "FIXTURE", scopeName: name });
+  push(out, { key: "h2h_wins_b", label: `số trận ${nameB} thắng trong các lần gặp ${nameA}`, value: fx.winsB, display: showInt(fx.winsB), unit: "trận", scope: "FIXTURE", scopeName: name });
+  push(out, { key: "h2h_draws", label: `số trận hoà giữa ${nameA} và ${nameB}`, value: fx.draws, display: showInt(fx.draws), unit: "trận", scope: "FIXTURE", scopeName: name });
+  push(out, { key: "h2h_goals_a", label: `bàn ${nameA} ghi trong các lần gặp ${nameB}`, value: fx.goalsA, display: showInt(fx.goalsA), unit: "bàn", scope: "FIXTURE", scopeName: name });
+  push(out, { key: "h2h_goals_b", label: `bàn ${nameB} ghi trong các lần gặp ${nameA}`, value: fx.goalsB, display: showInt(fx.goalsB), unit: "bàn", scope: "FIXTURE", scopeName: name });
   push(out, { key: "league_played", label: `số trận đã đá ở ${lname}`, value: league.played, display: showInt(league.played), unit: "trận", scope: "LEAGUE", scopeName: lname });
   return out;
 }
