@@ -12,6 +12,7 @@
 // Dùng:
 //   tsx scripts/omega-submit.ts --dry              # xem sẽ gửi gì, không gửi
 //   tsx scripts/omega-submit.ts --limit 20 --drip 7
+//   tsx scripts/omega-submit.ts --limit 131 --no-control   # gửi hết, không giữ đối chứng
 
 import { prisma } from "../lib/db/prisma";
 import { getGoogleAccessToken } from "../lib/google/service-account";
@@ -67,6 +68,25 @@ async function fetchIndexStates(propertyUrl: string, urls: string[]): Promise<Ma
 
 async function main() {
   const dry = process.argv.includes("--dry");
+
+  // --no-control: GỬI HẾT, không giữ nhánh đối chứng.
+  //
+  // Mặc định chia đôi là đúng trong khi phép thử còn là câu hỏi mở. Nó đã
+  // đóng: đo 24/9/2026 qua 7 mốc, nhánh gửi 10/10 index và KHÔNG URL nào rơi
+  // ra, đối chứng đứng ở 1/10 từ 17/9, Fisher p = 1,19 × 10⁻⁴. Một nhánh đối
+  // chứng THỨ HAI không trả lời thêm câu nào, còn giá của nó là số trang bị
+  // cố tình bỏ ngoài index — 65 trang trong lô 131.
+  //
+  // PHÉP THỬ CŨ KHÔNG MẤT khi dùng cờ này, và đó là điều làm nó an toàn: 30
+  // URL của phép thử nằm trong IndexSubmission, `already` phía dưới loại
+  // chúng khỏi MỌI lô sau, nên 10 URL đối chứng gốc vĩnh viễn không được gửi
+  // và pipeline IndexRecheckRun vẫn đo chúng mỗi 24 giờ. Ai xoá các hàng ấy
+  // để "chạy lại cho sạch" thì cùng lúc xoá nhóm đối chứng duy nhất của dự án.
+  //
+  // KHÔNG được biến cờ này thành mặc định. Dịch vụ khác, site khác, nghề khác
+  // đều là câu hỏi mở lần nữa, và ở đó chia đôi lại là việc đúng.
+  const noControl = process.argv.includes("--no-control");
+
   const limit = Number(arg("limit", "20"));
   const drip = Number(arg("drip", "7"));
 
@@ -129,7 +149,14 @@ async function main() {
     .sort((a, b) => (volByPath.get(new URL(b).pathname) ?? 0) - (volByPath.get(new URL(a).pathname) ?? 0))
     .slice(0, limit);
 
-  if (candidates.length < 2) { console.log("Không đủ URL để chia hai nhóm."); return; }
+  // Trần 2 URL chỉ có nghĩa khi còn phải chia hai nhóm. Với --no-control thì
+  // một URL là một lô hợp lệ, và giữ nguyên trần cũ sẽ chặn đúng trường hợp
+  // cờ này sinh ra để phục vụ.
+  const floor = noControl ? 1 : 2;
+  if (candidates.length < floor) {
+    console.log(noControl ? "Không còn URL nào để gửi." : "Không đủ URL để chia hai nhóm.");
+    return;
+  }
 
   // Chia theo TRẠNG THÁI INDEX trước, rồi mới theo volume trong từng nhóm.
   //
@@ -140,18 +167,27 @@ async function main() {
   // vụ kém hay do nó gánh nhiều URL khó hơn.
   //
   // Phân tầng rồi xen kẽ TRONG từng tầng giữ cân cả hai biến cùng lúc.
-  const stateOf = await fetchIndexStates(site.gscPropertyUrl, candidates);
-  const byState = new Map<string, string[]>();
-  for (const u of candidates) {
-    const k = stateOf.get(u) ?? "(không hỏi được)";
-    byState.set(k, [...(byState.get(k) ?? []), u]);
-  }
-
   const submitted: string[] = [];
   const control: string[] = [];
   let volS = 0;
   let volC = 0;
   const v = (u: string) => volByPath.get(new URL(u).pathname) ?? 0;
+
+  // fetchIndexStates chỉ tồn tại để CHIA cho cân. Không chia thì không gọi —
+  // và đó là 131 lệnh gọi URL Inspection không tiêu, trên một quota dùng
+  // chung với session khác. Mốc `indexedAtSubmit` phía dưới vẫn đo đủ, nên
+  // bỏ bước này không làm mất phép so về sau.
+  const byState = noControl
+    ? new Map<string, string[]>()
+    : await (async () => {
+        const stateOf = await fetchIndexStates(site.gscPropertyUrl, candidates);
+        const m = new Map<string, string[]>();
+        for (const u of candidates) {
+          const k = stateOf.get(u) ?? "(không hỏi được)";
+          m.set(k, [...(m.get(k) ?? []), u]);
+        }
+        return m;
+      })();
 
   // MỘT lượt duyệt toàn bộ theo volume giảm dần, không duyệt từng tầng.
   //
@@ -162,26 +198,35 @@ async function main() {
   //
   // Trần theo tầng vẫn giữ: một tầng không được dồn quá ceil(n/2) về một
   // nhánh, nên cân bằng trạng thái không bị volume nuốt mất.
-  const capOf = new Map([...byState].map(([k, g]) => [k, Math.ceil(g.length / 2)]));
-  const nS = new Map<string, number>();
-  const nC = new Map<string, number>();
+  if (noControl) {
+    submitted.push(...[...candidates].sort((a, b) => v(b) - v(a)));
+    volS = submitted.reduce((t, u) => t + v(u), 0);
+    console.log("--no-control: gửi HẾT, không giữ nhánh đối chứng.");
+    console.log("  (10 URL đối chứng của phép thử 14/9 đã bị loại từ bước trên và vẫn đang được đo.)\n");
+  } else {
+    const stateOfU = new Map<string, string>();
+    for (const [k, g] of byState) for (const u of g) stateOfU.set(u, k);
+    const capOf = new Map([...byState].map(([k, g]) => [k, Math.ceil(g.length / 2)]));
+    const nS = new Map<string, number>();
+    const nC = new Map<string, number>();
 
-  for (const u of [...candidates].sort((a, b) => v(b) - v(a))) {
-    const st = stateOf.get(u) ?? "(không hỏi được)";
-    const cap = capOf.get(st)!;
-    const s0 = nS.get(st) ?? 0;
-    const c0 = nC.get(st) ?? 0;
-    const toSubmitted = s0 >= cap ? false : c0 >= cap ? true : volS <= volC;
-    if (toSubmitted) { submitted.push(u); volS += v(u); nS.set(st, s0 + 1); }
-    else { control.push(u); volC += v(u); nC.set(st, c0 + 1); }
-  }
+    for (const u of [...candidates].sort((a, b) => v(b) - v(a))) {
+      const st = stateOfU.get(u) ?? "(không hỏi được)";
+      const cap = capOf.get(st)!;
+      const s0 = nS.get(st) ?? 0;
+      const c0 = nC.get(st) ?? 0;
+      const toSubmitted = s0 >= cap ? false : c0 >= cap ? true : volS <= volC;
+      if (toSubmitted) { submitted.push(u); volS += v(u); nS.set(st, s0 + 1); }
+      else { control.push(u); volC += v(u); nC.set(st, c0 + 1); }
+    }
 
-  console.log("cân bằng theo trạng thái index:");
-  for (const [state, group] of byState) {
-    const g = group.filter((u) => submitted.includes(u)).length;
-    console.log(`  ${state.padEnd(40)} gửi ${String(g).padStart(2)} | đối chứng ${String(group.length - g).padStart(2)}`);
+    console.log("cân bằng theo trạng thái index:");
+    for (const [state, group] of byState) {
+      const g = group.filter((u) => submitted.includes(u)).length;
+      console.log(`  ${state.padEnd(40)} gửi ${String(g).padStart(2)} | đối chứng ${String(group.length - g).padStart(2)}`);
+    }
+    console.log();
   }
-  console.log();
 
   console.log(`${candidates.length} URL: gửi ${submitted.length}, đối chứng ${control.length}, drip ${drip} ngày\n`);
   // In xen kẽ theo cặp, không gộp nhóm. Điều cần kiểm bằng mắt là hai nhánh
@@ -191,7 +236,8 @@ async function main() {
     console.log(`  GỬI       ${submitted[i].replace(site.url, "").padEnd(44)} ${String(v(submitted[i])).padStart(6)} lượt`);
     if (control[i]) console.log(`  đối chứng ${control[i].replace(site.url, "").padEnd(44)} ${String(v(control[i])).padStart(6)} lượt`);
   }
-  if (candidates.length > 10) console.log(`  … và ${candidates.length - 10} URL nữa`);
+  const shown = Math.min(5, submitted.length) + Math.min(5, control.length);
+  if (candidates.length > shown) console.log(`  … và ${candidates.length - shown} URL nữa`);
 
   // Tổng volume hai nhánh. Chia xen kẽ theo hạng làm hai nhánh cân, nhưng
   // "làm cho cân" và "đã cân" là hai việc khác nhau — với danh sách lẻ hoặc
@@ -200,9 +246,16 @@ async function main() {
   // không phải tác dụng của dịch vụ.
   const sum = (a: string[]) => a.reduce((t, u) => t + v(u), 0);
   const [sv, cv] = [sum(submitted), sum(control)];
-  const skew = sv + cv === 0 ? 0 : Math.abs(sv - cv) / ((sv + cv) / 2);
-  console.log(`\ntổng volume — gửi ${sv}, đối chứng ${cv} (lệch ${(skew * 100).toFixed(1)}%)`);
-  if (skew > 0.2) console.log("  ⚠ lệch trên 20%: hai nhánh không so được trực tiếp.");
+  if (control.length === 0) {
+    // Lệch volume là phép kiểm HAI nhánh có so được với nhau không. Không có
+    // nhánh thứ hai thì nó luôn ra 100%, và in một cảnh báo 100% ở đây sẽ dạy
+    // người đọc bỏ qua đúng cảnh báo đó khi nó có nghĩa thật.
+    console.log(`\ntổng volume gửi đi — ${sv} lượt/tháng`);
+  } else {
+    const skew = sv + cv === 0 ? 0 : Math.abs(sv - cv) / ((sv + cv) / 2);
+    console.log(`\ntổng volume — gửi ${sv}, đối chứng ${cv} (lệch ${(skew * 100).toFixed(1)}%)`);
+    if (skew > 0.2) console.log("  ⚠ lệch trên 20%: hai nhánh không so được trực tiếp.");
+  }
 
   if (dry) { console.log("\n--dry: không gửi, không ghi gì."); await prisma.$disconnect(); return; }
 
