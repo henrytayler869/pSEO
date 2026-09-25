@@ -1,15 +1,25 @@
 # Đưa `solieubongda.com` lên sóng — quy trình từng bước
 
-Viết 25/9/2026. Trạng thái đo được lúc viết, không phải trạng thái giả định:
+Viết 25/9/2026 sáng, **cập nhật cùng ngày chiều sau khi chạy thật bước 1→3**.
+Trạng thái đo được lúc cập nhật, không phải trạng thái giả định:
 
     whois Creation Date      2026-09-24T17:55:09Z   (đăng ký mới, không phải domain rụng)
-    dig solieubongda.com     RỖNG — còn ở nameserver parking của Gname
-    Website row              CÓ, vertical bong-da-nam, id cmuclgvm7…
-    Domain row (HQ)          CHƯA CÓ  ← nút chặn đầu tiên
-    revalidateSecret         NULL   (không còn chặn — xem "Trừ khi đẩy QUA")
-    khoá API còn hiệu lực    1 (nhưng chỉ lưu keyHash — xem §3)
-    deploy publisher         ĐỎ: 403 /sites/solieubongda.com/config
-    hai site cũ              200, không noindex, KHÔNG gián đoạn
+    dig NS solieubongda.com  jarred.ns.cloudflare.com, nina.ns.cloudflare.com   ✓
+    zone Cloudflare          b85ea66ae82026a8b4f3370bb5aa3483  (status pending)
+    A record apex + www      46.225.145.196  — CHƯA proxy, mây xám, có chủ ý
+    Website row              ĐÚNG MỘT hàng, id cmuclgvm7…      (xem "Hàng trùng")
+    GA4                      property 555962419, luồng G-6EQF6KSQV9
+    gscPropertyUrl           sc-domain:solieubongda.com
+    revalidateSecret         CÓ — chép từ theaccidentrecord.com ở bước 3
+    khoá API còn sống        2, một trong đó ĐÃ nằm trên VPS
+    build publisher          ✓ Compiled + 1395/1395 trang, 0 dòng HqError
+    deploy publisher         ĐỎ — nhưng ở verify:live, KHÔNG còn ở 403
+    hai site cũ              200, verify:live OK cả hai, KHÔNG gián đoạn
+
+**Chỗ đỏ đã dời, và đó là thước đo tiến độ thật.** Sáng nay deploy chết ở
+`403 /api/v1/sites/solieubongda.com/config` — tức build không có khoá. Giờ build
+dựng trọn 1.395 trang; thứ đỏ là phép kiểm SAU deploy, vì `curl` không tới được
+`https://solieubongda.com/`. Còn đúng một việc: bước 4.
 
 ## Điều đầu tiên phải hiểu, nếu không sẽ bấm nhầm nút
 
@@ -26,7 +36,7 @@ về sớm với lý do cụ thể — nó KHÔNG "hỏng nhưng báo ok", và c
 > *một khoá đẩy hụt mà báo thành công sẽ khiến người ta thu hồi khoá cũ và
 > làm chết site.*
 
-### Trừ khi đẩy QUA một site đang sống — thêm 25/9/2026
+### Trừ khi đẩy QUA một site đang sống — thêm 25/9/2026, ĐÃ DÙNG THẬT
 
 Ba điều kiện trên là của đường THẲNG. Ô chọn cạnh nút "Tạo khoá" mở đường thứ
 hai: gửi yêu cầu tới host của một publisher **đang sống**, và đặt host đích
@@ -53,77 +63,215 @@ Cloudflare cùng ép build lại được rồi.
 qua host khác. Một đường vận chuyển bí mật tự đổi đích khi gặp lỗi là thứ không
 ai truy được về sau.
 
-Hệ quả cho quy trình dưới đây: **bước 2 (nameserver) không còn là điều kiện
-tiên quyết để deploy xanh.** Cấp khoá qua site anh em trước, deploy xanh, rồi
-trỏ DNS khi thuận tiện. Các bước 1→6 vẫn phải chạy đủ để site có người xem.
+Đã chạy thật lúc 08:07 ngày 25/9, trước khi DNS phân giải:
+
+```bash
+node_modules/.bin/tsx scripts/issue-publisher-key.ts \
+  --site solieubongda.com --via <id site đang sống> "nhãn"
+```
+
+```
+✓ Đã đẩy khoá cho solieubongda.com (đi qua atmovingservices.com)
+  và site xác nhận ghi vào /srv/atmovingservices/.hq-key
+```
+
+Đường dẫn đó cũng là bằng chứng phụ cho tiền đề: **một** checkout
+`/srv/atmovingservices` phục vụ cả ba host.
+
+Hệ quả cho quy trình dưới đây: **bước 2 (nameserver) không phải điều kiện tiên
+quyết để build xanh.** Cấp khoá qua site anh em trước là gỡ được nút khoá ngay.
+Nhưng `verify:live` thì VẪN đòi host trả lời được, nên bước 2 và 4 vẫn phải xong
+trước khi deploy hết đỏ.
 
 ## Thứ tự, và ai làm bước nào
 
 Thứ tự này không đảo được. `provision.ts` đã mã hoá đúng nó, kèm lý do ở từng
 bước — quy trình dưới đây chỉ là cách đọc nó cho một lần chạy cụ thể.
 
-### Bước 1 — thêm Domain vào HQ  ·  *Control Panel*
+### ~~Bước 1 — thêm Domain vào HQ~~ · *XONG 25/9 08:2x, Control Panel*
 
-`/domains` → thêm `solieubongda.com` → tạo zone Cloudflare. Bảng `Domain`
-hiện chỉ có hai site cũ; **không có hàng `Domain` thì `provision` dừng ngay ở
-bước "zone"** và không làm gì tiếp.
-
-Bước này trả về **nameserver Cloudflare** — ghi lại, bước 2 cần.
-
-### Bước 2 — trỏ nameserver tại Gname  ·  *CHỦ DỰ ÁN*
-
-Đây là bước duy nhất không phần mềm nào làm được: đăng nhập Gname, đổi
-nameserver của `solieubongda.com` sang cặp Cloudflare ở bước 1.
-
-Kiểm trước khi đi tiếp — **đừng tin "đã bấm lưu"**:
+Chạy bằng `scripts/add-domain.ts`, cùng đường mã với form ở `/domains`:
 
 ```bash
-dig +short NS solieubongda.com     # phải ra ns Cloudflare
+node_modules/.bin/tsx scripts/add-domain.ts --name solieubongda.com
 ```
 
-Lan truyền có thể mất vài giờ. Bước 3 chạy sớm sẽ thất bại ở A record.
+    Đã TẠO zone mới     b85ea66ae82026a8b4f3370bb5aa3483
+    status              pending
+    nameservers         jarred.ns.cloudflare.com, nina.ns.cloudflare.com
+    Publisher           đã nối: "Số Liệu Bóng Đá"
 
-### Bước 3 — chạy provision  ·  *Control Panel*
+**`--vertical` cố ý BỎ TRỐNG.** Trường đó chỉ nhận niche đã có nghiên cứu
+traffic, và cả 13 niche đang có đều là thị trường Mỹ; truyền `bong-da-nam` vào
+sẽ bị từ chối. Liên kết Domain↔Publisher suy từ HOST nên vẫn nối đúng —
+`relevantVertical` chỉ dùng cho luồng nghiên cứu domain bên Mỹ.
 
-`/publisher` → nút provision cho site này. Nó làm theo đúng thứ tự:
+Lệnh này **nhận zone có sẵn thay vì tạo trùng**, nên chạy lại được.
 
-    1. A record, CHƯA proxy   proxy bật sớm thì thử thách ACME chết ở tầng edge,
-                              với thông báo nói về challenge chứ không nói về SSL
-    2. GA4 property + luồng web
-    3. Nối Website vào HQ     (đã có — sẽ báo "skipped")
-    4. Revalidate secret      CHÉP từ site đã có, không sinh mới
-    5. Cấp + đẩy khoá         chỉ chạy khi 4 xong VÀ host trả lời được
-    6. Bật proxy Cloudflare
-    7. Ghi dữ liệu vào repo publisher
+### ~~Bước 2 — trỏ nameserver tại Gname~~ · *XONG 25/9, CHỦ DỰ ÁN*
 
-Bước 4 là chỗ gỡ `revalidateSecret = NULL` — không ai phải sinh hay cầm một
-bí mật bằng tay.
-
-### Bước 4 — nginx + chứng chỉ trên VPS  ·  *phiên VPS*
-
-`provision` KHÔNG làm bước này — chú thích trong `provision.ts` nói thẳng:
-*"Đẩy khoá cần host trả lời được → cần nginx + cert → là bước tay."*
-
-Cần một server block cho `solieubongda.com` và một chứng chỉ. Kiểm:
+Bước duy nhất không phần mềm nào làm được. Kiểm — **đừng tin "đã bấm lưu"**:
 
 ```bash
-curl -sS -o /dev/null -w '%{http_code}\n' https://solieubongda.com/
+dig +short NS solieubongda.com
 ```
 
-Phải ra một mã HTTP thật, không phải lỗi TLS.
+Đã ra `jarred.ns.cloudflare.com` + `nina.ns.cloudflare.com`. `dig +short A` còn
+rỗng ở thời điểm đó, và đúng như vậy: A record là việc của bước 3.
 
-### Bước 5 — deploy lại publisher  ·  *phiên SEO bóng đá*
+### ~~Bước 3 — chạy provision~~ · *XONG 25/9 08:30, Control Panel — ĐỌC CẢ "Hàng trùng"*
+
+`/publisher` → nút provision. Kết quả thật:
+
+    [WAITING] Nghề "bong-da-nam" sẵn sàng   mỏng: chỉ số đặc tả cần verify:entity-spec
+    [SKIPPED] Zone Cloudflare               đã có
+    [DONE   ] A record                      apex + www → 46.225.145.196 (mới)
+    [DONE   ] GA4                           property 555962419, luồng G-6EQF6KSQV9
+    [SKIPPED] Nối Website                   ← NHÃN NÀY NÓI DỐI, xem dưới
+    [DONE   ] Revalidate secret             chép từ theaccidentrecord.com
+    [WAITING] Khoá API                      "đã thu hồi khoá vừa tạo" — xem dưới
+    [WAITING] Đám mây cam                   chờ nginx + cert, bật sớm sẽ ra 526
+    [WAITING] Ghi vào repo                  bong-da-nam chưa có đặc tả nội dung
+
+Bước "Revalidate secret" là chỗ gỡ `NULL` — không ai phải sinh hay cầm một bí
+mật bằng tay.
+
+Bước "Khoá API" in nguyên văn:
+
+    Chưa đẩy được (đã thu hồi khoá vừa tạo): Không gọi được
+    https://solieubongda.com/api/hq-key: fetch failed
+
+Site này **đã có hai khoá sống** và lẽ ra bước đó phải báo `skipped`. Nó không —
+vì phép kiểm `findFirst({ where: { websiteId } })` hỏi về hàng `Website` MỚI vừa
+bị tạo, và hàng đó chưa có khoá nào. Tức lỗi hàng trùng ở mục dưới còn kéo theo
+một khoá sinh ra vô ích; may là đường thu hồi tự động đã dọn nó. Sau #187 bước
+này báo `skipped` đúng.
+
+#### Hàng trùng: provision đã TẠO hàng `Website` thứ hai cho cùng host
+
+Đo 25/9/2026, và nó là lỗi mã chứ không phải lỗi thao tác. `provision.ts` nhận
+diện site bằng
+
+```ts
+upsert({ where: { gscPropertyUrl: `sc-domain:${host}` } })
+```
+
+Hàng của site này có `gscPropertyUrl` **NULL** — Search Console gắn sau, và cột
+đó nullable đúng vì thế — nên không khớp gì và `upsert` **tạo hàng mới**. Mọi
+site dựng qua trang Publisher mà chưa gắn Search Console đều bị nhân đôi y vậy.
+
+Hậu quả không tự lộ ra. Tài sản chia làm hai: khoá còn sống và sổ chi tiêu AI ở
+hàng cũ; GA4 vừa tạo và secret vừa chép ở hàng mới. Thứ báo động đầu tiên là
+`resolveSite` từ chối đoán, với thông báo nói về **"nhiều site"** chứ không nói
+về hàng trùng.
+
+Và **nhãn cũng nói dối**: `status: existing ? "skipped" : "done"` đọc biến
+`existing` (tìm theo url — CÓ) trong khi `upsert` đi theo `gscPropertyUrl`
+(KHÔNG có). Nên nó in `[SKIPPED] Nối Website: id <id mới>` **đúng lúc vừa tạo
+một hàng**.
+
+Đã sửa và merge: **[#187](https://github.com/henrytayler869/pSEO/pull/187)** —
+cả `provision.ts` lẫn `scripts/connect-website.ts` (cùng một hình dạng) nay tìm
+bằng `findWebsiteForDomain`, tức định nghĩa "cùng một site" của cả app.
+**KHÔNG có cổng canh phần này**: tái hiện cần một database có hàng lệch, mà DB
+của CI rỗng. `tsc` là tất cả những gì đang canh nó.
+
+#### Nếu phải dọn hàng trùng: THỨ TỰ trong transaction
+
+`gscPropertyUrl` là cột **unique**, và Postgres kiểm ngay trong transaction chứ
+không hoãn tới lúc commit. Nên gán giá trị đó cho hàng gốc **trước khi** xoá
+hàng trùng là P2002, dù cuối transaction chỉ còn một hàng giữ nó:
+
+    gộp rồi xoá   → P2002 Unique constraint failed on (`gscPropertyUrl`)
+    XOÁ rồi gộp   → chạy được
+
+Transaction rollback trọn nên lần thất bại không để lại trạng thái nửa vời.
+Kiểm bằng chính triệu chứng đã vỡ, không chỉ đếm hàng:
+
+```bash
+# phải trả về site, không phải lỗi "nhiều site"
+node_modules/.bin/tsx -e "import {prisma} from './lib/db/prisma';import {resolveSite} from './lib/scripts/resolve-site';resolveSite({argv:['n','x','--site','solieubongda.com']}).then(console.log).finally(()=>prisma.\$disconnect())"
+```
+
+### ~~Bước 4 — nginx + chứng chỉ trên VPS~~ · *XONG 25/9 11:02, phiên VPS*
+
+Chứng chỉ Let's Encrypt thật cho `solieubongda.com`, hết hạn 24/12/2026,
+`certbot renew --dry-run` đạt. Đo lại độc lập từ session HQ, **không** `-k`:
+
+    https://solieubongda.com/          200   ssl_verify=0
+    issuer                             Let's Encrypt CN=YE2, subject CN=solieubongda.com
+    x-site-resolved-by                 nginx        (không rơi vào nhánh 404 của proxy.ts)
+    www. và http://                    301 -> https://solieubongda.com/
+    atmovingservices / theaccidentrecord   200 cả hai — khối mới là CỘNG THÊM
+
+#### CHỖ MÂU THUẪN ĐÃ GIẢI: `provision.ts` đúng, tài liệu ra đúng kết luận bằng LÝ DO ĐÃ CHẾT
+
+Bản sáng nay nêu hai chỗ nói khác nhau mà không kết luận. Phiên VPS đọc cấu hình
+thật, và câu trả lời không phải "một trong hai đúng" — **cả hai đều không đủ**:
+
+`manualSteps()` ĐÚNG khi nói không cần bước tay: vhost `00-catchall` có
+`server_name _`, mang một cert **tự ký**, và `include snippets/publisher-app.conf`
+— tức nó **phục vụ** mọi host lạ chứ không chặn. Một host đi qua Cloudflare với
+SSL mode *full* (không strict) thì cert tự ký ở origin là đủ, không cần gì thêm.
+
+Tài liệu ĐÚNG khi nói cần chứng chỉ — nhưng **vì một lý do khác hẳn lý do nó
+viết**. Lý do thật: host này đang **MÂY XÁM** có chủ ý, nên trình duyệt nối
+**thẳng** vào origin và gặp cert tự ký → **lỗi TLS**, không phải một mã HTTP. Đo
+được: `curl https://solieubongda.com/` trả `000` từ ngoài trong khi `curl -k` qua
+`--resolve` trả 200. Đó chính là chỗ `verify:live` đỏ.
+
+Hệ quả: nếu chỉ sửa tài liệu theo `manualSteps()` — "không cần gì cả" — thì host
+mới **vẫn đỏ đúng như trước**. Một kết luận đúng dựa trên lý do đã chết là thứ sẽ
+bị sửa sai ở lần dọn dẹp tiếp theo.
+
+**Câu đúng cho lần sau:**
+
+> Không cần server block cho một host đi qua Cloudflare (ssl=full) —
+> `00-catchall` phục vụ mọi host bằng cert tự ký. **CẦN** cert riêng khi host còn
+> **mây xám**, vì lúc đó client nối thẳng vào origin và cert tự ký thành lỗi TLS
+> chứ không thành mã HTTP. Thứ tự an toàn: **cert trước** (ACME đi qua
+> `00-catchall`, đã đo), rồi vhost, rồi mới bật cam.
+
+Và lo **526** thì không xảy ra: origin giờ có cert Let's Encrypt thật, và kể cả
+trước đó `00-catchall` đã có cert tự ký — dưới *full* (không strict) CF vẫn nhận.
+Với cert này bật được cả *full (strict)* cho host này nếu muốn.
+
+### Bước 5 — bật proxy rồi deploy lại · *Control Panel, rồi phiên SEO bóng đá*
+
+**`verify:live` KHÔNG đòi đi qua Cloudflare.** Đọc `scripts/verify-live.ts`:
+điều kiện đạt là `x-site-resolved-by` khớp `wantResolvedBy: "nginx"`; `cf=` chỉ
+được IN ra, không được kiểm. Đo 25/9 sau khi có cert: cả 8 đường dẫn nó đòi
+(`/`, `/?cb=1`, `/about`, `/blog`, `/data`, `/privacy`, `/terms`, `/contact`) đều
+200 `by=nginx`, hai ca âm đều 404. Nên **bật cam không phải điều kiện để deploy
+hết đỏ** — nó là trạng thái đích vì hai host kia đều đã proxy, không phải nút
+chặn. Đừng gộp hai việc đó lại rồi tưởng phải làm cái này mới xong cái kia.
+
+**Bật đám mây cam là việc TAY, provision không làm.** Đọc kỹ bước 6 của
+`provision.ts`: khi origin chưa phục vụ HTTPS nó báo `waiting` kèm cảnh báo 526;
+khi origin ĐÃ phục vụ, nó vẫn báo `waiting` — không lần nào nó gọi API để đặt
+`proxied: true`. Nó chỉ chuyển sang `skipped · "Đã bật."` nếu đọc thấy record đã
+proxy từ trước, tức do người bật.
+
+Và câu nó in ra khi đó **dễ hiểu sai**: *"bấm lại sau khi xác nhận chứng chỉ
+đúng host, hoặc bật tay"* — bấm lại KHÔNG bật gì thêm, chỉ in lại đúng dòng ấy.
+Phần "bật tay" mới là đường thật. Lý do thiết kế thì đúng: thứ cần xác nhận là
+chứng chỉ phủ **đúng host này**, không phải "có cái gì đó trả HTTPS" — và đó là
+phán đoán của con người, không phải một mã trạng thái.
+
+Nên: bật mây cam cho `solieubongda.com` và `www` trên dashboard Cloudflare (hoặc
+qua API), sau khi đã xác nhận chứng chỉ ở origin phủ đúng host. Rồi cho deploy
+chạy lại:
+
+```bash
+gh run list --repo henrytayler869/pseo-publisher --workflow=deploy.yml -L 3
+gh run rerun <id lần đỏ>
+```
 
 Kho khoá trên VPS là file `.hq-key` cạnh `.env.production`, và nó **sống qua
-deploy** vì `deploy.sh` dùng `git reset --hard` chứ không `git clean`. Bước 3
-mục 5 ghi đè nó dưới tên host mới.
+deploy** vì `deploy.sh` dùng `git reset --hard` chứ không `git clean` — nên khoá
+đã đẩy hôm nay không cần đẩy lại.
 
-```bash
-npm run build          # 0 dòng HqError
-npm run verify:rendered
-```
-
-### Bước 6 — đọc HTML thật  ·  *phiên SEO bóng đá*
+### Bước 6 — đọc HTML thật · *phiên SEO bóng đá*
 
 Không phải bước hình thức. Hôm nay, ngay khi build chạy được lần đầu, việc
 mở HTML ra đọc tìm thấy **250 trang có `{opponent}` rỗng** — HQ đổi chuỗi ghép
@@ -132,23 +280,78 @@ HAI file nên sửa một chỗ làm thân trang đúng mà **title vẫn sai**.
 
 Mọi cổng đều xanh suốt thời gian đó.
 
-## Ba chỗ đã cắn trong tuần này, đừng cắn lại
+#### Và lần này: 5 trang CẤP GIẢI trả 404, trong khi trang con của chúng sống
+
+Phiên VPS quét cả 358 URL trong sitemap ngày 25/9. Đo lại độc lập từ HQ, qua
+Internet thật:
+
+    /bong-da-nam                          200   ← trang cha
+    /bong-da-nam/de-1                     404
+    /bong-da-nam/en-1                     404
+    /bong-da-nam/es-1                     404
+    /bong-da-nam/fr-1                     404
+    /bong-da-nam/it-1                     404
+    /bong-da-nam/en-1/coventry-city-fc    200   ← trang con
+
+Cả 5 **có trong sitemap** (358 `<loc>`, mỗi cái đúng 1 lần) và **được link từ
+trang chủ** (`href="/bong-da-nam/<giải>-1"` cả năm). Tức năm giải quốc nội không
+có trang chỉ mục, và đó là điều hướng chính của site.
+
+KHÔNG phải nginx, phiên VPS đã loại trừ bằng cách hỏi thẳng app ở cổng 3100:
+`/solieubongda.com/bong-da-nam/en-1` → 404 ngay tại app. Và trên đĩa,
+`prerender-manifest` **không có** `en-1` trong khi **có** `en-1/coventry-city-fc`;
+`en-1.html` chỉ 11.965 byte và chứa "404", mtime là lúc có người gọi chứ không
+phải lúc build.
+
+Nên "1395/1395 trang" của bước build KHÔNG mâu thuẫn: năm route này không nằm
+trong tập được sinh, chứ không phải sinh ra rồi lỗi. Chỗ cần nhìn là hàm sinh
+tham số tĩnh cho **cấp giải**, không phải tầng render.
+
+**Vì sao nó lọt qua mọi thứ:** build xanh, `verify:live` xanh (danh sách đường
+dẫn của nó không có trang cấp giải), sitemap tồn tại và hợp lệ. Google lấy
+sitemap rồi ăn 5 cái 404 ở đúng năm trang điều hướng.
+
+**Và một lỗi ĐO suýt che đúng 5 cái đó.** Lần quét đầu của phiên VPS dùng
+`xargs -I{}` và nó chết giữa đường ("command line cannot be assembled, too
+long"): chỉ 108/358 URL được thử, nhưng bảng in ra `108 200` với danh sách
+"không 200" **rỗng** — đọc y hệt "toàn bộ sitemap đều xanh". Thứ cứu là in
+**đã thử / tổng** cạnh nhau. Một vòng lặp chết giữa đường trông giống hệt một
+vòng lặp sạch, và đây là họ hàng gần của mọi lỗi "không thấy gì = không có gì"
+trong kho này.
+
+## Năm chỗ đã cắn trong tuần này, đừng cắn lại
 
 **`HQ_API_KEYS` là map THEO HOST.** Đổi host là đổi tên khoá trong map, ở cả
 `.env.local` lẫn secret GitHub. Giá trị không đổi.
 
-**Secret GitHub chỉ ảnh hưởng job `check` của CI, KHÔNG phải env runtime của
-VPS.** Đổi secret xong mà deploy vẫn đỏ là đúng — hai thứ khác nhau.
+**Khoá sống ở BA nơi, không hai.** `.env.local`/`.hq-key` trên máy dev (build
+tại chỗ), secret GitHub `HQ_API_KEYS` (**chỉ** job `check` của CI), và
+`.env.production`/`.hq-key` **trên VPS** (build lúc deploy). Đổi secret GitHub
+xong mà deploy vẫn đỏ là đúng — ba thứ khác nhau, và nơi thứ ba là nơi hay sai.
 
 **Cloudflare chặn User-Agent mặc định của Python/curl.** Một script kiểm khoá
 quên `User-Agent` trả 403 cho cả ba site, và "403 cho tất cả" đọc y hệt "khoá
 chết hết". Luôn đặt UA trình duyệt khi kiểm qua Cloudflare.
 
+**Nhận diện site theo HOST, không theo `gscPropertyUrl`.** Xem "Hàng trùng" ở
+bước 3. Cột đó nullable, nên dùng nó làm khoá nhận diện là lặng lẽ tạo bản sao.
+
+**Thêm cờ `--<tên> <giá trị>` vào script thì phải khai trong `VALUE_FLAGS`**
+(`lib/scripts/argv.ts`). Quên thì giá trị của cờ lọt vào `positionals()` và
+thành tham số vị trí — khoá cấp lúc 08:07 mang nhãn là ID của site trung
+chuyển, không lỗi nào. Nay `scripts/test-argv.ts` quét và bắt được (#187).
+
 ## Việc KHÔNG làm
 
-- **Không sinh khoá khi chưa qua bước 4.** Khoá sinh ra mà không đẩy được là
-  một hàng trong bảng không tương ứng với gì cả.
-- **Không đặt `revalidateSecret` bằng tay.** Bước 3 mục 4 chép từ site đã có.
+- **Không bật đám mây cam trước khi có chứng chỉ ở origin.** 526 cho cả site.
+- **Không đặt `revalidateSecret` bằng tay.** Bước 3 chép từ site đã có.
+- **Không sinh thêm khoá cho site này.** Đã có khoá sống và nó đã nằm trên VPS;
+  provision sẽ tự báo "skipped". Sinh thêm chỉ tạo hàng không ai cầm.
+- **Đừng coi deploy xanh là site xong.** Đo 25/9: `verify:live` đạt trong khi
+  5 trang cấp giải — điều hướng chính — trả 404 và nằm trong sitemap. Danh sách
+  đường dẫn của `verify:live` không phủ chúng.
 - **Không merge thêm gì vào `main` của publisher cho tới khi deploy xanh.**
   Mỗi PR mới đều chạy cùng một build và sẽ đỏ vì cùng một lý do, che mất lỗi
-  thật của chính PR đó.
+  thật của chính PR đó. Và `verify:live` đỏ vì host chưa phân giải sẽ làm đỏ
+  deploy của **mọi** phiên, kể cả thay đổi chẳng liên quan tới site bóng đá —
+  đó là lý do bước 4 gấp hơn vẻ ngoài của nó.
