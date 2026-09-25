@@ -10,6 +10,7 @@ import { LEAGUES, fetchLeagueSeasonMerged, type LeagueCode } from "@/lib/footbal
 import { currentEuropeanSeason } from "@/lib/football/season";
 import { upcomingMatches, UPCOMING_CAP, type UpcomingMatch } from "@/lib/football/fixtures";
 import { FOOTBALL_VERTICAL, parseKey, teamSlug } from "@/lib/page-axis/axes";
+import { FIXTURE_SEPARATOR, teamDisplayName } from "@/lib/football/team-display-names";
 
 /**
  * Sinh đoạn diễn giải cho một trang trên trục THỰC THỂ.
@@ -260,7 +261,21 @@ export async function buildEntityFactSet(
     const facts = teamFacts(teamStats(s, team), lg);
     const modelFacts = forModel(facts);
     const upcoming = upcomingMatches(s.matches, code, { team, limit: UPCOMING_CAP });
-    return { ...base, displayName: team, facts, upcoming, modelFacts, fingerprint: fingerprintOf(modelFacts, season, team) };
+    /**
+     * Tên HIỂN THỊ vào prompt và vào fingerprint; tên NGUỒN ở lại chỗ tra cứu.
+     *
+     * `team` là chuỗi openfootball và phải giữ nguyên cho `teamStats` cùng
+     * `upcomingMatches` — chúng so khớp với dữ liệu nguồn. Nhưng thứ model
+     * ĐỌC phải là cái tên trang tự gọi mình.
+     *
+     * Đo 25/9/2026, lượt sinh lô đầu sau khi có luật `source_team_name`: 36
+     * trang trượt, phần lớn vì đúng lý do này. Tôi đã sửa nhãn chỉ số trong
+     * `facts.ts` nhưng file NÀY dựng `displayName` của riêng nó, nên prompt
+     * vẫn nhận "FC Barcelona" và model viết lại đúng chuỗi được đưa. Luật
+     * không bắt nhầm — nó chỉ ra một file thứ tư mà tôi bỏ sót.
+     */
+    const teamName = teamDisplayName(team);
+    return { ...base, displayName: teamName, facts, upcoming, modelFacts, fingerprint: fingerprintOf(modelFacts, season, teamName) };
   }
 
   if (axis === "fixture") {
@@ -268,7 +283,9 @@ export async function buildEntityFactSet(
     const a = s.teams.find((t) => teamSlug(t) === slugA);
     const b = s.teams.find((t) => teamSlug(t) === slugB);
     if (!a || !b) return null;
-    const name = `${a} gặp ${b}`;
+    // Chỗ thứ tư của cùng một chuỗi ghép. `a`/`b` giữ tên nguồn cho
+    // `fixtureStats` và phép lọc lịch ngay dưới; chỉ CHỮ đổi.
+    const name = `${teamDisplayName(a)}${FIXTURE_SEPARATOR}${teamDisplayName(b)}`;
     const facts = fixtureFacts(fixtureStats(s, a, b), lg);
     const modelFacts = forModel(facts);
     // Cặp: chỉ những lần HAI đội này gặp nhau mà chưa đá — không phải lịch
