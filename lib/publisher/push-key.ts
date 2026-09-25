@@ -29,10 +29,68 @@ export type PushKeyResult = {
   detail: string;
 };
 
+/**
+ * Site "anh em" để mượn đường đẩy khoá, khi site đích chưa trả lời được.
+ *
+ * ═══ VÒNG LẶP NÓ GỠ ═══
+ *
+ * Site mới dựng chưa phân giải DNS và chưa có chứng chỉ, nên POST thẳng vào
+ * `https://<host mới>/api/hq-key` không tới đâu. Nhưng khoá lại là thứ cần
+ * CÓ TRƯỚC thì build mới chạy được, và build phải chạy được thì mới có gì để
+ * trỏ DNS vào. Đo 25/9/2026 trên solieubongda.com: DNS còn ở nameserver
+ * parking, deploy đỏ vì 403, và không đường nào tiến.
+ *
+ * Phía publisher ĐÃ mở sẵn lối ra: `/api/hq-key` nhận `host` trong body và
+ * chấp nhận host chưa có trong bảng site — chú thích của chính nó nói "để gỡ
+ * vòng lặp dựng site mới". Thiếu đúng một mảnh là HQ vẫn gửi tới host đích.
+ *
+ * ═══ VÌ SAO AN TOÀN ═══
+ *
+ * MỘT kho publisher phục vụ MỌI site: cùng app, cùng tiến trình, cùng file
+ * `.hq-key`. Nên ranh giới tin cậy ở đây là CẢ DEPLOYMENT, không phải từng
+ * hostname — gửi qua host nào cũng ghi vào đúng một file đó.
+ *
+ * Và bán kính không rộng thêm: ai cầm `REVALIDATE_SECRET` của site anh em thì
+ * đã purge sạch zone Cloudflare và ép build lại được rồi. Đặt thêm một khoá
+ * sai chỉ khiến site nhận 401 từ HQ và phục vụ trang đã cache — nhỏ hơn thứ
+ * họ vốn làm được.
+ *
+ * ═══ KHÔNG PHẢI FALLBACK IM LẶNG ═══
+ *
+ * Chỗ gọi phải TRUYỀN site anh em vào. Không tự đi tìm, không tự thử lại qua
+ * host khác khi host đích hỏng — một đường vận chuyển bí mật tự đổi đích khi
+ * gặp lỗi là thứ không ai truy được về sau. Và `detail` trả về nói rõ đã đi
+ * qua đâu.
+ */
+export interface SiblingRoute {
+  /** URL site anh em — phải đang sống và có chứng chỉ. */
+  url: string;
+  /** Secret của SITE ANH EM, không phải của site đích. */
+  revalidateSecret: string;
+}
+
 export async function pushKeyToSite(
   website: { url: string; revalidateSecret: string | null },
-  key: string
+  key: string,
+  via?: SiblingRoute
 ): Promise<PushKeyResult> {
+  if (via) {
+    if (!isHeaderSafeSecret(via.revalidateSecret)) {
+      return {
+        attempted: false,
+        ok: false,
+        detail: "Revalidate secret của site trung chuyển có ký tự ngoài ASCII nên không đặt vào header HTTP được.",
+      };
+    }
+    return deliver({
+      endpoint: `${via.url.replace(/\/+$/, "")}/api/hq-key`,
+      secret: via.revalidateSecret,
+      key,
+      targetHost: hostOf(website.url),
+      viaHost: hostOf(via.url),
+    });
+  }
+
   if (!website.revalidateSecret) {
     return {
       attempted: false,
@@ -51,7 +109,28 @@ export async function pushKeyToSite(
     };
   }
 
-  const endpoint = `${website.url.replace(/\/+$/, "")}/api/hq-key`;
+  return deliver({
+    endpoint: `${website.url.replace(/\/+$/, "")}/api/hq-key`,
+    secret: website.revalidateSecret,
+    key,
+    targetHost: hostOf(website.url),
+    viaHost: null,
+  });
+}
+
+function hostOf(url: string): string {
+  return new URL(url).hostname.replace(/^www\./, "");
+}
+
+async function deliver(args: {
+  endpoint: string;
+  secret: string;
+  key: string;
+  targetHost: string;
+  viaHost: string | null;
+}): Promise<PushKeyResult> {
+  const { endpoint, secret, key, targetHost, viaHost } = args;
+  const through = viaHost ? ` (đi qua ${viaHost})` : "";
 
   let res: Response;
   try {
@@ -59,12 +138,12 @@ export async function pushKeyToSite(
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-revalidate-secret": website.revalidateSecret,
+        "x-revalidate-secret": secret,
       },
       // host đi kèm: từ khi publisher giữ khoá theo từng host, một lần đẩy
       // không nói rõ host sẽ ghi vào site đầu tiên trong bảng — đúng cho một
       // site, sai lặng lẽ từ site thứ hai.
-      body: JSON.stringify({ key, host: new URL(website.url).hostname.replace(/^www\./, "") }),
+      body: JSON.stringify({ key, host: targetHost }),
       signal: AbortSignal.timeout(15_000),
       cache: "no-store",
     });
@@ -72,7 +151,7 @@ export async function pushKeyToSite(
     return {
       attempted: true,
       ok: false,
-      detail: `Không gọi được ${endpoint}: ${e instanceof Error ? e.message : String(e)}`,
+      detail: `Không gọi được ${endpoint}${through}: ${e instanceof Error ? e.message : String(e)}`,
     };
   }
 
@@ -110,5 +189,9 @@ export async function pushKeyToSite(
     return { attempted: true, ok: false, detail: `Site trả 200 nhưng không xác nhận đã ghi: ${text.slice(0, 200)}` };
   }
 
-  return { attempted: true, ok: true, detail: `Đã đẩy sang site và site xác nhận ghi vào ${body.keyFile ?? "file khoá"}.` };
+  return {
+    attempted: true,
+    ok: true,
+    detail: `Đã đẩy khoá cho ${targetHost}${through} và site xác nhận ghi vào ${body.keyFile ?? "file khoá"}.`,
+  };
 }

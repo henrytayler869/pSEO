@@ -23,6 +23,7 @@ import { judgeReadiness } from "@/lib/publisher/site-config";
 import { Ga4CreateProperty } from "@/components/ga4-create-property";
 import { listAccounts } from "@/lib/google/analytics-admin";
 import { listPublisherKeys } from "@/lib/settings/api-key";
+import { listCourierSites } from "@/lib/publisher/couriers";
 
 export default async function WebsiteDetailPage({ params }: { params: Promise<{ websiteId: string }> }) {
   const { websiteId } = await params;
@@ -31,6 +32,7 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
 
   const budget = await getBudgetStatus(websiteId);
   const apiKeys = await listPublisherKeys(websiteId);
+  const couriers = await listCourierSites(websiteId);
 
   // Chỉ hỏi Google khi website CHƯA có property — không có gì để tạo thì
   // không đáng một lời gọi mạng mỗi lần mở trang.
@@ -217,7 +219,13 @@ export default async function WebsiteDetailPage({ params }: { params: Promise<{ 
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <PublisherApiKeys websiteId={websiteId} vertical={detail.website.vertical} keys={apiKeys} />
+          <PublisherApiKeys
+            websiteId={websiteId}
+            vertical={detail.website.vertical}
+            keys={apiKeys}
+            hasSecret={detail.website.revalidateSecret !== null}
+            couriers={couriers}
+          />
         </CardContent>
       </Card>
 

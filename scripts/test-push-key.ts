@@ -93,6 +93,45 @@ async function main() {
   r = await pushKeyToSite(site, KEY);
   check("mạng hỏng → thất bại có nêu địa chỉ", !r.ok && r.detail.includes("api/hq-key"), r.detail);
 
+  // ---- ĐẨY QUA SITE ANH EM ----
+  //
+  // Phần đáng canh nhất ở đây KHÔNG phải "gọi được không" mà là HAI THỨ ĐI HAI
+  // ĐƯỜNG: yêu cầu bay tới host trung chuyển, còn host đích đi trong body. Lẫn
+  // hai thứ đó là một lỗi im lặng hoàn toàn — site trung chuyển trả 200 và ghi
+  // khoá cho CHÍNH NÓ, tức vừa làm site đang sống dùng khoá của site khác, vừa
+  // báo thành công cho một lần đẩy chưa tới đích.
+  const target = { url: "https://moi.example/", revalidateSecret: null };
+  const courier = { url: "https://dangsong.example/", revalidateSecret: "secret-cua-site-anh-em" };
+
+  stub(() => json({ ok: true, keyFile: "/srv/site/.hq-key", source: "pushed" }));
+  r = await pushKeyToSite(target, KEY, courier);
+  check("site đích không có secret vẫn đẩy được QUA site anh em", r.ok, r.detail);
+  check("gọi tới host TRUNG CHUYỂN", captured?.url === "https://dangsong.example/api/hq-key", captured?.url ?? "");
+  check("dùng secret của site TRUNG CHUYỂN", captured?.headers["x-revalidate-secret"] === courier.revalidateSecret);
+  check("host ĐÍCH đi trong body", JSON.parse(captured!.body).host === "moi.example", captured!.body);
+  check("báo cáo nói rõ đã đi qua đâu", r.detail.includes("dangsong.example"), r.detail);
+  check("và nói rõ khoá cấp cho host nào", r.detail.includes("moi.example"), r.detail);
+
+  // Đối chứng dương cho phép kiểm trên: đường thẳng KHÔNG được nói "đi qua".
+  // Thiếu ca này thì một `detail` luôn chứa chữ đó cũng đạt.
+  stub(() => json({ ok: true, keyFile: "/srv/site/.hq-key" }));
+  r = await pushKeyToSite(site, KEY);
+  check("đường thẳng không nói 'đi qua'", r.ok && !r.detail.includes("đi qua"), r.detail);
+
+  // Secret của site trung chuyển cũng phải qua phép kiểm header. Bỏ sót nhánh
+  // này thì lỗi nổ ở tầng undici SAU khi khoá đã được sinh ra.
+  r = await pushKeyToSite(target, KEY, { url: courier.url, revalidateSecret: "bí-mật" });
+  check("secret trung chuyển có dấu → chặn TRƯỚC khi gọi", !r.attempted && !r.ok, r.detail);
+
+  // Site trung chuyển từ chối thì đây là THẤT BẠI, không âm thầm quay về đẩy
+  // thẳng. Một đường vận chuyển bí mật tự đổi đích khi gặp lỗi là thứ không ai
+  // truy được về sau.
+  stub(() => json({ error: "Unauthorized." }, 401));
+  r = await pushKeyToSite(target, KEY, courier);
+  check("trung chuyển trả 401 → thất bại, KHÔNG tự thử đường khác", !r.ok, r.detail);
+  check("và vẫn gọi đúng host trung chuyển, không đổi sang host đích",
+    captured?.url === "https://dangsong.example/api/hq-key", captured?.url ?? "");
+
   globalThis.fetch = realFetch;
   console.log(fail.length ? `\n✗ ${fail.length} trượt:\n  ${fail.join("\n  ")}\n` : "");
   console.log(`${pass}/${pass + fail.length} đạt.`);
