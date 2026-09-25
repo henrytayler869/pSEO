@@ -8,6 +8,7 @@ import { pushKeyToSite } from "@/lib/publisher/push-key";
 import { writeSiteToRepo } from "@/lib/publisher/repo-write";
 import { specFor } from "@/lib/content-spec/niche-spec";
 import { findWebsiteForDomain } from "@/lib/publisher/link-domain";
+import { cacheRules, copyCacheRules, HostLeftInRuleError } from "@/lib/cloudflare/cache-rule";
 
 /**
  * "Dựng Site": chạy những bước HQ THẬT SỰ làm được, và nói rõ những bước
@@ -384,6 +385,95 @@ export async function provisionSite(input: ProvisionInput): Promise<ProvisionRep
         detail: serving
           ? "Origin đã phục vụ HTTPS — bấm lại sau khi xác nhận chứng chỉ đúng host, hoặc bật tay."
           : `${siteUrl} chưa phục vụ HTTPS. Cần khối nginx + chứng chỉ trước, nếu không bật proxy sẽ ra 526.`,
+      });
+    }
+  }
+
+  // ── 6b. Quy tắc cache HTML ─────────────────────────────────────────────
+  //
+  // Cloudflare KHÔNG cache HTML mặc định, kể cả khi origin gửi `s-maxage=86400`.
+  // Zone mới thiếu quy tắc thì trả `cf-cache-status: DYNAMIC` mãi, và không có
+  // gì hỏng: trang vẫn 200, nội dung vẫn đúng. Chỉ là mọi request HTML chạm
+  // thẳng VPS, và `/api/revalidate` purge một lớp biên rỗng.
+  //
+  // `scripts/ensure-cache-rule.ts` đã tồn tại từ 17/9/2026 với đúng câu "Site
+  // thứ ba sẽ gặp lại đúng chỗ này" — và site thứ ba gặp lại thật, ngày
+  // 25/9/2026, vì nút này không gọi nó. Nay có.
+  //
+  // ĐẶT SAU bước proxy, không trước: quy tắc cache chỉ có nghĩa khi request đi
+  // qua biên Cloudflare. Trước đó nó là cấu hình đúng cho một đường không ai đi.
+  if (cfToken && domain.cloudflareZoneId) {
+    try {
+      const mine = await cacheRules(domain.cloudflareZoneId, cfToken);
+      if (mine.length > 0) {
+        push({ key: "cache", title: "Quy tắc cache HTML", status: "skipped", detail: `Đã có ${mine.length} quy tắc.` });
+      } else {
+        /**
+         * Zone NGUỒN chọn tự động: zone đầu tiên (theo createdAt) thật sự CÓ
+         * quy tắc. Không lấy "site cũ nhất" rồi tin nó có — site cũ nhất cũng
+         * có thể là site chưa ai cấu hình cache, và khi đó bước này báo
+         * "no-source" trong khi ngay cạnh có một zone dùng được.
+         *
+         * Chép chứ không tự viết: quy tắc của zone đang chạy là đặc tả duy nhất
+         * đã được kiểm chứng bằng việc nó đang chạy, và vế dễ mất nhất khi viết
+         * lại là loại trừ `/api/`.
+         */
+        const others = await prisma.domain.findMany({
+          where: { name: { not: host }, cloudflareZoneId: { not: null } },
+          orderBy: { createdAt: "asc" },
+          select: { name: true, cloudflareZoneId: true },
+        });
+        let donor: { name: string; zoneId: string } | null = null;
+        for (const o of others) {
+          const rules = await cacheRules(o.cloudflareZoneId!, cfToken);
+          if (rules.length > 0) {
+            donor = { name: o.name, zoneId: o.cloudflareZoneId! };
+            break;
+          }
+        }
+        if (!donor) {
+          push({
+            key: "cache",
+            title: "Quy tắc cache HTML",
+            status: "waiting",
+            detail:
+              "Chưa zone nào có quy tắc cache để chép. Site đầu tiên phải đặt tay một lần " +
+              "(Cache Rules: cache HTML, loại trừ /api/), rồi site sau chép được.",
+          });
+        } else {
+          const r = await copyCacheRules({
+            token: cfToken,
+            targetZoneId: domain.cloudflareZoneId,
+            targetHost: host,
+            sourceZoneId: donor.zoneId,
+            sourceHost: donor.name,
+          });
+          push({
+            key: "cache",
+            title: "Quy tắc cache HTML",
+            status: r.status === "copied" ? "done" : r.status === "already" ? "skipped" : "waiting",
+            detail:
+              r.status === "copied"
+                ? `Chép ${r.rules.length} quy tắc từ ${donor.name}. Kiểm cf-cache-status: phải rời DYNAMIC.`
+                : r.status === "already"
+                  ? `Đã có ${r.rules.length} quy tắc.`
+                  : `Zone ${donor.name} không còn quy tắc nào để chép.`,
+          });
+        }
+      }
+    } catch (e) {
+      // HostLeftInRuleError là lỗi CÓ TÊN vì nó nói về một quy tắc sẽ không bao
+      // giờ khớp — thứ trông như đã cấu hình xong. Đừng gộp nó vào "lỗi mạng".
+      push({
+        key: "cache",
+        title: "Quy tắc cache HTML",
+        status: "failed",
+        detail:
+          e instanceof HostLeftInRuleError
+            ? `KHÔNG ghi gì: ${e.message}`
+            : e instanceof Error
+              ? e.message
+              : String(e),
       });
     }
   }
