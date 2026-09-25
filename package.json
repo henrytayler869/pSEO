@@ -58,7 +58,7 @@
     "verify:team-display-names": "tsx scripts/verify-team-display-names.ts",
     "verify:fixture-schedule": "tsx scripts/verify-fixture-schedule.ts",
     "test:push-key": "tsx scripts/test-push-key.ts",
-    "test:cache-rule": "tsx scripts/test-cache-rule-rewrite.ts"
+    "probe:index-coverage": "tsx scripts/probe-index-coverage.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.123.0",
