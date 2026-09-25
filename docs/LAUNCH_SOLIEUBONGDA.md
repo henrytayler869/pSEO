@@ -193,36 +193,58 @@ Kiểm bằng chính triệu chứng đã vỡ, không chỉ đếm hàng:
 node_modules/.bin/tsx -e "import {prisma} from './lib/db/prisma';import {resolveSite} from './lib/scripts/resolve-site';resolveSite({argv:['n','x','--site','solieubongda.com']}).then(console.log).finally(()=>prisma.\$disconnect())"
 ```
 
-### Bước 4 — nginx + chứng chỉ trên VPS · *phiên VPS — VIỆC DUY NHẤT CÒN LẠI*
+### ~~Bước 4 — nginx + chứng chỉ trên VPS~~ · *XONG 25/9 11:02, phiên VPS*
 
-`provision` không làm bước này. Đã giao cho phiên VPS ngày 25/9.
+Chứng chỉ Let's Encrypt thật cho `solieubongda.com`, hết hạn 24/12/2026,
+`certbot renew --dry-run` đạt. Đo lại độc lập từ session HQ, **không** `-k`:
 
-**Hai chỗ trong kho này đang nói khác nhau, và tôi không đọc được VPS nên không
-kết luận:**
+    https://solieubongda.com/          200   ssl_verify=0
+    issuer                             Let's Encrypt CN=YE2, subject CN=solieubongda.com
+    x-site-resolved-by                 nginx        (không rơi vào nhánh 404 của proxy.ts)
+    www. và http://                    301 -> https://solieubongda.com/
+    atmovingservices / theaccidentrecord   200 cả hai — khối mới là CỘNG THÊM
 
-- `manualSteps()` trong `lib/publisher/provision.ts` **không còn** liệt kê
-  nginx/cert, kèm ghi chú *"18/9/2026 chiều — khối nginx CHUNG xoá bỏ mục thứ
-  nhất"*.
-- Mục này, ở bản viết buổi sáng, **vẫn** đòi "một server block cho
-  `solieubongda.com` và một chứng chỉ", dẫn một chú thích cũ hơn.
+#### CHỖ MÂU THUẪN ĐÃ GIẢI: `provision.ts` đúng, tài liệu ra đúng kết luận bằng LÝ DO ĐÃ CHẾT
 
-Nếu khối nginx chung thật sự phục vụ mọi host thì có thể chỉ cần thêm host vào
-chứng chỉ (`certbot --expand` hoặc cert riêng), không cần server block mới.
-**Ai làm bước này: đọc cấu hình thật, làm theo cái đúng, rồi sửa chỗ sai trong
-hai chỗ trên** — một tài liệu dạy làm thừa một bước cũng là một tài liệu sai.
+Bản sáng nay nêu hai chỗ nói khác nhau mà không kết luận. Phiên VPS đọc cấu hình
+thật, và câu trả lời không phải "một trong hai đúng" — **cả hai đều không đủ**:
 
-Kiểm — phải ra **mã HTTP thật**, không phải lỗi TLS:
+`manualSteps()` ĐÚNG khi nói không cần bước tay: vhost `00-catchall` có
+`server_name _`, mang một cert **tự ký**, và `include snippets/publisher-app.conf`
+— tức nó **phục vụ** mọi host lạ chứ không chặn. Một host đi qua Cloudflare với
+SSL mode *full* (không strict) thì cert tự ký ở origin là đủ, không cần gì thêm.
 
-```bash
-curl -sS -o /dev/null -w '%{http_code}\n' https://solieubongda.com/
-```
+Tài liệu ĐÚNG khi nói cần chứng chỉ — nhưng **vì một lý do khác hẳn lý do nó
+viết**. Lý do thật: host này đang **MÂY XÁM** có chủ ý, nên trình duyệt nối
+**thẳng** vào origin và gặp cert tự ký → **lỗi TLS**, không phải một mã HTTP. Đo
+được: `curl https://solieubongda.com/` trả `000` từ ngoài trong khi `curl -k` qua
+`--resolve` trả 200. Đó chính là chỗ `verify:live` đỏ.
 
-**ĐỪNG BẬT ĐÁM MÂY CAM Ở BƯỚC NÀY.** A record đang để mây xám có chủ ý: bật
-proxy trước khi origin có chứng chỉ thì Cloudflare nối về bằng HTTPS tới một
-origin không có cert → cả site trả **526**, và thử thách ACME chết **ở tầng
-edge** với thông báo nói về challenge chứ không nói về SSL mode. Bật từ HQ sau.
+Hệ quả: nếu chỉ sửa tài liệu theo `manualSteps()` — "không cần gì cả" — thì host
+mới **vẫn đỏ đúng như trước**. Một kết luận đúng dựa trên lý do đã chết là thứ sẽ
+bị sửa sai ở lần dọn dẹp tiếp theo.
+
+**Câu đúng cho lần sau:**
+
+> Không cần server block cho một host đi qua Cloudflare (ssl=full) —
+> `00-catchall` phục vụ mọi host bằng cert tự ký. **CẦN** cert riêng khi host còn
+> **mây xám**, vì lúc đó client nối thẳng vào origin và cert tự ký thành lỗi TLS
+> chứ không thành mã HTTP. Thứ tự an toàn: **cert trước** (ACME đi qua
+> `00-catchall`, đã đo), rồi vhost, rồi mới bật cam.
+
+Và lo **526** thì không xảy ra: origin giờ có cert Let's Encrypt thật, và kể cả
+trước đó `00-catchall` đã có cert tự ký — dưới *full* (không strict) CF vẫn nhận.
+Với cert này bật được cả *full (strict)* cho host này nếu muốn.
 
 ### Bước 5 — bật proxy rồi deploy lại · *Control Panel, rồi phiên SEO bóng đá*
+
+**`verify:live` KHÔNG đòi đi qua Cloudflare.** Đọc `scripts/verify-live.ts`:
+điều kiện đạt là `x-site-resolved-by` khớp `wantResolvedBy: "nginx"`; `cf=` chỉ
+được IN ra, không được kiểm. Đo 25/9 sau khi có cert: cả 8 đường dẫn nó đòi
+(`/`, `/?cb=1`, `/about`, `/blog`, `/data`, `/privacy`, `/terms`, `/contact`) đều
+200 `by=nginx`, hai ca âm đều 404. Nên **bật cam không phải điều kiện để deploy
+hết đỏ** — nó là trạng thái đích vì hai host kia đều đã proxy, không phải nút
+chặn. Đừng gộp hai việc đó lại rồi tưởng phải làm cái này mới xong cái kia.
 
 **Bật đám mây cam là việc TAY, provision không làm.** Đọc kỹ bước 6 của
 `provision.ts`: khi origin chưa phục vụ HTTPS nó báo `waiting` kèm cảnh báo 526;
@@ -258,6 +280,45 @@ HAI file nên sửa một chỗ làm thân trang đúng mà **title vẫn sai**.
 
 Mọi cổng đều xanh suốt thời gian đó.
 
+#### Và lần này: 5 trang CẤP GIẢI trả 404, trong khi trang con của chúng sống
+
+Phiên VPS quét cả 358 URL trong sitemap ngày 25/9. Đo lại độc lập từ HQ, qua
+Internet thật:
+
+    /bong-da-nam                          200   ← trang cha
+    /bong-da-nam/de-1                     404
+    /bong-da-nam/en-1                     404
+    /bong-da-nam/es-1                     404
+    /bong-da-nam/fr-1                     404
+    /bong-da-nam/it-1                     404
+    /bong-da-nam/en-1/coventry-city-fc    200   ← trang con
+
+Cả 5 **có trong sitemap** (358 `<loc>`, mỗi cái đúng 1 lần) và **được link từ
+trang chủ** (`href="/bong-da-nam/<giải>-1"` cả năm). Tức năm giải quốc nội không
+có trang chỉ mục, và đó là điều hướng chính của site.
+
+KHÔNG phải nginx, phiên VPS đã loại trừ bằng cách hỏi thẳng app ở cổng 3100:
+`/solieubongda.com/bong-da-nam/en-1` → 404 ngay tại app. Và trên đĩa,
+`prerender-manifest` **không có** `en-1` trong khi **có** `en-1/coventry-city-fc`;
+`en-1.html` chỉ 11.965 byte và chứa "404", mtime là lúc có người gọi chứ không
+phải lúc build.
+
+Nên "1395/1395 trang" của bước build KHÔNG mâu thuẫn: năm route này không nằm
+trong tập được sinh, chứ không phải sinh ra rồi lỗi. Chỗ cần nhìn là hàm sinh
+tham số tĩnh cho **cấp giải**, không phải tầng render.
+
+**Vì sao nó lọt qua mọi thứ:** build xanh, `verify:live` xanh (danh sách đường
+dẫn của nó không có trang cấp giải), sitemap tồn tại và hợp lệ. Google lấy
+sitemap rồi ăn 5 cái 404 ở đúng năm trang điều hướng.
+
+**Và một lỗi ĐO suýt che đúng 5 cái đó.** Lần quét đầu của phiên VPS dùng
+`xargs -I{}` và nó chết giữa đường ("command line cannot be assembled, too
+long"): chỉ 108/358 URL được thử, nhưng bảng in ra `108 200` với danh sách
+"không 200" **rỗng** — đọc y hệt "toàn bộ sitemap đều xanh". Thứ cứu là in
+**đã thử / tổng** cạnh nhau. Một vòng lặp chết giữa đường trông giống hệt một
+vòng lặp sạch, và đây là họ hàng gần của mọi lỗi "không thấy gì = không có gì"
+trong kho này.
+
 ## Năm chỗ đã cắn trong tuần này, đừng cắn lại
 
 **`HQ_API_KEYS` là map THEO HOST.** Đổi host là đổi tên khoá trong map, ở cả
@@ -286,6 +347,9 @@ chuyển, không lỗi nào. Nay `scripts/test-argv.ts` quét và bắt được
 - **Không đặt `revalidateSecret` bằng tay.** Bước 3 chép từ site đã có.
 - **Không sinh thêm khoá cho site này.** Đã có khoá sống và nó đã nằm trên VPS;
   provision sẽ tự báo "skipped". Sinh thêm chỉ tạo hàng không ai cầm.
+- **Đừng coi deploy xanh là site xong.** Đo 25/9: `verify:live` đạt trong khi
+  5 trang cấp giải — điều hướng chính — trả 404 và nằm trong sitemap. Danh sách
+  đường dẫn của `verify:live` không phủ chúng.
 - **Không merge thêm gì vào `main` của publisher cho tới khi deploy xanh.**
   Mỗi PR mới đều chạy cùng một build và sẽ đỏ vì cùng một lý do, che mất lỗi
   thật của chính PR đó. Và `verify:live` đỏ vì host chưa phân giải sẽ làm đỏ
