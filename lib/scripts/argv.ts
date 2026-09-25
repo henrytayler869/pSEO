@@ -12,8 +12,20 @@
  * biến câu lệnh của họ thành một câu lệnh khác.
  */
 
-/** Cờ có nhận GIÁ TRỊ theo sau — giá trị đó không phải tham số vị trí. */
-const VALUE_FLAGS = new Set(["--site", "--file"]);
+/**
+ * Cờ có nhận GIÁ TRỊ theo sau — giá trị đó không phải tham số vị trí.
+ *
+ * DANH SÁCH NÀY PHẢI ĐẦY ĐỦ, và quên một cờ thì hỏng IM LẶNG. Đo 25/9/2026:
+ * `issue-publisher-key.ts` thêm `--via <id site>` mà không thêm vào đây, nên
+ * `positionals()[0]` trả về ID của site trung chuyển thay vì nhãn người gõ —
+ * và khoá được cấp với nhãn `cmtshrs8p00016xql1gyqmrof`. Không lỗi nào; chỉ
+ * một hàng trong bảng mang nhãn vô nghĩa, phát hiện khi có người đọc bảng.
+ *
+ * `scripts/test-argv.ts` quét mọi script dùng `positionals()` và đòi mọi cờ
+ * ĐỌC GIÁ TRỊ trong đó phải có mặt ở đây — vì lần sau người thêm cờ cũng sẽ
+ * không nghĩ tới file này.
+ */
+export const VALUE_FLAGS = new Set(["--site", "--file", "--via"]);
 
 export function positionals(argv: string[] = process.argv): string[] {
   const out: string[] = [];
