@@ -10,6 +10,7 @@ import { normalizeHost } from "@/lib/publisher/link-domain";
 import { getVerticalsWithPages } from "@/lib/queries/verticals";
 import { createPublisherKey, revokePublisherKey } from "@/lib/settings/api-key";
 import { pushKeyToSite, isHeaderSafeSecret } from "@/lib/publisher/push-key";
+import { resolveCourier } from "@/lib/publisher/couriers";
 import { judgeReadiness } from "@/lib/publisher/site-config";
 import { judgeFillBudget, COST_PER_PASSAGE_USD } from "@/lib/ai/fill-queue";
 import { buildFillQueue } from "@/lib/queries/fill-queue";
@@ -334,6 +335,19 @@ export interface CreateKeyResult {
   pushed?: boolean;
 }
 
+/**
+ * Đẩy khoá QUA một site khác, khi site đích chưa trả lời được.
+ *
+ * Ca dùng thật: site mới chưa phân giải DNS, nên vừa không nhận được khoá vừa
+ * chưa có revalidate secret của riêng nó — mà thiếu khoá thì build đỏ, và build
+ * phải xanh trước khi có gì để trỏ DNS vào. `lib/publisher/couriers.ts` giải
+ * thích vì sao đường này tới đúng chỗ và vì sao nó không mở rộng bán kính.
+ *
+ * Phải CHỌN, không tự rơi vào. Nếu đẩy thẳng hụt thì action trả về thất bại
+ * kèm lý do, chứ không âm thầm thử lại qua host khác: một đường vận chuyển bí
+ * mật tự đổi đích khi gặp lỗi là thứ không ai truy được về sau.
+ */
+
 export async function createPublisherKeyAction(_prev: CreateKeyResult, formData: FormData): Promise<CreateKeyResult> {
   const websiteId = String(formData.get("websiteId") ?? "");
   const label = String(formData.get("label") ?? "");
@@ -345,12 +359,24 @@ export async function createPublisherKeyAction(_prev: CreateKeyResult, formData:
   });
   if (!site) return { ok: false, message: "Không tìm thấy website." };
 
+  // Giải quyết đường đi TRƯỚC khi sinh khoá. HQ chỉ lưu băm, nên một khoá đã
+  // tạo mà không tới được site là khoá không ai cầm — nó nằm trong bảng trông
+  // y như khoá còn sống. Kiểm điều biết trước được (site trung chuyển có tồn
+  // tại, có secret dùng được) trước khi có gì phải thu hồi.
+  const viaId = String(formData.get("via") ?? "");
+  let via: { url: string; revalidateSecret: string; name: string } | undefined;
+  if (viaId) {
+    const resolved = await resolveCourier(viaId, websiteId);
+    if ("error" in resolved) return { ok: false, message: resolved.error };
+    via = resolved;
+  }
+
   const { key } = await createPublisherKey(websiteId, label);
 
   // Đẩy luôn, không để thành một nút thứ hai. Một khoá đã tạo mà chưa đẩy là
   // một hàng trong bảng không tương ứng với gì cả — và nút "đẩy" riêng là nút
   // người ta sẽ quên bấm, rồi kết luận tính năng hỏng.
-  const push = await pushKeyToSite(site, key);
+  const push = await pushKeyToSite(site, key, via);
 
   revalidatePath(`/publisher/${websiteId}`);
   return {

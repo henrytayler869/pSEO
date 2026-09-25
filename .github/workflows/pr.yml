@@ -159,6 +159,19 @@ jobs:
       - name: Script không được tự đoán chạy trên site nào
         run: npx tsx scripts/test-resolve-site.ts
 
+      # Không mạng, không DB: fetch bị thay bằng stub, nên mọi phản hồi là ca
+      # dựng sẵn. Script này đã tồn tại từ lâu mà KHÔNG ở trong package.json và
+      # KHÔNG ở trong cổng nào — tức nó chỉ chạy khi có người nhớ ra nó.
+      #
+      # Hai nhóm ca nó canh, và cả hai đều im lặng khi hỏng:
+      #   - một 200 KHÔNG mang cờ xác nhận phải là THẤT BẠI. Báo thành công cho
+      #     một lần đẩy hụt sẽ khiến người ta thu hồi khoá cũ và làm chết site.
+      #   - đẩy qua site anh em phải gửi yêu cầu tới host TRUNG CHUYỂN nhưng đặt
+      #     host ĐÍCH trong body. Lẫn hai thứ đó thì site đang sống nhận khoá của
+      #     site khác, và lần đẩy vẫn báo thành công.
+      - name: Đẩy khoá — 200 không xác nhận là thất bại, và host đích không được lẫn với host trung chuyển
+        run: npx tsx scripts/test-push-key.ts
+
       # Ca "cờ đứng trước số" là lỗi thật đã đo: Number(argv[2]) gặp --site
       # cho NaN, slice(0, NaN) cho mảng rỗng, script in "31 cụm" và sinh 0
       # đoạn — không lỗi nào. Im lặng nên chỉ test bắt được.

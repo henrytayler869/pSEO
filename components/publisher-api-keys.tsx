@@ -9,6 +9,7 @@ import {
 } from "@/app/publisher/actions";
 import { Button } from "@/components/ui/button";
 import type { PublisherKeyRow } from "@/lib/settings/api-key";
+import type { CourierSite } from "@/lib/publisher/couriers";
 
 const createInitial: CreateKeyResult = { ok: false, message: "" };
 const revokeInitial: ActionResult = { ok: false, message: "" };
@@ -23,10 +24,16 @@ export function PublisherApiKeys({
   websiteId,
   vertical,
   keys,
+  hasSecret,
+  couriers,
 }: {
   websiteId: string;
   vertical: string;
   keys: PublisherKeyRow[];
+  /** Site này có revalidate secret dùng được hay chưa. Không có thì đẩy thẳng
+   * chắc chắn hụt, và ô chọn phải nói ra điều đó TRƯỚC khi ai bấm. */
+  hasSecret: boolean;
+  couriers: CourierSite[];
 }) {
   const [createState, createAction, creating] = useActionState(createPublisherKeyAction, createInitial);
   const [revokeState, revokeAction, revoking] = useActionState(revokePublisherKeyAction, revokeInitial);
@@ -108,10 +115,30 @@ export function PublisherApiKeys({
           placeholder="đặt tên, ví dụ: build trên Vercel"
           className="w-72 rounded-md border px-2.5 py-1.5 text-sm"
         />
+        {couriers.length > 0 && (
+          <select name="via" defaultValue="" className="rounded-md border px-2.5 py-1.5 text-sm">
+            <option value="">
+              {hasSecret ? "đẩy thẳng sang site này" : "đẩy thẳng (site này chưa có secret → sẽ hụt)"}
+            </option>
+            {couriers.map((c) => (
+              <option key={c.id} value={c.id}>
+                đi qua {c.name}
+              </option>
+            ))}
+          </select>
+        )}
         <Button type="submit" size="sm" disabled={creating}>
           {creating ? "Đang tạo…" : "Tạo khoá"}
         </Button>
       </form>
+      {couriers.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          <strong>Đi qua site khác</strong> dùng khi site này chưa trả lời được — DNS chưa phân giải, chứng chỉ chưa có, hoặc chưa
+          có revalidate secret riêng. Mọi publisher chạy từ một kho và ghi vào cùng một file khoá, nên đẩy qua host nào cũng tới
+          đúng chỗ; host đích đi trong nội dung yêu cầu. Chọn site vừa deploy xanh gần nhất, và <em>phải chọn</em> — đẩy thẳng hụt
+          thì báo hụt, không tự đổi đường.
+        </p>
+      )}
       <p className="text-xs text-muted-foreground">
         Xoay khoá: tạo khoá mới → đổi bên publisher → đợi dòng &ldquo;dùng&rdquo; của khoá cũ ngừng chạy → thu hồi. Thu hồi trước khi đổi
         là làm site chết trong quãng giữa.

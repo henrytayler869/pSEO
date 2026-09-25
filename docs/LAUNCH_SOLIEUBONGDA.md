@@ -6,7 +6,7 @@ Viết 25/9/2026. Trạng thái đo được lúc viết, không phải trạng 
     dig solieubongda.com     RỖNG — còn ở nameserver parking của Gname
     Website row              CÓ, vertical bong-da-nam, id cmuclgvm7…
     Domain row (HQ)          CHƯA CÓ  ← nút chặn đầu tiên
-    revalidateSecret         NULL
+    revalidateSecret         NULL   (không còn chặn — xem "Trừ khi đẩy QUA")
     khoá API còn hiệu lực    1 (nhưng chỉ lưu keyHash — xem §3)
     deploy publisher         ĐỎ: 403 /sites/solieubongda.com/config
     hai site cũ              200, không noindex, KHÔNG gián đoạn
@@ -25,6 +25,37 @@ về sớm với lý do cụ thể — nó KHÔNG "hỏng nhưng báo ok", và c
 
 > *một khoá đẩy hụt mà báo thành công sẽ khiến người ta thu hồi khoá cũ và
 > làm chết site.*
+
+### Trừ khi đẩy QUA một site đang sống — thêm 25/9/2026
+
+Ba điều kiện trên là của đường THẲNG. Ô chọn cạnh nút "Tạo khoá" mở đường thứ
+hai: gửi yêu cầu tới host của một publisher **đang sống**, và đặt host đích
+trong nội dung yêu cầu. Cả hai nút chặn của đường thẳng đều không còn nằm trên
+đường này:
+
+    nút chặn                        đẩy thẳng   đi qua site anh em
+    DNS chưa phân giải              CHẶN        không đụng tới
+    chưa có chứng chỉ               CHẶN        không đụng tới
+    revalidateSecret của site NULL  CHẶN        dùng secret của site anh em
+
+Nó tới đúng chỗ vì **một kho publisher phục vụ mọi site**: cùng build, cùng
+tiến trình, cùng file `.hq-key`, và `writePushedKey` GỘP (`{...readMap(), [h]:
+key}`) nên khoá của hai site kia không bị đụng. Endpoint bên publisher đã cố ý
+nhận host lạ từ 17/9/2026 (`1ef64a9`, "gỡ vòng lặp dựng site mới") — trước bản
+build đang chạy, nên đường này dùng được ngay mà không cần deploy lại trước.
+
+Đánh đổi, nói thẳng: **secret của site B trở thành thứ cho phép ghi khoá của
+site A.** Chấp nhận được vì ranh giới tin cậy ở đây là cả deployment chứ không
+phải từng hostname, và ai cầm `REVALIDATE_SECRET` thì vốn đã purge sạch zone
+Cloudflare cùng ép build lại được rồi.
+
+**Phải chọn, không tự rơi vào.** Đẩy thẳng hụt thì báo hụt — không tự thử lại
+qua host khác. Một đường vận chuyển bí mật tự đổi đích khi gặp lỗi là thứ không
+ai truy được về sau.
+
+Hệ quả cho quy trình dưới đây: **bước 2 (nameserver) không còn là điều kiện
+tiên quyết để deploy xanh.** Cấp khoá qua site anh em trước, deploy xanh, rồi
+trỏ DNS khi thuận tiện. Các bước 1→6 vẫn phải chạy đủ để site có người xem.
 
 ## Thứ tự, và ai làm bước nào
 
