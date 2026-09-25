@@ -5,7 +5,9 @@
 // NaN, slice(0, NaN) cho mảng rỗng — script in "31 cụm" và sinh 0 đoạn,
 // không lỗi nào. Ca "cờ đứng trước số" bên dưới chính là ca đó.
 
-import { positionals, numberArg, BadArgError } from "../lib/scripts/argv";
+import fs from "node:fs";
+import path from "node:path";
+import { positionals, numberArg, BadArgError, VALUE_FLAGS } from "../lib/scripts/argv";
 
 const argv = (...rest: string[]) => ["node", "script.ts", ...rest];
 
@@ -62,6 +64,57 @@ check("cờ boolean không nuốt tham số theo sau", () => {
 
 check("không cờ nào → mọi thứ là tham số vị trí", () => {
   eq(positionals(argv("/x", "/y")), ["/x", "/y"], "positionals");
+});
+
+check("giá trị của --via không lọt vào tham số vị trí", () => {
+  // Ca ĐÃ XẢY RA 25/9/2026: issue-publisher-key.ts thêm --via mà quên
+  // VALUE_FLAGS, nên nhãn khoá lưu thành id của site trung chuyển.
+  eq(positionals(argv("--site", "a.com", "--via", "cmt123", "nhãn")), ["nhãn"], "positionals");
+});
+
+/**
+ * CỔNG CHỐNG TÁI DIỄN, không phải một ca nữa.
+ *
+ * Ca ở trên chỉ canh đúng cờ tôi vừa thêm. Lỗi thật thì ở chỗ khác: người thêm
+ * cờ MỚI vào một script cũng sẽ không nghĩ tới lib/scripts/argv.ts, y như lần
+ * này — và hậu quả im lặng (một nhãn sai, hoặc ở script khác là một con số bị
+ * nuốt) nên không có gì đỏ lên để nhắc họ.
+ *
+ * Nên quét thay vì liệt kê: file nào gọi positionals() thì mọi cờ ĐỌC GIÁ TRỊ
+ * trong đó phải có trong VALUE_FLAGS. "Đọc giá trị" nhận ra bằng chính hình
+ * dạng code đang dùng — `indexOf("--x")` rồi lấy phần tử `+ 1`. Cờ boolean
+ * (`--yes`, `--dry`) không khớp hình dạng đó, và đúng là chúng KHÔNG được vào
+ * VALUE_FLAGS: cho vào thì chúng nuốt tham số đứng sau.
+ */
+check("mọi cờ đọc-giá-trị trong script dùng positionals() đều đã khai", () => {
+  const dir = path.join(process.cwd(), "scripts");
+  const offenders: string[] = [];
+  let scanned = 0;
+  let flagsSeen = 0;
+
+  for (const f of fs.readdirSync(dir).filter((n) => n.endsWith(".ts"))) {
+    const src = fs.readFileSync(path.join(dir, f), "utf-8");
+    if (!/\bpositionals\s*\(/.test(src)) continue;
+    scanned++;
+    for (const m of src.matchAll(/indexOf\("(--[a-z0-9-]+)"\)([\s\S]{0,160})/g)) {
+      const [, flag, after] = m;
+      if (!/\+\s*1\s*\]/.test(after)) continue; // cờ boolean: không lấy phần tử kế
+      flagsSeen++;
+      if (!VALUE_FLAGS.has(flag)) offenders.push(`${f}: ${flag}`);
+    }
+  }
+
+  // ĐỐI CHỨNG DƯƠNG. Không có nó thì một regex hỏng — hay một lần đổi tên thư
+  // mục — cho ra "0 vi phạm" và đọc y hệt "đã quét xong, sạch".
+  if (scanned === 0) throw new Error("không quét được script nào — phép kiểm này đang không kiểm gì");
+  if (flagsSeen === 0) throw new Error(`quét ${scanned} file mà không thấy cờ đọc-giá-trị nào — regex hỏng`);
+
+  if (offenders.length > 0) {
+    throw new Error(
+      `cờ đọc giá trị nhưng thiếu trong VALUE_FLAGS (lib/scripts/argv.ts): ${offenders.join(", ")}` +
+        " — giá trị của chúng sẽ lọt vào positionals() và im lặng thành tham số vị trí"
+    );
+  }
 });
 
 console.log(`\n${pass}/${pass + fails.length} đúng.`);

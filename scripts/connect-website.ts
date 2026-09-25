@@ -89,6 +89,7 @@
 
 import fs from "node:fs";
 import { prisma } from "../lib/db/prisma";
+import { findWebsiteForDomain } from "../lib/publisher/link-domain";
 import { assertValidGscProperty } from "../lib/google/search-console";
 import { assertValidGa4MeasurementId, assertValidGa4PropertyId } from "../lib/google/analytics-data";
 import { deriveWpApiBaseUrl } from "../lib/wordpress/rest-api";
@@ -244,8 +245,23 @@ async function main() {
     return;
   }
 
+  /**
+   * TÌM THEO HOST trước, rồi mới quyết tạo hay cập nhật.
+   *
+   * Bản trước `upsert` với `where: { gscPropertyUrl: gsc }`. Cùng lỗi đã nổ ở
+   * lib/publisher/provision.ts ngày 25/9/2026 và ghi chi tiết ở đó: hàng nào
+   * có `gscPropertyUrl` NULL — hoặc mang property dạng URL-prefix thay vì
+   * `sc-domain:` — thì không khớp, và `upsert` TẠO HÀNG THỨ HAI cho cùng một
+   * host thay vì cập nhật hàng đang có.
+   *
+   * `findWebsiteForDomain` là định nghĩa "cùng một site" của cả app. Dùng nó
+   * ở đây nghĩa là lệnh này không có ý kiến riêng.
+   */
+  const allSites = await prisma.website.findMany({ select: { id: true, name: true, url: true } });
+  const linked = findWebsiteForDomain(url, allSites);
+
   const website = await prisma.website.upsert({
-    where: { gscPropertyUrl: gsc },
+    where: linked ? { id: linked.id } : { gscPropertyUrl: gsc },
     create: {
       name,
       url,

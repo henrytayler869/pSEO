@@ -7,6 +7,7 @@ import { createPublisherKey } from "@/lib/settings/api-key";
 import { pushKeyToSite } from "@/lib/publisher/push-key";
 import { writeSiteToRepo } from "@/lib/publisher/repo-write";
 import { specFor } from "@/lib/content-spec/niche-spec";
+import { findWebsiteForDomain } from "@/lib/publisher/link-domain";
 
 /**
  * "Dựng Site": chạy những bước HQ THẬT SỰ làm được, và nói rõ những bước
@@ -185,7 +186,18 @@ export async function provisionSite(input: ProvisionInput): Promise<ProvisionRep
   // ── 2. GA4 property + luồng web ────────────────────────────────────────
   let ga4PropertyId: string | null = null;
   let ga4MeasurementId: string | null = null;
-  const existing = await prisma.website.findFirst({ where: { url: siteUrl } });
+  /**
+   * "Site này đã nối chưa" phải hỏi theo HOST, bằng đúng luật cả app dùng.
+   *
+   * Bản trước hỏi `where: { url: siteUrl }` — so chuỗi. Nó đúng khi URL trong DB
+   * khớp từng ký tự với `https://<host>`, và im lặng trả null khi hàng đang lưu
+   * dạng có `www.` hay có dấu `/` cuối. `findWebsiteForDomain` là chỗ định nghĩa
+   * "cùng một site" cho toàn bộ app — dùng nó ở đây thì nút này không thể có ý
+   * kiến riêng về việc hai hàng có phải một site.
+   */
+  const allSites = await prisma.website.findMany({ select: { id: true, name: true, url: true } });
+  const linked = findWebsiteForDomain(host, allSites);
+  const existing = linked ? await prisma.website.findUnique({ where: { id: linked.id } }) : null;
   if (existing?.ga4PropertyId) {
     ga4PropertyId = existing.ga4PropertyId;
     ga4MeasurementId = existing.ga4MeasurementId;
@@ -230,28 +242,61 @@ export async function provisionSite(input: ProvisionInput): Promise<ProvisionRep
     });
   } else {
     try {
-      const site = await prisma.website.upsert({
-        where: { gscPropertyUrl: `sc-domain:${host}` },
-        create: {
-          name: input.name,
-          url: siteUrl,
-          vertical: input.vertical,
-          tagline: input.tagline,
-          description: input.description,
-          gscPropertyUrl: `sc-domain:${host}`,
-          ga4PropertyId: ga4PropertyId ?? "",
-          ga4MeasurementId,
-        },
-        update: {
-          name: input.name,
-          tagline: input.tagline,
-          description: input.description,
-          ...(ga4PropertyId ? { ga4PropertyId } : {}),
-          ...(ga4MeasurementId ? { ga4MeasurementId } : {}),
-        },
-      });
+      /**
+       * NHẬN DIỆN THEO ID CỦA HÀNG ĐÃ TÌM ĐƯỢC, không theo `gscPropertyUrl`.
+       *
+       * Đo 25/9/2026 trên solieubongda.com: bản trước `upsert` với
+       * `where: { gscPropertyUrl: "sc-domain:<host>" }`. Hàng của site đó có
+       * `gscPropertyUrl` NULL — Search Console gắn sau, và cột này nullable
+       * đúng vì thế — nên không khớp gì, và `upsert` TẠO HÀNG THỨ HAI cho cùng
+       * một host. Mọi site dựng qua trang Publisher mà chưa gắn Search Console
+       * đều bị nhân đôi y như vậy.
+       *
+       * Hậu quả không tự lộ ra. Tài sản chia làm hai — khoá còn sống và sổ chi
+       * tiêu ở hàng cũ, GA4 với revalidate secret ở hàng mới — và thứ báo động
+       * đầu tiên là `resolveSite` từ chối đoán, với một thông báo nói về "nhiều
+       * site" chứ không nói về hàng trùng.
+       *
+       * Và NHÃN CŨNG NÓI DỐI: `status: existing ? "skipped" : "done"` đọc
+       * `existing` (tìm theo host, có) trong khi `upsert` đi theo đường khác
+       * (tìm theo gscPropertyUrl, không có). Nên nó in "skipped · id <id mới>"
+       * đúng lúc nó vừa tạo một hàng. Nhãn phải nói về việc ĐÃ LÀM, nên giờ nó
+       * suy từ chính nhánh code chạy.
+       */
+      const site = existing
+        ? await prisma.website.update({
+            where: { id: existing.id },
+            data: {
+              name: input.name,
+              tagline: input.tagline,
+              description: input.description,
+              // Chỉ ĐIỀN chỗ trống, không ghi đè: một site đã gắn Search Console
+              // bằng property khác dạng (URL-prefix thay vì sc-domain) thì giá
+              // trị suy ra ở đây sai, và ghi đè là làm mất cấu hình đang chạy.
+              ...(existing.gscPropertyUrl ? {} : { gscPropertyUrl: `sc-domain:${host}` }),
+              ...(ga4PropertyId ? { ga4PropertyId } : {}),
+              ...(ga4MeasurementId ? { ga4MeasurementId } : {}),
+            },
+          })
+        : await prisma.website.create({
+            data: {
+              name: input.name,
+              url: siteUrl,
+              vertical: input.vertical,
+              tagline: input.tagline,
+              description: input.description,
+              gscPropertyUrl: `sc-domain:${host}`,
+              ga4PropertyId: ga4PropertyId ?? "",
+              ga4MeasurementId,
+            },
+          });
       websiteId = site.id;
-      push({ key: "connect", title: "Nối Website", status: existing ? "skipped" : "done", detail: `id ${site.id}` });
+      push({
+        key: "connect",
+        title: "Nối Website",
+        status: existing ? "skipped" : "done",
+        detail: existing ? `đã có, cập nhật id ${site.id}` : `tạo mới id ${site.id}`,
+      });
     } catch (e) {
       push({ key: "connect", title: "Nối Website", status: "failed", detail: e instanceof Error ? e.message : String(e) });
     }
