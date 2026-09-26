@@ -120,13 +120,28 @@ export function zonedWallClockToInstant(date: string, time: string, timeZone: st
   return guess;
 }
 
-function formatVn(at: Date, opts: Intl.DateTimeFormatOptions): string {
+/**
+ * Định dạng một thời điểm TUYỆT ĐỐI theo giờ Việt Nam.
+ *
+ * Xuất ra ngoài vì `table.ts` in ngày của trận ĐÃ đá bằng đúng phép quy đổi
+ * này. Hai chỗ định dạng một thời điểm là hai câu trả lời cho một câu hỏi —
+ * cùng lý lẽ với `FootballFact.display`.
+ */
+export function formatVn(at: Date, opts: Intl.DateTimeFormatOptions): string {
   return new Intl.DateTimeFormat("vi-VN", { timeZone: VN_TIMEZONE, ...opts }).format(at);
 }
 
-function toUpcoming(match: FootballMatch, leagueCode: string): UpcomingMatch {
+/** Ngày giờ VN của một trận, hoặc null khi nguồn không ghi giờ. */
+export function vnInstantOf(
+  match: { date: string; time?: string | null },
+  leagueCode: string
+): Date | null {
   const tz = LEAGUE_TIMEZONE[leagueCode];
-  const kickoff = tz && match.time ? zonedWallClockToInstant(match.date, match.time, tz) : null;
+  return tz && match.time ? zonedWallClockToInstant(match.date, match.time, tz) : null;
+}
+
+function toUpcoming(match: FootballMatch, leagueCode: string): UpcomingMatch {
+  const kickoff = vnInstantOf(match, leagueCode);
   return {
     sourceDate: match.date,
     sourceTime: match.time ?? null,

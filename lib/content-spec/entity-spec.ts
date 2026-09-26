@@ -60,7 +60,24 @@ export type EntityScope = "TEAM" | "LEAGUE" | "FIXTURE";
  * Cùng 96 trang, cùng dữ liệu đã có (trận chưa đá nằm sẵn trong file mùa với
  * `fullTime: null`). Khác nhau ở thứ trang trả lời.
  */
-export type EntitySectionKind = "metrics" | "fixtures";
+/**
+ * `standings` đọc BẢNG xếp hạng, `results` đọc danh sách trận ĐÃ đá — hai
+ * hình dạng dữ liệu thêm ngày 26/9/2026, xem `lib/football/table.ts`.
+ *
+ * ═══ VÌ SAO CHÚNG LÀ MỤC CỦA ĐẶC TẢ, KHÔNG PHẢI MÃ TRONG VIEW ═══
+ *
+ * Tiêu đề "Bảng xếp hạng" và "Kết quả gần đây" là chữ của NGHỀ bóng đá. Viết
+ * chúng thẳng vào `entity-view.tsx` là đặt lại đúng cái bẫy mà cả tầng đặc tả
+ * này tồn tại để tránh: nghề thứ hai đi trục thực thể sẽ in chữ bóng đá, y
+ * như 90 trang tai nạn từng in văn xuôi chuyển nhà.
+ *
+ * Trang giải đã HỨA bảng xếp hạng trong chính `title` của nó từ trước —
+ * "{league} {season} — bảng xếp hạng và lịch thi đấu" — mà không có mục nào
+ * in bảng. Đo 26/9/2026 trên production: thẻ title và description khai bảng,
+ * thân trang có lịch, ba chỉ số mặt bằng và một đoạn văn. Dữ liệu thì đã có
+ * sẵn: `buildStandings` vẫn chạy để tính thứ hạng cho từng trang đội.
+ */
+export type EntitySectionKind = "metrics" | "fixtures" | "standings" | "results";
 
 export interface EntitySection {
   key: string;
@@ -77,6 +94,14 @@ export interface EntitySection {
    * tới khi nào" — nó chôn câu trả lời xuống dưới màn hình thứ mười.
    */
   fixtureLimit?: number;
+  /**
+   * Số trận ĐÃ đá tối đa của mục `results`. Bỏ qua với loại mục khác.
+   *
+   * Tách khỏi `fixtureLimit` chứ không dùng chung một trường: một trang có
+   * thể muốn 5 trận tới và 10 trận vừa rồi, và một trường dùng chung buộc hai
+   * quyết định đó phải bằng nhau mà không ai nói ra vì sao.
+   */
+  resultLimit?: number;
   /** Thiếu bất kỳ chỉ số nào ở đây thì KHÔNG render mục. */
   requires: readonly string[];
   /** Nhắc thêm nếu có; thiếu thì mục vẫn render. */
@@ -89,6 +114,35 @@ export interface EntitySection {
    */
   says: string;
 }
+
+/**
+ * Một ô của DẢI TRẢ LỜI đầu trang.
+ *
+ * ═══ VÌ SAO DẢI NÀY CŨNG PHẢI NẰM TRONG ĐẶC TẢ ═══
+ *
+ * "Xếp hạng", "Phong độ", "Trận tới" là chữ của NGHỀ bóng đá. Viết chúng vào
+ * `entity-view.tsx` — file mà mọi nghề đi trục thực thể dùng chung — là đặt
+ * lại đúng cái bẫy tầng đặc tả sinh ra để tránh.
+ *
+ * Ba loại ô, vì dải này đọc ba nguồn khác nhau:
+ *   - `metric` lấy một chỉ số đã có, in `display` nguyên văn;
+ *   - `form`   lấy chuỗi thắng/hoà/thua từ bảng xếp hạng;
+ *   - `next`   lấy trận chưa đá sớm nhất từ danh sách lịch.
+ *
+ * Ô nào không có dữ liệu thì KHÔNG render — dải bốn ô thành ba ô đọc được,
+ * còn một ô trống thì nói "chúng tôi định đo cái này mà không có".
+ */
+export type EntitySummaryItem =
+  | {
+      kind: "metric";
+      metric: string;
+      /** Chỗ thay: {team} {opponent} {league} {season}. */
+      label: string;
+      /** Chữ nhỏ cạnh con số. Nhận thêm {metric:tên} như câu FAQ. */
+      note?: string;
+    }
+  | { kind: "form"; label: string }
+  | { kind: "next"; label: string };
 
 export interface EntityFaqEntry {
   key: string;
@@ -108,6 +162,15 @@ export interface EntityPageSpec {
   title: string;
   description: string;
   sections: readonly EntitySection[];
+  /**
+   * Tối đa 4 ô ở đầu trang, trước mọi mục.
+   *
+   * Đo 26/9/2026 trên trang thật: trang đội in 20 ô chỉ số ngang trọng lượng
+   * nhau, nên người vào từ truy vấn "lịch thi đấu bayern" phải quét hết để
+   * tìm một dòng. Dải này gom thứ hay bị hỏi nhất lên trên; phần còn lại của
+   * trang vẫn là bằng chứng cho nó.
+   */
+  summary?: readonly EntitySummaryItem[];
   /** Tiêu đề bọc ngoài đoạn diễn giải do AI viết. */
   interpretationHeading: string;
   faq?: { heading: string; entries: readonly EntityFaqEntry[] };
@@ -151,6 +214,12 @@ const FOOTBALL: EntityContentSpec = {
         "Lịch thi đấu sắp tới của {team} ở {league} theo giờ Việt Nam, kèm số liệu mùa {season}: " +
         "thứ hạng, phong độ, tách sân nhà và sân khách — và ngày của trận gần nhất đã tính vào.",
       interpretationHeading: "Những con số này cho thấy gì về {team}",
+      summary: [
+        { kind: "metric", metric: "team_position", label: "Xếp hạng" },
+        { kind: "metric", metric: "team_points", label: "Điểm", note: "sau {metric:team_played} trận" },
+        { kind: "form", label: "5 trận gần nhất" },
+        { kind: "next", label: "Trận tới" },
+      ],
       sections: [
         /**
          * Mục LỊCH đứng ĐẦU, trước mọi mục số liệu.
@@ -181,16 +250,45 @@ const FOOTBALL: EntityContentSpec = {
             "luật với halfTime null nghĩa là 'không biết'. Đo 24/9/2026: Ngoại hạng Anh đủ giờ " +
             "cho cả 330 trận chưa đá, còn Bundesliga thiếu giờ ở 198/270 trận.",
         },
+        /**
+         * Cùng khoá `standing`, cùng `requires`, ĐỔI cách trình bày: ba ô số
+         * thành một CỬA SỔ bảng xếp hạng quanh chính đội này.
+         *
+         * `requires` giữ nguyên ba chỉ số vì chúng vẫn là điều kiện đúng —
+         * không có thứ hạng thì không có gì để tô trong bảng — và vì đổi nó
+         * sẽ đẩy ba chỉ số sang `excluded` mà không có lý do thật nào.
+         *
+         * Ba con số ấy giờ hiện ở hai chỗ: dải trả lời đầu trang, và dòng của
+         * đội trong bảng. In thêm ba ô rời nữa là nói cùng một điều ba lần.
+         */
         {
           key: "standing",
           heading: "{team} đang đứng ở đâu",
           scope: "TEAM",
+          kind: "standings",
           requires: ["team_position", "team_points", "team_played"],
           optional: ["team_won", "team_drawn", "team_lost"],
           says:
-            "Thứ hạng, điểm và số trận đã đá. Bảng xếp hạng TÍNH TỪ chính các trận đã đá, không lấy " +
-            "từ nguồn thứ hai — hai con số cho cùng một sự thật sẽ lệch đúng vào ngày có trận hoãn " +
-            "hoặc trừ điểm, tức đúng ngày người ta vào xem.",
+            "Cửa sổ bảng xếp hạng quanh đội này — hai đội trên, hai đội dưới — tô dòng của chính nó. " +
+            "Bảng TÍNH TỪ chính các trận đã đá, không lấy từ nguồn thứ hai: hai con số cho cùng một " +
+            "sự thật sẽ lệch đúng vào ngày có trận hoãn hoặc trừ điểm, tức đúng ngày người ta vào xem. " +
+            "KHÔNG tô vùng dự cúp châu Âu — nguồn không nói suất nào đi đâu.",
+        },
+        {
+          key: "ket-qua",
+          heading: "Kết quả gần đây của {team}",
+          scope: "TEAM",
+          kind: "results",
+          resultLimit: 5,
+          /**
+           * Đòi `team_played`: mùa chưa đá trận nào thì không có kết quả nào,
+           * và một tiêu đề "kết quả gần đây" trên danh sách rỗng tệ hơn không
+           * có mục — cùng luật với mục lịch thi đấu.
+           */
+          requires: ["team_played"],
+          says:
+            "Các trận ĐÃ có tỷ số của đội này, mới nhất trước, kèm tỷ số hiệp một khi nguồn có ghi. " +
+            "Hiệp một null nghĩa là KHÔNG BIẾT, in ô trống chứ không in 0-0.",
         },
         {
           key: "goals",
@@ -297,6 +395,12 @@ const FOOTBALL: EntityContentSpec = {
         "Lịch sử đối đầu giữa {team} và {opponent} ở {league} mùa {season}: số trận, kết quả và bàn " +
         "thắng của mỗi bên, kèm ngày của trận gần nhất đã tính vào.",
       interpretationHeading: "Những lần {team} gặp {opponent} cho thấy gì",
+      summary: [
+        { kind: "metric", metric: "h2h_meetings", label: "Đã gặp nhau", note: "trận" },
+        { kind: "metric", metric: "h2h_wins_a", label: "{team} thắng" },
+        { kind: "metric", metric: "h2h_wins_b", label: "{opponent} thắng" },
+        { kind: "metric", metric: "h2h_draws", label: "Hoà" },
+      ],
       sections: [
         {
           key: "h2h-record",
@@ -306,6 +410,43 @@ const FOOTBALL: EntityContentSpec = {
           says:
             "Số lần hai đội đã gặp nhau trong tập dữ liệu đang có, và kết quả từng bên. Cấp CẶP ĐỐI " +
             "ĐẦU — không được trình bày như phong độ chung của một đội.",
+        },
+        /**
+         * Lần gặp lại SẮP TỚI — mục duy nhất trên trang cặp đọc danh sách trận
+         * chưa đá, và nó tồn tại một phần để phép sửa 26/9/2026 có chỗ hiện ra.
+         *
+         * Trước hôm đó `buildEntityFactSet` lọc danh sách đã quy về tên HIỂN
+         * THỊ bằng tên NGUỒN, nên `upcoming` của 119/876 trang cặp rỗng sạch —
+         * 203 dòng trận. Không trang nào in ra điều đó, vì không mục nào đọc
+         * trường ấy: một lỗi có thật, nằm im, chờ đúng mục này được thêm vào.
+         *
+         * 2 trận: giải vòng tròn hai lượt nên một cặp gặp nhau tối đa hai lần
+         * mỗi mùa, và trần đúng bằng sự thật của thể thức thì không bao giờ
+         * cắt mất gì.
+         */
+        {
+          key: "gap-lai",
+          heading: "{team} gặp lại {opponent} khi nào",
+          scope: "FIXTURE",
+          kind: "fixtures",
+          fixtureLimit: 2,
+          requires: [],
+          says:
+            "Các lần hai đội NÀY còn phải gặp nhau trong mùa, giờ đã quy về múi giờ Việt Nam. " +
+            "Không phải lịch của từng đội — trang đội có mục riêng cho việc đó.",
+        },
+        {
+          key: "h2h-history",
+          heading: "Từng trận trong lịch sử đối đầu",
+          scope: "FIXTURE",
+          kind: "results",
+          /** Cả mùa vòng tròn hai lượt chỉ có hai lần gặp, nên trần 12 của
+           *  tầng vận chuyển đã rộng hơn mọi ca thật. */
+          resultLimit: 12,
+          requires: ["h2h_meetings"],
+          says:
+            "ĐÚNG những trận hai đội này gặp nhau, mới nhất trước — không phải phong độ chung của " +
+            "một đội. Cấp CẶP ĐỐI ĐẦU, cùng phạm vi với các chỉ số h2h ngay trên.",
         },
         {
           key: "h2h-goals",
@@ -354,7 +495,31 @@ const FOOTBALL: EntityContentSpec = {
         "Bảng xếp hạng {league} mùa {season} tính từ các trận đã đá, lịch thi đấu sắp tới theo giờ " +
         "Việt Nam, kèm tỷ lệ trận trên 2,5 bàn và tỷ lệ chủ nhà thắng, và ngày của trận gần nhất đã tính vào.",
       interpretationHeading: "Mùa {season} của {league} đang diễn ra thế nào",
+      summary: [
+        { kind: "metric", metric: "league_played", label: "Trận đã đá" },
+        { kind: "metric", metric: "league_over25_pct", label: "Trên 2,5 bàn" },
+        { kind: "metric", metric: "league_home_win_pct", label: "Chủ nhà thắng" },
+        { kind: "next", label: "Trận tới" },
+      ],
       sections: [
+        /**
+         * Bảng xếp hạng ĐỨNG ĐẦU, vì `title` của chính trang này đã hứa nó
+         * đứng đầu — và cho tới 26/9/2026 trang không in bảng nào.
+         *
+         * Đòi `league_played`: mùa chưa đá trận nào thì bảng là 18 dòng số 0,
+         * tức một bảng nói đúng mà không nói gì.
+         */
+        {
+          key: "bang-xep-hang",
+          heading: "Bảng xếp hạng {league} {season}",
+          scope: "LEAGUE",
+          kind: "standings",
+          requires: ["league_played"],
+          says:
+            "Bảng ĐẦY ĐỦ của giải, tính bằng phép cộng trên chính các trận đã có tỷ số. Cấp GIẢI. " +
+            "KHÔNG tô vùng dự cúp châu Âu và không tô vùng xuống hạng: nguồn hiện tại không nói suất " +
+            "nào đi đâu, và tô theo trí nhớ là bịa một luật giải.",
+        },
         {
           key: "lich-thi-dau",
           heading: "Lịch thi đấu {league} sắp tới",
@@ -370,6 +535,20 @@ const FOOTBALL: EntityContentSpec = {
           says:
             "Các trận CHƯA đá của giải, sớm nhất trước, giờ đã quy về múi giờ Việt Nam. Cấp GIẢI — " +
             "đây là lịch của toàn giải, không phải của một đội; trang đội có mục riêng.",
+        },
+        {
+          key: "ket-qua",
+          heading: "Kết quả {league} mới nhất",
+          scope: "LEAGUE",
+          kind: "results",
+          /** 10, cùng lý do với `fixtureLimit` của mục lịch: một vòng đấu có
+           *  9–10 trận, và cắt ở 5 là cho người đọc thấy nửa vòng mà không
+           *  biết mình đang thấy nửa. */
+          resultLimit: 10,
+          requires: ["league_played"],
+          says:
+            "Các trận vừa có tỷ số của toàn giải, mới nhất trước. Cấp GIẢI — không phải kết quả của " +
+            "một đội; trang đội có mục riêng.",
         },
         {
           key: "league-shape",

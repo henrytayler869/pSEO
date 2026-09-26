@@ -2,6 +2,20 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "pseo-control-panel-dev",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "autoPort": true
+    },
+    {
+      "name": "publisher",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "publisher/atmovingservices", "run", "dev"],
+      "port": 3002,
+      "autoPort": true
+    },
+    {
       "name": "hq-vn-football",
       "runtimeExecutable": "npm",
       "runtimeArgs": [

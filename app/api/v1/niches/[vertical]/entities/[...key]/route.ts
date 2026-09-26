@@ -83,6 +83,12 @@ export async function GET(
      *  hai bên cạnh `facts`; mục `kind: "fixtures"` của đặc tả đọc trường
      *  này. Mảng rỗng là câu trả lời hợp lệ — mùa đã đá hết. */
     upcoming: factSet.upcoming,
+    /** Bảng xếp hạng đầy đủ của giải mà trang này thuộc về. Trang giải in cả
+     *  bảng; trang đội cắt cửa sổ quanh chính nó. Không đi vào prompt. */
+    standings: factSet.standings,
+    /** Trận ĐÃ có tỷ số, mới nhất trước — ngược chiều với `upcoming`, xem
+     *  `recentResults`. */
+    results: factSet.results,
     /** null = chưa sinh. Bình thường, không phải lỗi. */
     interpretation: cached ? { text: cached.text, factsFingerprint: cached.factsFingerprint } : null,
     /** Đặc tả của LOẠI trang này, để publisher biết mục nào cần chỉ số nào mà

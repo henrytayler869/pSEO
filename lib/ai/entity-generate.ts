@@ -9,6 +9,7 @@ import {
 import { LEAGUES, fetchLeagueSeasonMerged, type LeagueCode } from "@/lib/football/openfootball";
 import { currentEuropeanSeason } from "@/lib/football/season";
 import { upcomingMatches, UPCOMING_CAP, type UpcomingMatch } from "@/lib/football/fixtures";
+import { leagueTable, recentResults, RESULTS_CAP, type ResultRow, type TableRow } from "@/lib/football/table";
 import { FOOTBALL_VERTICAL, parseKey, teamSlug } from "@/lib/page-axis/axes";
 import { FIXTURE_SEPARATOR, teamDisplayName } from "@/lib/football/team-display-names";
 
@@ -134,6 +135,23 @@ export interface EntityFactSet {
    */
   upcoming: UpcomingMatch[];
   /**
+   * Bảng xếp hạng đầy đủ của giải, và kết quả đã đá.
+   *
+   * Hình dạng thứ BA và thứ TƯ bên cạnh `facts`, và chúng theo `upcoming` ở
+   * mọi điểm quan trọng: KHÔNG vào `modelFacts`, KHÔNG vào prompt, KHÔNG vào
+   * fingerprint. Xem chú thích đầu `lib/football/table.ts` — lý do cuối là
+   * lý do thật: bảng đổi sau mỗi vòng đấu, và buộc fingerprint theo nó nghĩa
+   * là sinh lại 351 đoạn văn mỗi vòng cho một đoạn văn không nhắc tới bảng.
+   *
+   * Trang GIẢI nhận cả bảng; trang ĐỘI cũng nhận cả bảng và tự cắt cửa sổ
+   * quanh mình — cắt ở đây sẽ là quyết định TRÌNH BÀY nằm trong tầng vận
+   * chuyển, và trang thứ hai muốn cửa sổ rộng hơn sẽ phải sửa API.
+   */
+  standings: TableRow[];
+  /** Trận đã có tỷ số, mới nhất trước. Trang đội nhận trận của đội, trang cặp
+   *  nhận các lần hai đội gặp nhau, trang giải nhận vòng vừa đá. */
+  results: ResultRow[];
+  /**
    * Tập đưa cho MODEL, đã bỏ chỉ số cấp giải.
    *
    * Tách khỏi `facts` sau khi đo 22/9/2026 và thấy cài đặt mâu thuẫn với
@@ -252,7 +270,9 @@ export async function buildEntityFactSet(
     // Trang GIẢI: chỉ số cấp giải CHÍNH LÀ nội dung của nó, nên không lọc.
     const facts = leagueFacts(lg);
     const upcoming = upcomingMatches(s.matches, code, { limit: UPCOMING_CAP });
-    return { ...base, displayName: LEAGUES[code], facts, upcoming, modelFacts: facts, fingerprint: fingerprintOf(facts, season, LEAGUES[code]) };
+    const standings = leagueTable(s);
+    const results = recentResults(s.matches, code, { limit: RESULTS_CAP });
+    return { ...base, displayName: LEAGUES[code], facts, upcoming, standings, results, modelFacts: facts, fingerprint: fingerprintOf(facts, season, LEAGUES[code]) };
   }
 
   if (axis === "team") {
@@ -275,7 +295,9 @@ export async function buildEntityFactSet(
      * không bắt nhầm — nó chỉ ra một file thứ tư mà tôi bỏ sót.
      */
     const teamName = teamDisplayName(team);
-    return { ...base, displayName: teamName, facts, upcoming, modelFacts, fingerprint: fingerprintOf(modelFacts, season, teamName) };
+    const standings = leagueTable(s);
+    const results = recentResults(s.matches, code, { team, limit: RESULTS_CAP });
+    return { ...base, displayName: teamName, facts, upcoming, standings, results, modelFacts, fingerprint: fingerprintOf(modelFacts, season, teamName) };
   }
 
   if (axis === "fixture") {
@@ -290,10 +312,24 @@ export async function buildEntityFactSet(
     const modelFacts = forModel(facts);
     // Cặp: chỉ những lần HAI đội này gặp nhau mà chưa đá — không phải lịch
     // của từng đội. `upcomingMatches` lọc theo MỘT đội, nên lọc thêm đội kia.
+    /**
+     * `upcomingMatches` trả về tên HIỂN THỊ, nên phép lọc phải so với tên
+     * hiển thị của `b` — KHÔNG phải `b`.
+     *
+     * Đo 26/9/2026: `b === "Bayern München"` (tên nguồn) trong khi mục lịch
+     * in "Bayern Munich", nên so sánh không bao giờ đúng và mục lịch thi đấu
+     * BIẾN MẤT khỏi mọi trang cặp có đội đã đổi tên hiển thị. Không cổng nào
+     * đỏ: mục thiếu `requires` rỗng nên `sectionRenderable` chỉ hỏi danh sách
+     * có rỗng không, và danh sách rỗng là câu trả lời hợp lệ khi mùa đã đá
+     * hết. Cùng họ với ba sự cố tên hiển thị trước đó.
+     */
+    const bShown = teamDisplayName(b);
     const upcoming = upcomingMatches(s.matches, code, { team: a })
-      .filter((m) => m.home === b || m.away === b)
+      .filter((m) => m.home === bShown || m.away === bShown)
       .slice(0, UPCOMING_CAP);
-    return { ...base, displayName: name, facts, upcoming, modelFacts, fingerprint: fingerprintOf(modelFacts, season, name) };
+    const standings = leagueTable(s);
+    const results = recentResults(s.matches, code, { team: a, opponent: b, limit: RESULTS_CAP });
+    return { ...base, displayName: name, facts, upcoming, standings, results, modelFacts, fingerprint: fingerprintOf(modelFacts, season, name) };
   }
 
   return null;

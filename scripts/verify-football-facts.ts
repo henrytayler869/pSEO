@@ -27,6 +27,9 @@ import { currentEuropeanSeason } from "@/lib/football/season";
 import {
   fixtureFacts, fixtureStats, leagueStats, matchesOf, playedMatches, teamFacts, teamStats,
 } from "@/lib/football/facts";
+import { FORM_LENGTH, leagueTable, recentResults } from "@/lib/football/table";
+import { upcomingMatches } from "@/lib/football/fixtures";
+import { teamDisplayName } from "@/lib/football/team-display-names";
 
 let failures = 0;
 const fail = (msg: string) => { console.error(`  ✗ ${msg}`); failures++; };
@@ -98,6 +101,38 @@ async function main(): Promise<void> {
     );
     const missingHalf = played.length - lg.knownHalves;
 
+    /**
+     * ── Bảng xếp hạng vận chuyển: cùng thứ tự, cùng số, và CỘT PHONG ĐỘ
+     *    phải khớp bảng ────────────────────────────────────────────────────
+     *
+     * `leagueTable` mặc quần áo cho `buildStandings`, nên hai thứ phải trùng
+     * từng dòng. Phép kiểm đáng giá là cột `form`: nó đếm theo đường KHÁC —
+     * duyệt trận của từng đội rồi chấm thắng/hoà/thua — nên khi đội mới đá
+     * không quá `FORM_LENGTH` trận, số T/H/B trong phong độ phải bằng đúng
+     * cột thắng/hoà/thua của bảng. Lệch nghĩa là một trong hai đường sai.
+     */
+    const rows = leagueTable(s);
+    eq(rows.length, table.length, `${code} số dòng bảng vận chuyển`);
+    for (const [i, r] of rows.entries()) {
+      eq(r.position, i + 1, `${code} ${r.team} thứ hạng`);
+      eq(r.points, table[i].points, `${code} ${r.team} điểm bảng vận chuyển`);
+      eq(r.goalDiff, table[i].goalsFor - table[i].goalsAgainst, `${code} ${r.team} hiệu số`);
+      if (r.slug === "") fail(`${code} ${r.team}: slug rỗng — liên kết bảng sẽ trỏ vào chính trang đang xem`);
+      if (r.form.length > FORM_LENGTH) fail(`${code} ${r.team}: phong độ ${r.form.length} trận, trần là ${FORM_LENGTH}`);
+      if (r.played <= FORM_LENGTH) {
+        eq(r.form.filter((o) => o === "T").length, r.won, `${code} ${r.team} phong độ thắng`);
+        eq(r.form.filter((o) => o === "H").length, r.drawn, `${code} ${r.team} phong độ hoà`);
+        eq(r.form.filter((o) => o === "B").length, r.lost, `${code} ${r.team} phong độ thua`);
+      }
+
+      // Kết quả của đội: đếm phải bằng số trận đã đá, và thứ tự MỚI TRƯỚC.
+      const res = recentResults(s.matches, code, { team: table[i].team });
+      eq(res.length, r.played, `${code} ${r.team} số dòng kết quả`);
+      for (let k = 1; k < res.length; k++) {
+        if (res[k - 1].date < res[k].date) fail(`${code} ${r.team}: kết quả không theo thứ tự mới trước`);
+      }
+    }
+
     // ── Cặp đối đầu: tổng phải khớp ────────────────────────────────────────
     let pairsWithMeetings = 0;
     for (let i = 0; i < s.teams.length; i++) {
@@ -109,6 +144,37 @@ async function main(): Promise<void> {
         }
         pairsWithMeetings++;
         eq(fx.winsA + fx.winsB + fx.draws, fx.meetings.length, `${code} ${s.teams[i]}/${s.teams[j]} kết quả = số trận`);
+        eq(
+          recentResults(s.matches, code, { team: s.teams[i], opponent: s.teams[j] }).length,
+          fx.meetings.length,
+          `${code} ${s.teams[i]}/${s.teams[j]} số dòng kết quả đối đầu`
+        );
+      }
+    }
+
+    /**
+     * ── Lịch thi đấu của trang CẶP: lọc theo tên HIỂN THỊ phải ra đúng số
+     *    trận mà nguồn nói ──────────────────────────────────────────────────
+     *
+     * Hồi quy cho lỗi đo 26/9/2026: `buildEntityFactSet` lọc danh sách đã quy
+     * về tên hiển thị bằng tên NGUỒN, nên mục lịch biến mất khỏi 119/876 trang
+     * cặp — 203 dòng trận. Không cổng nào đỏ vì một danh sách rỗng là câu trả
+     * lời hợp lệ khi mùa đã đá hết.
+     *
+     * Phép kiểm so hai đường: đếm thẳng trên tên nguồn, và đếm qua đường mà
+     * trang thật đi (quy đổi tên rồi lọc).
+     */
+    for (let i = 0; i < s.teams.length; i++) {
+      for (let j = i + 1; j < s.teams.length; j++) {
+        const [A, B] = [s.teams[i], s.teams[j]];
+        const raw = s.matches.filter(
+          (m) => m.fullTime === null && ((m.home === A && m.away === B) || (m.home === B && m.away === A))
+        ).length;
+        const shown = teamDisplayName(B);
+        const shipped = upcomingMatches(s.matches, code, { team: A }).filter(
+          (m) => m.home === shown || m.away === shown
+        ).length;
+        eq(shipped, raw, `${code} ${A}/${B} số trận chưa đá của trang cặp`);
       }
     }
 
