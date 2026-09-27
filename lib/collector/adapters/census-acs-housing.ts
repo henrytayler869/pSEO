@@ -1,4 +1,5 @@
 import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types";
+import { parseAcsValue, assertNonEmptyUniverse } from "@/lib/collector/acs-value";
 import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
@@ -15,9 +16,9 @@ const VARIABLES = {
   totalOccupiedUnits: "B25003_001E",
   ownerOccupiedUnits: "B25003_002E",
 };
-const SUPPRESSED_VALUE = -666666666; // Census's sentinel for "can't produce a reliable estimate" — not a real value
 
 interface ZctaHousingData {
+  totalOccupiedUnits: number | null;
   medianHomeValue: number | null;
   medianHouseholdIncome: number | null;
   medianYearBuilt: number | null;
@@ -55,6 +56,11 @@ export class CensusAcsHousingAdapter implements CollectorAdapter {
     const points: CollectedDataPoint[] = [];
     const confidence = 0.9; // ACS5 is a modeled 5-year survey estimate, not a direct count — same confidence PVWatts uses for its modeled estimate
     if (row.medianHomeValue !== null) {
+      // Vũ trụ: đơn vị nhà CÓ NGƯỜI Ở. Bằng 0 thì "giá nhà trung vị" không có
+      // nghĩa — và `Number(null) === 0` từng biến một ô vắng ước lượng thành
+      // median 0 USD, thứ không cổng nào bên dưới bắt được.
+      assertNonEmptyUniverse(row.totalOccupiedUnits, { zip: location.zip, table: "B25003" });
+
       points.push({ metric: "census_median_home_value_usd", value: row.medianHomeValue, unit: "USD", resolvedAtResolution: "ZIP", isInferred: false, confidence });
     }
     if (row.medianHouseholdIncome !== null) {
@@ -115,6 +121,7 @@ export class CensusAcsHousingAdapter implements CollectorAdapter {
       const totalOccupied = parseAcsValue(r[totalOccupiedIdx]);
       const ownerOccupied = parseAcsValue(r[ownerOccupiedIdx]);
       result.set(zip, {
+        totalOccupiedUnits: totalOccupied,
         medianHomeValue: parseAcsValue(r[homeValueIdx]),
         medianHouseholdIncome: parseAcsValue(r[incomeIdx]),
         medianYearBuilt: parseAcsValue(r[yearBuiltIdx]),
@@ -126,8 +133,3 @@ export class CensusAcsHousingAdapter implements CollectorAdapter {
   }
 }
 
-function parseAcsValue(raw: string): number | null {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n === SUPPRESSED_VALUE || n < 0) return null;
-  return n;
-}

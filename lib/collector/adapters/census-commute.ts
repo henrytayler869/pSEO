@@ -1,4 +1,5 @@
 import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types";
+import { parseAcsValue, assertNonEmptyUniverse } from "@/lib/collector/acs-value";
 import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
@@ -31,7 +32,6 @@ const VARIABLES = {
   min90plus: "B08303_013E",
 };
 
-const SUPPRESSED_VALUE = -666666666; // sentinel "không ước lượng tin cậy được" của Census
 
 interface ZctaCommute {
   carSharePct: number | null;
@@ -88,6 +88,10 @@ export class CensusCommuteAdapter implements CollectorAdapter {
       if (value === null) return;
       points.push({ metric, value, unit, resolvedAtResolution: "ZIP", isInferred: false, confidence });
     };
+
+    // Cùng lý lẽ với census-mobility: tỷ lệ và tổng dưới đây là các phần của
+    // một vũ trụ "người đi làm 16+". Vũ trụ rỗng thì 0% không phải phép đo.
+    assertNonEmptyUniverse(row.workersTotal, { zip: location.zip, table: "B08301" });
 
     push("commute_car_share_pct", row.carSharePct, "%");
     // Tên metric mang đúng NGƯỠNG đo, không phải "long"/"dài". Một tên mờ
@@ -164,8 +168,3 @@ export class CensusCommuteAdapter implements CollectorAdapter {
   }
 }
 
-function parseAcsValue(raw: string): number | null {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n === SUPPRESSED_VALUE || n < 0) return null;
-  return n;
-}

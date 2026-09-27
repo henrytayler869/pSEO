@@ -181,6 +181,19 @@ jobs:
       - name: Chép quy tắc cache — vế /api/ phải sống, host sót phải ném
         run: npx tsx scripts/test-cache-rule-rewrite.ts
 
+      # Không mạng, không DB: mọi ô là hình dạng THẬT chụp từ ACS5 2023.
+      #
+      # Canh hai thứ đã hỏng im lặng trong production:
+      #   - `Number(null) === 0`. Ô Census vắng ước lượng thành số 0 THẬT, qua
+      #     sạch mọi phép kiểm hữu hạn/không âm/không-sentinel. 270 hàng
+      #     DataPoint đã mang số 0 kiểu đó, và không có gì đỏ lên: bốn số 0 là
+      #     bốn điểm hợp lệ nên phép ném "không còn điểm nào" không chạy.
+      #   - Số 0 CÓ vũ trụ vẫn là dữ liệu. DC chỉ có một hạt nên "đến từ hạt
+      #     khác trong bang = 0" là SỰ THẬT. Bản vá vơ đũa cả nắm sẽ giết nó và
+      #     tạo ra một lỗ im lặng khác trong lúc chữa lỗ này.
+      - name: Ô ACS rỗng không được thành số 0, và số 0 thật không được mất
+        run: npx tsx scripts/test-acs-value.ts
+
       # Ca "cờ đứng trước số" là lỗi thật đã đo: Number(argv[2]) gặp --site
       # cho NaN, slice(0, NaN) cho mảng rỗng, script in "31 cụm" và sinh 0
       # đoạn — không lỗi nào. Im lặng nên chỉ test bắt được.
