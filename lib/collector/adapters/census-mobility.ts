@@ -1,4 +1,5 @@
 import type { CollectorAdapter, CollectedDataPoint, LocationRef } from "../types";
+import { parseAcsValue, assertNonEmptyUniverse } from "@/lib/collector/acs-value";
 import { SchemaDriftError, LocationFetchError, assertHttpOk } from "../errors";
 import { fetchWithCurlFallback } from "@/lib/net/curl-fetch";
 
@@ -30,9 +31,10 @@ const VARIABLES = {
   movedFromAbroad: "B07003_016E",
 };
 
-const SUPPRESSED_VALUE = -666666666; // Census's "can't produce a reliable estimate" sentinel — not a real value
 
 interface ZctaMobility {
+  /** Vũ trụ B07003_001E — cần cho assertNonEmptyUniverse, không phát thành DataPoint. */
+  total: number | null;
   movedWithinCounty: number | null;
   movedFromDifferentCounty: number | null;
   movedFromDifferentState: number | null;
@@ -72,6 +74,21 @@ export class CensusMobilityAdapter implements CollectorAdapter {
       if (value === null) return;
       points.push({ metric, value, unit, resolvedAtResolution: "ZIP", isInferred: false, confidence });
     };
+
+    /**
+     * VŨ TRỤ TRƯỚC, các phần sau.
+     *
+     * Bốn dòng dưới là các thành phần CỦA một tổng. Tổng bằng 0 hoặc vắng mặt
+     * thì chúng không phải "không ai chuyển đến" — chúng là chỗ trống. Phép ném
+     * `points.length === 0` bên dưới KHÔNG bắt được ca đó: bốn số 0 là bốn điểm
+     * hợp lệ, nên nó im và trang dựng ra nói site phục vụ một nơi không ai tới.
+     *
+     * Đặt ở đây chứ không trong `parse`: `parse` đọc một ô, còn đây là quan hệ
+     * GIỮA các ô — và quan hệ đó là thứ phân biệt số 0 của Washington DC (một
+     * hạt duy nhất, nên "đến từ hạt khác trong bang" bằng 0 là SỰ THẬT) với số
+     * 0 của một ZIP hộp thư.
+     */
+    assertNonEmptyUniverse(row.total, { zip: location.zip, table: "B07003" });
 
     push("census_moved_within_county", row.movedWithinCounty, "people/yr");
     push("census_moved_from_different_county", row.movedFromDifferentCounty, "people/yr");
@@ -126,6 +143,7 @@ export class CensusMobilityAdapter implements CollectorAdapter {
       const total = parseAcsValue(r[idx.total]);
       const sameHouse = parseAcsValue(r[idx.sameHouse]);
       result.set(r[zctaIdx], {
+        total,
         movedWithinCounty: parseAcsValue(r[idx.movedWithinCounty]),
         movedFromDifferentCounty: parseAcsValue(r[idx.movedFromDifferentCounty]),
         movedFromDifferentState: parseAcsValue(r[idx.movedFromDifferentState]),
@@ -142,8 +160,3 @@ export class CensusMobilityAdapter implements CollectorAdapter {
   }
 }
 
-function parseAcsValue(raw: string): number | null {
-  const n = Number(raw);
-  if (!Number.isFinite(n) || n === SUPPRESSED_VALUE || n < 0) return null;
-  return n;
-}
