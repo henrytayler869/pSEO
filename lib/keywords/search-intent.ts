@@ -58,33 +58,74 @@ export async function fetchSearchIntent(keywords: string[]): Promise<KeywordInte
   return out;
 }
 
+/** Kết quả một lượt đo, đủ để người chạy thấy nó làm gì chứ không chỉ thấy
+ * "xong". `unresolved` là những chuỗi DataForSEO không trả nhãn — chúng ở lại
+ * null, và null đó vẫn nghĩa là "chưa biết", không phải "không có ý định". */
+export interface IntentMeasurement {
+  /** Số chuỗi từ khoá đã gửi đi đo. */
+  keywords: number;
+  /** Số chuỗi DataForSEO trả về (kể cả trả về mà không có nhãn). */
+  measured: number;
+  /** Số HÀNG KeywordMetric được ghi nhãn. */
+  updated: number;
+  unresolved: string[];
+  byIntent: Record<string, number>;
+}
+
 /**
- * Đo và lưu ý định cho mọi từ khoá của một ngành.
+ * Đo và lưu ý định cho từ khoá của một ngành.
  *
  * Ghi theo CHUỖI từ khoá, không theo từng hàng: cùng một chuỗi xuất hiện ở
  * nhiều thị trường (198 chuỗi trên 712 hàng), và đo lại từng hàng là trả tiền
  * cho cùng một câu hỏi nhiều lần.
+ *
+ * `onlyMissing` là mặc định, và mặc định đó có lý do trả giá bằng tiền lẫn
+ * bằng nội dung. Đo lại cả ngành thì (1) trả tiền cho những chuỗi đã biết câu
+ * trả lời, và (2) GHI ĐÈ nhãn của những thị trường đang có bài — mà nhãn ý
+ * định chọn template và chọn tiêu đề, nên một nhãn đổi âm thầm là một trang
+ * đổi hình dạng mà không ai yêu cầu. Đo lại toàn bộ phải là một lựa chọn gõ
+ * ra bằng tay.
  */
-export async function measureAndStoreIntents(vertical: string): Promise<{ measured: number; updated: number }> {
-  const identities = await prisma.marketIdentity.findMany({
-    where: { vertical },
-    select: { keywordMetrics: { select: { keyword: true } } },
+export async function measureAndStoreIntents(
+  vertical: string,
+  opts: { onlyMissing?: boolean } = {}
+): Promise<IntentMeasurement> {
+  const onlyMissing = opts.onlyMissing ?? true;
+
+  const rows = await prisma.keywordMetric.findMany({
+    where: { marketIdentity: { vertical }, ...(onlyMissing ? { mainIntent: null } : {}) },
+    select: { keyword: true },
   });
-  const keywords = [...new Set(identities.flatMap((i) => i.keywordMetrics.map((k) => k.keyword)))];
-  if (keywords.length === 0) return { measured: 0, updated: 0 };
+  const keywords = [...new Set(rows.map((r) => r.keyword))];
+  const empty: IntentMeasurement = { keywords: 0, measured: 0, updated: 0, unresolved: [], byIntent: {} };
+  if (keywords.length === 0) return empty;
 
   const results = await fetchSearchIntent(keywords);
 
   let updated = 0;
+  const unresolved: string[] = [];
+  const byIntent: Record<string, number> = {};
   for (const r of results) {
-    if (!r.intent) continue;
+    if (!r.intent) {
+      unresolved.push(r.keyword);
+      continue;
+    }
+    // Chỉ ghi lên hàng đang null khi onlyMissing: cùng một chuỗi có thể đã
+    // mang nhãn ở thị trường khác, và lượt này không được phép sửa nhãn đó.
     const res = await prisma.keywordMetric.updateMany({
-      where: { keyword: r.keyword, marketIdentity: { vertical } },
+      where: { keyword: r.keyword, marketIdentity: { vertical }, ...(onlyMissing ? { mainIntent: null } : {}) },
       data: { mainIntent: r.intent },
     });
     updated += res.count;
+    byIntent[r.intent] = (byIntent[r.intent] ?? 0) + res.count;
   }
-  return { measured: results.length, updated };
+
+  // Chuỗi gửi đi mà không thấy trong phản hồi cũng là chưa giải được — im
+  // lặng bỏ chúng sẽ làm "đã đo hết" đúng với số đã gửi và sai với thực tế.
+  const returned = new Set(results.map((r) => r.keyword));
+  for (const k of keywords) if (!returned.has(k)) unresolved.push(k);
+
+  return { keywords: keywords.length, measured: results.length, updated, unresolved, byIntent };
 }
 
 function extractItems(body: unknown): KeywordIntent[] | null {
